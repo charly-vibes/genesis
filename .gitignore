@@ -19,3 +19,40 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.dont/*
+!.dont/AGENTS.md
+!.dont/config.toml
+!.dont/events.jsonl
+!.dont/db.cozo
+!.dont/seed/
+!.dont/vocab/
+!.dont/rules/
+!.dont/imports/
+!.dont/sessions/
+!.dont/schemas/
+.dont/seed/*
+.dont/vocab/*
+.dont/rules/*
+.dont/imports/*
+.dont/sessions/*
+.dont/schemas/*
+!.dont/seed/.gitkeep
+!.dont/vocab/.gitkeep
+!.dont/rules/.gitkeep
+!.dont/imports/.gitkeep
+!.dont/sessions/.gitkeep
+!.dont/schemas/.gitkeep
+
+# pretender cache / internal state
+/.pretender/
+
+# testaruda cache / internal state
+.testaruda/
+
+# espectacular internal state
+.espectacular/*.db
