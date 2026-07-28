@@ -27,11 +27,19 @@
 - [ ] 5.4 Implement the `gh` invocation + fallback ladder (missing/unauthed/labels/no-network/permission) per §7.
 
 ## 6. Build `suite_linter` (wai-bdqw.8)
-- [ ] 6.1 Implement the testaruda.toml schema check (depends on testaruda-86m canonical schema).
-- [ ] 6.2 Implement the pretender.toml-presence check (depends on pretender-gyb).
-- [ ] 6.3 Implement the `ah check` in pre-commit check (when `.espectacular/` exists).
-- [ ] 6.4 Implement the `dont check` in pre-push check (when `.dont/` exists; depends on dont-bpuo policy).
-- [ ] 6.5 Implement the badge↔block match check (depends on wai-bdqw.7).
+
+The suite_linter is an **orchestrator, not a monolith**. Each tool defines
+its own checks via the `LintCheck` trait; genesis just runs them.
+
+- [ ] 6.1 Define the `LintCheck` trait (fn signature, result type, fix fn).
+- [ ] 6.2 Define a `LinterRegistry` where tools register their checks at startup.
+- [ ] 6.3 Implement `LinterRegistry::run_all()` — iterates, runs, collects results.
+- [ ] 6.4 Implement `LinterRegistry::run_named(name)` — run a single check by name.
+- [ ] 6.5 Add `LintResult` type with severity (advisory/warning/error) and optional fix command.
+
+Tool-specific checks (testaruda.toml schema, pretender.toml presence, ah/dont
+wiring, badge↔block match) belong in each tool's own `doctor` command, not
+in genesis. Each tool registers its checks with the `LinterRegistry`.
 
 ## 7. AIX generation (`aix` module)
 - [ ] 7.1 Extract `llms.txt`/`llm.txt` generation from wai into genesis.
