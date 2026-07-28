@@ -18,7 +18,8 @@
 //! output.print(verbosity, &mut out, &mut err).unwrap();
 //! ```
 
-use crate::suggestions::Suggestion;
+use crate::feedback::scratch as scratch_mod;
+use crate::suggestions::{CommandRegistry, Suggestion};
 use serde::Serialize;
 use std::fmt::Debug;
 use std::io::Write;
@@ -216,6 +217,339 @@ impl<T: Debug> Output<T> {
             .collect();
 
         crate::envelope::Envelope::success(kind, &self.data, warnings, hints.unwrap_or_default())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ErrorSink
+// ---------------------------------------------------------------------------
+
+/// Configuration for self-healing error handling.
+///
+/// Wires together error printing, scratch persistence, and optional
+/// feedback fallback.
+#[derive(Debug, Clone)]
+pub struct ErrorSink {
+    /// The tool name (used for scratch directory and feedback subcommand).
+    pub tool_name: String,
+    /// Persist the last error to the error scratch.
+    pub scratch: bool,
+    /// Print the error with a Suggestion::Fix footer.
+    pub suggest: bool,
+    /// Include the full ContextBundle in the error output.
+    pub context: bool,
+    /// Name of the feedback subcommand, if the tool has one.
+    /// If None, no feedback suggestion is printed.
+    pub feedback_subcommand: Option<String>,
+    /// The current verbosity level.
+    pub verbosity: Verbosity,
+}
+
+impl ErrorSink {
+    /// Create a new error sink with sensible defaults.
+    pub fn new(tool_name: impl Into<String>) -> Self {
+        Self {
+            tool_name: tool_name.into(),
+            scratch: true,
+            suggest: true,
+            context: false,
+            feedback_subcommand: Some("feedback".into()),
+            verbosity: Verbosity::Normal,
+        }
+    }
+
+    /// Handle an error — print it, optionally write to scratch, and
+    /// optionally suggest a feedback command.
+    pub fn handle(&self, err: &dyn std::error::Error, stderr: &mut impl Write) {
+        self.handle_message(&err.to_string(), None, stderr);
+    }
+
+    /// Handle an error with an explicit suggestion footer override.
+    pub fn handle_with_footer(
+        &self,
+        err: &dyn std::error::Error,
+        suggestion: &Suggestion,
+        stderr: &mut impl Write,
+    ) {
+        self.handle_message(&err.to_string(), Some(suggestion), stderr);
+    }
+
+    /// Core error handler implementation.
+    fn handle_message(
+        &self,
+        message: &str,
+        suggestion: Option<&Suggestion>,
+        stderr: &mut impl Write,
+    ) {
+        // Always print the error.
+        let _ = writeln!(stderr, "{}: {}", self.tool_name, message);
+
+        // Print suggestion footer.
+        if let Some(s) = suggestion {
+            if let Some(footer) = s.footer() {
+                let _ = writeln!(stderr, "{}", footer);
+            }
+        } else if self.suggest {
+            // No explicit suggestion — print generic footer.
+            let _ = writeln!(stderr, "-> Run: {} doctor", self.tool_name);
+        }
+
+        // Optionally print feedback fallback (only when no suggestion at all).
+        if self.feedback_subcommand.is_some() && suggestion.is_none() && !self.suggest {
+            let _ = writeln!(
+                stderr,
+                "Feedback: {} {} bug --from-last-error",
+                self.tool_name,
+                self.feedback_subcommand.as_deref().unwrap_or("feedback"),
+            );
+        }
+
+        // Write to scratch if enabled.
+        if self.scratch {
+            let record = scratch_mod::ErrorRecord {
+                ts: chrono_now(),
+                argv: vec![self.tool_name.clone()],
+                exit: 1,
+                footer: suggestion.and_then(|s| s.footer()),
+                kind: "error".into(),
+            };
+            scratch_mod::write_scratch_best_effort(&self.tool_name, &record);
+        }
+    }
+}
+
+/// Get an ISO 8601 timestamp without pulling in chrono.
+fn chrono_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dur = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = dur.as_secs();
+    // Simple ISO-like format: YYYY-MM-DDTHH:MM:SSZ
+    let days = secs / 86400;
+    let time_secs = secs % 86400;
+    let hours = time_secs / 3600;
+    let minutes = (time_secs % 3600) / 60;
+    let seconds = time_secs % 60;
+
+    // Days since epoch (1970-01-01)
+    let mut y = 1970i64;
+    let mut remaining = days as i64;
+    loop {
+        let days_in_year = if is_leap(y) { 366 } else { 365 };
+        if remaining < days_in_year {
+            break;
+        }
+        remaining -= days_in_year;
+        y += 1;
+    }
+    let month_days = if is_leap(y) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut m = 1;
+    for &md in &month_days {
+        if remaining < md {
+            break;
+        }
+        remaining -= md;
+        m += 1;
+    }
+    let d = remaining + 1;
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y, m, d, hours, minutes, seconds
+    )
+}
+
+fn is_leap(year: i64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+// ---------------------------------------------------------------------------
+// GuideBuilder & Guide
+// ---------------------------------------------------------------------------
+
+/// A builder for assembling a `Guide`.
+///
+/// ```rust
+/// use genesis::guide::Guide;
+///
+/// let guide = Guide::builder("my-tool", "0.1.0")
+///     .commands(&["init", "check"])
+///     .build();
+/// ```
+#[derive(Debug, Clone)]
+pub struct GuideBuilder {
+    name: String,
+    version: String,
+    about: Option<String>,
+    commands: Vec<String>,
+    verbosity: u8,
+    has_config: bool,
+}
+
+impl GuideBuilder {
+    /// Set the tool version.
+    pub fn version(mut self, version: &str) -> Self {
+        self.version = version.to_string();
+        self
+    }
+
+    /// Set the tool's one-line description.
+    pub fn about(mut self, about: &str) -> Self {
+        self.about = Some(about.to_string());
+        self
+    }
+
+    /// Register valid commands (for typo detection).
+    pub fn commands(mut self, commands: &[&str]) -> Self {
+        self.commands = commands.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    /// Enable ConfigStore integration.
+    ///
+    /// No-op if `genesis::config` is not available — this method exists
+    /// for API compatibility when downstream tools adopt config later.
+    pub fn config<T>(mut self) -> Self
+    where
+        T: crate::config::ConfigFile + serde::de::DeserializeOwned + 'static,
+    {
+        self.has_config = true;
+        self
+    }
+
+    /// Set the maximum verbosity level.
+    pub fn max_verbosity(mut self, level: u8) -> Self {
+        self.verbosity = level.min(Verbosity::MAX);
+        self
+    }
+
+    /// Build the `Guide`.
+    pub fn build(self) -> Guide {
+        let mut registry = CommandRegistry::new();
+        if !self.commands.is_empty() {
+            registry.register(&self.name, self.commands);
+        }
+
+        Guide {
+            name: self.name,
+            version: self.version,
+            about: self.about,
+            registry,
+            verbosity: Verbosity::from(self.verbosity),
+            has_config: self.has_config,
+        }
+    }
+}
+
+/// A coherent CLI scaffold for a guiding tool.
+///
+/// Assembles all genesis modules into one entry point.
+#[derive(Debug, Clone)]
+pub struct Guide {
+    name: String,
+    version: String,
+    #[allow(dead_code)]
+    about: Option<String>,
+    registry: CommandRegistry,
+    verbosity: Verbosity,
+    #[allow(dead_code)]
+    has_config: bool,
+}
+
+impl Guide {
+    /// Create a new `GuideBuilder`.
+    pub fn builder(name: &str, version: &str) -> GuideBuilder {
+        GuideBuilder {
+            name: name.to_string(),
+            version: version.to_string(),
+            about: None,
+            commands: Vec::new(),
+            verbosity: Verbosity::Normal as u8,
+            has_config: false,
+        }
+    }
+
+    /// The tool name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The tool version.
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    /// The current verbosity.
+    pub fn verbosity(&self) -> Verbosity {
+        self.verbosity
+    }
+
+    /// The command registry.
+    pub fn registry(&self) -> &CommandRegistry {
+        &self.registry
+    }
+
+    /// Run a command handler, wrapping its `Output`.
+    ///
+    /// Handles printing, error formatting, and exit code.
+    pub fn run<T, F>(&self, f: F) -> i32
+    where
+        T: Debug,
+        F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
+    {
+        match f() {
+            Ok(output) => {
+                let mut stdout = std::io::stdout();
+                let mut stderr = std::io::stderr();
+                if let Err(e) = output.print(self.verbosity, &mut stdout, &mut stderr) {
+                    let _ = writeln!(&mut stderr, "error printing output: {}", e);
+                    return 1;
+                }
+                if output.is_error { 1 } else { 0 }
+            }
+            Err(err) => {
+                let sink = ErrorSink::new(&self.name).with_verbosity(self.verbosity);
+                let mut stderr = std::io::stderr();
+                sink.handle(err.as_ref(), &mut stderr);
+                1
+            }
+        }
+    }
+
+    /// Create an `ErrorSink` configured for this tool.
+    pub fn error_sink(&self) -> ErrorSink {
+        ErrorSink::new(&self.name).with_verbosity(self.verbosity)
+    }
+}
+
+impl ErrorSink {
+    /// Set the verbosity level (fluent).
+    pub fn with_verbosity(mut self, verbosity: Verbosity) -> Self {
+        self.verbosity = verbosity;
+        self
+    }
+
+    /// Enable or disable scratch persistence (fluent).
+    pub fn with_scratch(mut self, enabled: bool) -> Self {
+        self.scratch = enabled;
+        self
+    }
+
+    /// Enable or disable suggestion footer (fluent).
+    pub fn with_suggest(mut self, enabled: bool) -> Self {
+        self.suggest = enabled;
+        self
+    }
+
+    /// Set the feedback subcommand name (fluent).
+    pub fn with_feedback(mut self, name: Option<&str>) -> Self {
+        self.feedback_subcommand = name.map(|s| s.to_string());
+        self
     }
 }
 
@@ -463,5 +797,131 @@ mod tests {
         let json = serde_json::to_string(&envelope).unwrap();
         assert!(json.contains("hello"));
         assert!(json.contains("run doctor"));
+    }
+
+    // -- ErrorSink ---------------------------------------------------------
+
+    #[test]
+    fn test_error_sink_defaults() {
+        let sink = ErrorSink::new("test-tool");
+        assert_eq!(sink.tool_name, "test-tool");
+        assert!(sink.scratch);
+        assert!(sink.suggest);
+        assert!(!sink.context);
+        assert_eq!(sink.feedback_subcommand.as_deref(), Some("feedback"));
+    }
+
+    #[test]
+    fn test_error_sink_fluent_builders() {
+        let sink = ErrorSink::new("tool")
+            .with_verbosity(Verbosity::Quiet)
+            .with_scratch(false)
+            .with_suggest(false)
+            .with_feedback(None);
+
+        assert_eq!(sink.verbosity, Verbosity::Quiet);
+        assert!(!sink.scratch);
+        assert!(!sink.suggest);
+        assert!(sink.feedback_subcommand.is_none());
+    }
+
+    #[test]
+    fn test_error_sink_handle_prints_error() {
+        let sink = ErrorSink::new("test-tool").with_scratch(false);
+        let mut stderr = Vec::new();
+        let err = std::io::Error::other("something broke");
+        sink.handle(&err, &mut stderr);
+        let stderr = String::from_utf8(stderr).unwrap();
+        assert!(stderr.contains("test-tool"));
+        assert!(stderr.contains("something broke"));
+        assert!(stderr.contains("Run:"));
+    }
+
+    #[test]
+    fn test_error_sink_handle_without_suggest() {
+        let sink = ErrorSink::new("test-tool")
+            .with_scratch(false)
+            .with_suggest(false);
+        let mut stderr = Vec::new();
+        let err = std::io::Error::other("fail");
+        sink.handle(&err, &mut stderr);
+        let stderr = String::from_utf8(stderr).unwrap();
+        assert!(stderr.contains("fail"));
+        // No suggestion footer
+        assert!(!stderr.contains("Run:"));
+    }
+
+    #[test]
+    fn test_error_sink_handle_with_footer() {
+        let sink = ErrorSink::new("tool").with_scratch(false);
+        let mut stderr = Vec::new();
+        let err = std::io::Error::other("err");
+        let suggestion = Suggestion::fix("custom fix");
+        sink.handle_with_footer(&err, &suggestion, &mut stderr);
+        let stderr = String::from_utf8(stderr).unwrap();
+        assert!(stderr.contains("custom fix"));
+    }
+
+    // -- GuideBuilder & Guide ----------------------------------------------
+
+    #[test]
+    fn test_guide_new_sets_name_and_version() {
+        let guide = Guide::builder("my-tool", "1.0.0").build();
+        assert_eq!(guide.name(), "my-tool");
+        assert_eq!(guide.version(), "1.0.0");
+    }
+
+    #[test]
+    fn test_guide_with_commands() {
+        let guide = Guide::builder("tool", "0.1")
+            .commands(&["init", "check", "doctor"])
+            .build();
+
+        let all = guide.registry().all();
+        assert_eq!(all.len(), 3);
+        assert!(all.contains(&"init"));
+        assert!(all.contains(&"check"));
+        assert!(all.contains(&"doctor"));
+    }
+
+    #[test]
+    fn test_guide_with_verbosity() {
+        let guide = Guide::builder("tool", "0.1").max_verbosity(2).build();
+        assert_eq!(guide.verbosity(), Verbosity::Verbose);
+    }
+
+    #[test]
+    fn test_guide_run_success_returns_zero() {
+        let guide = Guide::builder("test", "0.1").build();
+        let exit: i32 = guide.run(|| -> Result<Output<&str>, Box<dyn std::error::Error>> {
+            Ok(Output::success("ok"))
+        });
+        assert_eq!(exit, 0);
+    }
+
+    #[test]
+    fn test_guide_run_failure_returns_one() {
+        let guide = Guide::builder("test", "0.1").build();
+        let exit: i32 = guide.run(|| -> Result<Output<String>, Box<dyn std::error::Error>> {
+            let output: Output<String> = Output::failure("nope");
+            Ok(output)
+        });
+        assert_eq!(exit, 1);
+    }
+
+    #[test]
+    fn test_guide_run_error_returns_one() {
+        let guide = Guide::builder("test", "0.1").build();
+        let exit: i32 = guide.run(|| -> Result<Output<String>, Box<dyn std::error::Error>> {
+            Err("something went wrong".into())
+        });
+        assert_eq!(exit, 1);
+    }
+
+    #[test]
+    fn test_guide_error_sink_is_configured() {
+        let guide = Guide::builder("my-tool", "0.1").build();
+        let sink = guide.error_sink();
+        assert_eq!(sink.tool_name, "my-tool");
     }
 }
