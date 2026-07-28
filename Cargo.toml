@@ -28,4 +28,4 @@ clap = { version = "4", features = ["derive", "env"] }
 strsim = "0.11"
 
 [dev-dependencies]
-# Conformance tests
+tempfile = "3"
