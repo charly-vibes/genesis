@@ -122,7 +122,18 @@ impl Suggestion {
         }
     }
 
-    /// Format the suggestion as a "→ Run: …" footer string.
+    /// Create a fix suggestion from a hint string.
+    ///
+    /// The hint is used as both the description and the command suggestion.
+    pub fn fix(hint: impl Into<String>) -> Self {
+        let s: String = hint.into();
+        Suggestion::Fix {
+            command: Some(s.clone()),
+            description: s,
+        }
+    }
+
+    /// Format the suggestion as a \"→ Run: …\" footer string."}]
     ///
     /// Returns `None` if the suggestion doesn't have a runnable command.
     pub fn footer(&self) -> Option<String> {
