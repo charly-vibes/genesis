@@ -1,0 +1,11 @@
+id = "validation-error-suggests-doctor-fix"
+description = "validation error suggests doctor fix"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_validation_error_contains_suggestion", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "missing-config-suggests-init-command"
+description = "missing config suggests init command"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_missing_file_error_contains_suggestion", timeout_seconds = 60 },
+]

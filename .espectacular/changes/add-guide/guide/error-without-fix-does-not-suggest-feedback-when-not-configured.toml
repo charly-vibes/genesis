@@ -1,0 +1,11 @@
+id = "error-without-fix-does-not-suggest-feedback-when-not-configured"
+description = "error without fix does not suggest feedback when not configured"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_error_sink_handle_without_suggest", timeout_seconds = 60 },
+]

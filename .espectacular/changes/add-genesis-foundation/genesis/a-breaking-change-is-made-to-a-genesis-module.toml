@@ -1,0 +1,6 @@
+id = "a-breaking-change-is-made-to-a-genesis-module"
+description = "a breaking change is made to a genesis module"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"

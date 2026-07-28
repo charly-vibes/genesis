@@ -1,0 +1,11 @@
+id = "output-carries-data-and-next-step"
+description = "output carries data and next step"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_output_with_next_step", timeout_seconds = 60 },
+]

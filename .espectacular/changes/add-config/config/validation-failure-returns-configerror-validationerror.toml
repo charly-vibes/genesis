@@ -1,0 +1,11 @@
+id = "validation-failure-returns-configerror-validationerror"
+description = "validation failure returns configerror validationerror"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_validation_error", timeout_seconds = 60 },
+]

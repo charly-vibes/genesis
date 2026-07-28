@@ -1,0 +1,11 @@
+id = "error-without-fix-suggests-feedback-only-when-configured"
+description = "error without fix suggests feedback only when configured"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_error_sink_handle_prints_error", timeout_seconds = 60 },
+]

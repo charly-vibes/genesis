@@ -1,0 +1,11 @@
+id = "guide-builds-with-tool-name-and-version"
+description = "guide builds with tool name and version"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_guide_new_sets_name_and_version", timeout_seconds = 60 },
+]

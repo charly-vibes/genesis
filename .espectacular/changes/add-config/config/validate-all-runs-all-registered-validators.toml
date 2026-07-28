@@ -1,0 +1,11 @@
+id = "validate-all-runs-all-registered-validators"
+description = "validate all runs all registered validators"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_validate_all_actually_validates", timeout_seconds = 60 },
+]

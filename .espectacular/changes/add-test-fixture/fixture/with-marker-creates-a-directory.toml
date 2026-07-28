@@ -1,0 +1,11 @@
+id = "with-marker-creates-a-directory"
+description = "with marker creates a directory"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_with_marker_creates_directory", timeout_seconds = 60 },
+]

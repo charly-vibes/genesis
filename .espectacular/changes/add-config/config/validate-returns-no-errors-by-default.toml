@@ -1,0 +1,11 @@
+id = "validate-returns-no-errors-by-default"
+description = "validate returns no errors by default"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_config_file_validate_default_noop", timeout_seconds = 60 },
+]

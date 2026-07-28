@@ -1,0 +1,11 @@
+id = "quiet-mode-suppresses-suggestions"
+description = "quiet mode suppresses suggestions"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_print_success_at_quiet_verbosity", timeout_seconds = 60 },
+]

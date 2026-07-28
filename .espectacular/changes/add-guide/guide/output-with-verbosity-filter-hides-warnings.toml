@@ -1,0 +1,11 @@
+id = "output-with-verbosity-filter-hides-warnings"
+description = "output with verbosity filter hides warnings"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_print_warnings_only_at_verbose", timeout_seconds = 60 },
+]

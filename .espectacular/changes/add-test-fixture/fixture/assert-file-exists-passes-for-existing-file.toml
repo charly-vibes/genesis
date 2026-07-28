@@ -1,0 +1,11 @@
+id = "assert-file-exists-passes-for-existing-file"
+description = "assert file exists passes for existing file"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_with_file_creates_file", timeout_seconds = 60 },
+]

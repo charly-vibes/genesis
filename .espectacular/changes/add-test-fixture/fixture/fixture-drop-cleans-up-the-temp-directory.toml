@@ -1,0 +1,11 @@
+id = "fixture-drop-cleans-up-the-temp-directory"
+description = "fixture drop cleans up the temp directory"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_drop_cleans_up_temp_dir", timeout_seconds = 60 },
+]

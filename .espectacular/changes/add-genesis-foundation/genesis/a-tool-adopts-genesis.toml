@@ -1,0 +1,6 @@
+id = "a-tool-adopts-genesis"
+description = "a tool adopts genesis"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"

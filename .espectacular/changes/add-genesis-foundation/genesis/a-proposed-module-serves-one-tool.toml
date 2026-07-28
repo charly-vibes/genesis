@@ -1,0 +1,6 @@
+id = "a-proposed-module-serves-one-tool"
+description = "a proposed module serves one tool"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
