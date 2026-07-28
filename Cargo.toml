@@ -33,5 +33,7 @@ toml = "0.8"
 # Regex (feedback redactor)
 regex = "1"
 
-[dev-dependencies]
+# Test fixtures
 tempfile = "3"
+
+[dev-dependencies]
