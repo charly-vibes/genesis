@@ -225,6 +225,10 @@ mod tests {
     #[test]
     fn test_write_and_read_last_error() {
         let tool = "_test_genesis_scratch";
+        // Clean up any leftover data from previous runs
+        let _ = std::fs::remove_file(scratch_path(tool));
+        let _ = std::fs::remove_dir(scratch_dir(tool));
+
         let record = ErrorRecord {
             ts: "2026-07-28T00:00:00Z".into(),
             argv: vec!["test".into()],
@@ -253,6 +257,10 @@ mod tests {
     #[test]
     fn test_read_all_errors() {
         let tool = "_test_genesis_all";
+        // Clean up any leftover data from previous runs
+        let _ = std::fs::remove_file(scratch_path(tool));
+        let _ = std::fs::remove_dir(scratch_dir(tool));
+
         for i in 0..3 {
             let record = ErrorRecord {
                 ts: format!("2026-07-28T00:00:0{}Z", i),
@@ -279,6 +287,8 @@ mod tests {
         let tool = "_test_genesis_cap";
         let path = scratch_path(tool);
         let dir = scratch_dir(tool);
+        // Clean up any leftover data from previous runs
+        let _ = std::fs::remove_file(&path);
         std::fs::create_dir_all(&dir).unwrap();
 
         // Write MAX_ENTRIES + 10 lines
