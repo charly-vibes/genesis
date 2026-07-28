@@ -59,3 +59,4 @@ target
 
 # mdbook build output
 docs/_book/
+*.old

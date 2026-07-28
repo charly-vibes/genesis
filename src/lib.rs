@@ -9,9 +9,9 @@
 //! - `feedback`     — agent issue reporting (new)
 //! - `suite_linter` — suite-wide config lint checks (new)
 
-pub mod envelope;
-pub mod suggestions;
-pub mod managed_block;
 pub mod aix;
+pub mod envelope;
 pub mod feedback;
+pub mod managed_block;
+pub mod suggestions;
 pub mod suite_linter;
