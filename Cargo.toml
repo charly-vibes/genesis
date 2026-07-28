@@ -24,5 +24,8 @@ thiserror = "2"
 # CLI argument parsing
 clap = { version = "4", features = ["derive", "env"] }
 
+# String similarity (suggestions module)
+strsim = "0.11"
+
 [dev-dependencies]
 # Conformance tests
