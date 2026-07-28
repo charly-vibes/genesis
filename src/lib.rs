@@ -10,6 +10,7 @@
 //! - `suite_linter` — suite-wide config lint checks (new)
 
 pub mod aix;
+pub mod config;
 pub mod envelope;
 pub mod feedback;
 pub mod managed_block;
