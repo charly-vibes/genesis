@@ -1,0 +1,58 @@
+# Publish workflow - runs CI checks and publishes to crates.io on tag
+#
+# Triggered by pushing a version tag (e.g., `git tag v0.2.0 && git push --tags`).
+# Runs the full CI pipeline, then publishes the crate to crates.io.
+#
+# Required secrets:
+#   CARGO_REGISTRY_TOKEN    - crates.io API token for publishing the crate
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: CI checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Run CI pipeline
+        run: just ci
+
+  publish:
+    name: Publish to crates.io
+    needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Publish crate
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

@@ -1,7 +1,8 @@
-# genesis justfile - unified local/CI workflow
+# genesis-vibes justfile - unified local/CI workflow
 #
 # Same commands run locally and in CI for consistent diagnostics.
 # Run `just` for default (build + test), `just ci` for full pipeline.
+# Run `just publish` to publish a new version to crates.io.
 
 set shell := ["bash", "-uc"]
 
@@ -52,12 +53,16 @@ lint:
 
 # === CI Pipeline ===
 
-# Full CI pipeline (CI)
+# Full CI pipeline — mirrors .github/workflows/ci.yml exactly
 ci: fmt-check lint test build-release
 
 # Validate specs (via espectacular)
 validate:
     ah check
+
+# Publish to crates.io (run after `just ci` passes)
+publish:
+    cargo publish
 
 # Session start
 prime:

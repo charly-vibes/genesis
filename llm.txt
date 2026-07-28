@@ -1,4 +1,4 @@
-# genesis
+# genesis-vibes
 
 Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes suite.
 
@@ -8,13 +8,25 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly
 - **suggestions**: `Suggestion` enum, `SuggestionEngine` — self-healing error suggestions (port from wai)
 - **managed_block**: `<!-- …:START -->`/`<!-- …:END -->` injector (port from wai/dont/espectacular)
 - **aix**: `llms.txt`/`llm.txt` generation, agent block injection (port from wai)
+- **config**: `ConfigFile` trait, `ConfigRegistry`, `ConfigStore` — shared config management
+- **guide**: `Verbosity`, `Output`, `ErrorSink`, `GuideBuilder` — CLI scaffold
+- **fixture**: `Fixture` builder, assertions, `Fixture::run` — test scratch environments
 - **feedback**: Redactor, context-bundle serializer, error-scratch writer, gh invocation (new)
-- **suite_linter**: testaruda.toml schema, pretender.toml-presence, ah check, badge↔block match (new)
+- **suite_linter**: `LintCheck` trait, `LinterRegistry` — suite-wide config lint checks
 
 ## Distribution
 
-Git dependency from `github.com/charly-vibes/genesis`, pinned by SemVer tag.
-No crates.io until stable.
+```toml
+[dependencies]
+genesis-vibes = "0.2"
+```
+
+Or git dependency for bleeding-edge:
+
+```toml
+[dependencies]
+genesis-vibes = { git = "https://github.com/charly-vibes/genesis", tag = "v0.2.0" }
+```
 
 ## Boundary rule
 
