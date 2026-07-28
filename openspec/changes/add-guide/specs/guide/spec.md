@@ -34,6 +34,13 @@ genesis SHALL provide an `Output<T>` type for guided command results.
 - **THEN** the guide SHALL print data to stdout
 - **AND** SHALL print the next_step footer to stderr
 
+#### Scenario: output with --json flag produces envelope
+
+- **WHEN** a command returns `Output { data: some_data, .. }`
+- **AND** the tool is run with `--json`
+- **THEN** the guide SHALL serialize the output through `genesis::envelope::Envelope`
+- **AND** the envelope SHALL have `ok: true` and `envelope_kind` matching the command
+
 #### Scenario: output with verbosity filter hides warnings
 
 - **WHEN** a command returns `Output { verbosity: 2, warnings: vec![...] }`
@@ -51,10 +58,17 @@ genesis SHALL provide an `ErrorSink` for self-healing error handling.
 - **AND** a `Suggestion::Fix` footer SHALL be printed
 - **AND** the error SHALL be written to the error scratch file
 
-#### Scenario: error without fix suggests feedback
+#### Scenario: error without fix suggests feedback only when configured
 
 - **WHEN** an error has no `Suggestion::Fix` available
-- **THEN** the error sink SHALL print `Feedback: <tool> feedback bug --from-last-error`
+- **AND** `ErrorSink.feedback_subcommand` is `Some("my-tool feedback")`
+- **THEN** the error sink SHALL print `Feedback: my-tool feedback bug --from-last-error`
+
+#### Scenario: error without fix does not suggest feedback when not configured
+
+- **WHEN** an error has no `Suggestion::Fix` available
+- **AND** `ErrorSink.feedback_subcommand` is `None`
+- **THEN** the error sink SHALL NOT print any feedback suggestion
 
 ### Requirement: Verbosity
 

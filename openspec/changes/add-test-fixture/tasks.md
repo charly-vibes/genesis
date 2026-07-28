@@ -17,7 +17,7 @@
 - [ ] 2.4 `assert_no_file(path)` — panics if file exists.
 
 ## 3. Fixture::run() — dogfooding
-- [ ] 3.1 `Fixture::run(command)` — runs command as subprocess in fixture dir.
+- [ ] 3.1 `Fixture::run(args: &[&str])` — runs command as subprocess in fixture dir.
 - [ ] 3.2 Return `Output` struct with stdout, stderr, exit_code.
 - [ ] 3.3 `Output::json<T>()` — parse stdout as JSON.
 - [ ] 3.4 `Output::success()` — returns true if exit_code == 0.

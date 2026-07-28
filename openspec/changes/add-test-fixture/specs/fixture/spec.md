@@ -62,11 +62,11 @@ genesis SHALL provide a way to run a command inside the fixture.
 
 #### Scenario: run executes a command in the fixture dir
 
-- **WHEN** `fixture.run("echo hello")` is called
+- **WHEN** `fixture.run(&["echo", "hello"])` is called
 - **THEN** the command SHALL run with `<fixture_root>` as the working directory
 - **AND** `output.stdout` SHALL contain "hello"
 
 #### Scenario: run returns exit code
 
-- **WHEN** `fixture.run("false")` is called
+- **WHEN** `fixture.run(&["false"])` is called
 - **THEN** `output.exit_code` SHALL be non-zero

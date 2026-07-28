@@ -25,6 +25,18 @@ config file operations.
 - **THEN** genesis SHALL return `ConfigError::ValidationError`
 - **AND** the error SHALL include the validation message
 
+#### Scenario: missing config suggests init command
+
+- **WHEN** `ConfigError::MissingFile` is constructed
+- **THEN** `to_suggestion()` SHALL return `Suggestion::Fix`
+- **AND** the fix command SHALL be `<tool> init`
+
+#### Scenario: validation error suggests doctor --fix
+
+- **WHEN** `ConfigError::ValidationError` is constructed
+- **THEN** `to_suggestion()` SHALL return `Suggestion::Fix`
+- **AND** the fix command SHALL be `<tool> doctor --fix`
+
 ### Requirement: ConfigFile trait
 
 genesis SHALL provide a `ConfigFile` trait that tools implement to declare
@@ -76,3 +88,17 @@ and batch operations.
 - **WHEN** `ConfigStore::validate_all()` is called
 - **THEN** it SHALL call `validate()` on each found config
 - **AND** SHALL collect and return all validation messages
+
+#### Scenario: managed_block generates a table of found and missing configs
+
+- **WHEN** `ConfigStore::managed_block()` is called
+- **THEN** it SHALL return a markdown table with columns: Tool, Path, Status
+- **AND** each registered tool SHALL have a row
+- **AND** each row SHALL show ✅ found or ❌ missing
+- **AND** the block SHALL end with a next-step suggestion for any missing configs
+
+#### Scenario: managed_block markers follow the <!-- CONFIG:START/END --> convention
+
+- **WHEN** `ConfigStore::managed_block()` is called
+- **THEN** the output SHALL start with `<!-- CONFIG:START -->`
+- **AND** SHALL end with `<!-- CONFIG:END -->`

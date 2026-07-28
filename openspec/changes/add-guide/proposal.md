@@ -23,6 +23,10 @@ A `genesis::guide` module provides a single entry point that assembles all
 the pieces into a coherent CLI scaffold, so a new tool gets all five
 principles for free.
 
+**Depends on**: `add-config` proposal — Guide's `.config::<T>()` builder
+method requires `ConfigRegistry` from `genesis::config`. If config hasn't
+been adopted yet, `.config()` is a no-op.
+
 ## What Changes
 
 ### `Guide` struct — the single entry point
@@ -75,18 +79,46 @@ pub enum Verbosity {
 }
 ```
 
+### `Guide::run()` — wrap the full execution
+
+```rust
+fn main() -> Result<(), Box<dyn Error>> {
+    let guide = Guide::new("my-tool", env!("CARGO_PKG_VERSION"))
+        .commands(&["init", "check", "doctor"])
+        .config::<MyConfig>()?
+        .build();
+
+    guide.run(|| {
+        // Your CLI logic here — returns Output<T>
+        match cli_command() {
+            Ok(data) => Output::success(data).with_next_step("Run my-tool doctor"),
+            Err(err) => Output::failure(err),
+        }
+    })
+}
+```
+
+`Guide::run()` handles:
+- Printing the `Output` (data, next_step, warnings at appropriate verbosity)
+- Error handling via `ErrorSink` (suggestion footer, scratch write, feedback fallback)
+- `--json` flag: serializes `Output` through `genesis::envelope::Envelope`
+- Exit code: success (0) or error (non-zero)
+
 ### `ErrorSink` — self-healing errors
 
 ```rust
 pub struct ErrorSink {
-    /// The last error is persisted to the error scratch (§4 of feedback).
+    /// The last error is persisted to the error scratch.
     pub scratch: bool,
     /// The error is printed with a Suggestion::Fix footer.
     pub suggest: bool,
     /// The error is printed with the full ContextBundle.
     pub context: bool,
+    /// Feedback subcommand name, if the tool has one.
+    /// If None, no feedback suggestion is printed.
+    pub feedback_subcommand: Option<String>,
 }
-```
+``````
 
 Wired into the tool's `main.rs` error handler. Every non-zero exit:
 1. Prints the error with a `Suggestion::Fix` footer
@@ -102,12 +134,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .config::<MyConfig>()?
         .build();
 
-    let result = match cli_command() {
-        Ok(output) => guide.success(output),
-        Err(err) => guide.failure(err),
-    };
-    // result always has a footer with next step or fix
-    Ok(())
+    guide.run(|| {
+        let data = do_something()?;
+        Ok(Output::success(data).with_next_step("Run my-tool doctor"))
+    })
 }
 ```
 
@@ -125,7 +155,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 - Next-step hint after every command
 - `Output` type for guided results
 - `ErrorSink` for self-healing error handling
-- Assembly of suggestions + managed_block + config + aix into one API
+- `Output::to_envelope(&self) -> Envelope<T>` — serialize to shared envelope format
+  for `--json` output
+- `Output::with_next_step(self, hint: &str) -> Self` — fluent setter for next_step
+- `Output::success(data) -> Self` — convenience constructor
+- `Output::failure(err) -> Self` — convenience constructor
+- Assembly of suggestions + managed_block + config + aix + envelope into one API
 
 ## Impact
 
