@@ -1,0 +1,17 @@
+[book]
+authors = ["charly vibes"]
+language = "en"
+src = "docs"
+title = "genesis"
+description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure."
+
+[build]
+build-dir = "docs/_book"
+
+[output.html]
+default-theme = "navy"
+git-repository-url = "https://github.com/charly-vibes/genesis"
+edit-url-template = "https://github.com/charly-vibes/genesis/edit/main/{path}"
+site-url = "/genesis/"
+no-section-label = true
+additional-css = []

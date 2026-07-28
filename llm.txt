@@ -1,0 +1,21 @@
+# genesis
+
+Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes suite.
+
+## Modules
+
+- **envelope**: `Envelope`, `EnvelopeKind`, `ErrorResult` — structured CLI output envelope (port from dont)
+- **suggestions**: `Suggestion` enum, `SuggestionEngine` — self-healing error suggestions (port from wai)
+- **managed_block**: `<!-- …:START -->`/`<!-- …:END -->` injector (port from wai/dont/espectacular)
+- **aix**: `llms.txt`/`llm.txt` generation, agent block injection (port from wai)
+- **feedback**: Redactor, context-bundle serializer, error-scratch writer, gh invocation (new)
+- **suite_linter**: testaruda.toml schema, pretender.toml-presence, ah check, badge↔block match (new)
+
+## Distribution
+
+Git dependency from `github.com/charly-vibes/genesis`, pinned by SemVer tag.
+No crates.io until stable.
+
+## Boundary rule
+
+A module is accepted only if >=2 tools need it; domain logic is never extracted.

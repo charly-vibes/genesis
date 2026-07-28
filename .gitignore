@@ -56,3 +56,6 @@ target
 
 # espectacular internal state
 .espectacular/*.db
+
+# mdbook build output
+docs/_book/

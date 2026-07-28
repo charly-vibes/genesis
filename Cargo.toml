@@ -1,0 +1,28 @@
+[package]
+name = "genesis"
+version = "0.1.0"
+edition = "2024"
+description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure"
+license = "Apache-2.0"
+repository = "https://github.com/charly-vibes/genesis"
+readme = "README.md"
+keywords = ["cli", "infrastructure", "aix", "self-healing"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "genesis"
+
+[dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+miette = { version = "7", features = ["fancy"] }
+thiserror = "2"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive", "env"] }
+
+[dev-dependencies]
+# Conformance tests

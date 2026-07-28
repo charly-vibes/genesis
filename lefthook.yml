@@ -1,0 +1,28 @@
+# lefthook.yml - pre-commit/pre-push hooks
+#
+# Install: lefthook install
+# Bypass (WIP only): git push --no-verify
+#
+# Warning: --no-verify requires:
+#   - Commit message MUST contain "WIP" or "wip"
+#   - Tests MUST be fixed before merging
+
+pre-commit:
+# ah:managed:start
+  ah-check:
+    run: ah check
+# ah:managed:end
+
+  parallel: true
+  commands:
+    format-check:
+      glob: "*.rs"
+      run: just fmt-check
+    lint:
+      glob: "*.rs"
+      run: just lint
+
+pre-push:
+  commands:
+    test:
+      run: testaruda select --safe --base origin/main --head HEAD

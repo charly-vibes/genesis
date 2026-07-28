@@ -1,0 +1,19 @@
+[default]
+extend-ignore-re = [
+  "dont",
+  "wai",
+  "genesis"
+]
+
+[default.extend-words]
+EDN = "EDN"
+LOV = "LOV"
+
+[files]
+extend-exclude = [
+  ".git/",
+  ".wai/",
+  ".beads/",
+  ".dont/",
+  ".espectacular/"
+]
