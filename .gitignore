@@ -24,6 +24,9 @@ target
 .dolt/
 *.db
 .beads-credential-key
+.beads/interactions.jsonl
+.beads/backup/
+.beads/embeddeddolt/
 .dont/*
 !.dont/AGENTS.md
 !.dont/config.toml
