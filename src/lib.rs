@@ -1,4 +1,4 @@
-//! genesis — shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
+//! genesis-vibes — shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 //!
 //! Modules, each extracted only when >=2 tools need it:
 //!

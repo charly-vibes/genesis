@@ -1,10 +1,10 @@
-# genesis
+# genesis-vibes
 
-> Status: **Proposal** — a shared Rust crate of cross-cutting CLI/AIX/self-healing
-> infrastructure for the charly-vibes suite. Each tool depends on it instead of
+> A shared Rust crate of cross-cutting CLI/AIX/self-healing infrastructure
+> for the charly-vibes tool suite. Each tool depends on it instead of
 > reimplementing the same conventions.
 
-genesis is the shared foundation the suite consistency evaluation
+genesis-vibes is the shared foundation the suite consistency evaluation
 (2026-07-27) and the tool-craft playbook point at. It generalizes
 `dont-2j6o` ("extract shared JSON envelope crate") from one module to the
 full set of cross-cutting pieces four-of-five tools are missing.
@@ -25,11 +25,35 @@ Domain logic (metrics, stores, engines, analysis) stays in each tool.
 
 ## Distribution
 
-Git dependency from `github.com/charly-vibes/genesis`, no crates.io publish
-until the interface stabilizes (per `dont-2j6o`'s decision).
+[![crates.io](https://img.shields.io/crates/v/genesis-vibes.svg)](https://crates.io/crates/genesis-vibes)
+
+```toml
+[dependencies]
+genesis-vibes = "0.2"
+```
+
+Or use a git dependency for bleeding-edge changes:
+
+```toml
+[dependencies]
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.2.0" }
+```
+
+## Modules
+
+| Module | Status | Description |
+|---|---|---|
+| `envelope` | stable | Structured CLI output envelope (ported from dont) |
+| `suggestions` | stable | Self-healing error suggestions, CommandRegistry (ported from wai) |
+| `managed_block` | stable | Managed block injector (ported from wai/dont/espectacular) |
+| `aix` | partial | AIX artifact generation (llms.txt/llm.txt/AGENTS.md helpers) |
+| `config` | stable | Shared config management via ConfigFile trait + ConfigRegistry |
+| `guide` | stable | CLI scaffold: Verbosity, Output, ErrorSink, GuideBuilder |
+| `fixture` | stable | Test scratch fixtures and dogfooding runners |
+| `feedback` | new | Agent issue reporting: redactor, context bundle, error scratch, gh invocation |
+| `suite_linter` | new | Suite-wide config lint checks via LintCheck trait |
 
 ## Status
 
-Specification and proposal stage — no `src/` yet. Implementation is blocked
-until the foundation proposal (`openspec/changes/add-genesis-foundation`) is
-approved.
+Implemented and published on crates.io (v0.2.0). Downstream adoption is tracked
+per-repo via `upgrade-genesis` openspec changes.

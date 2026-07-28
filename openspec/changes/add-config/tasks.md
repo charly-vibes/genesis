@@ -26,7 +26,7 @@
 - [x] 4.6 Integration tests with temp dir + real config files.
 
 ## 5. Downstream migration
-- [ ] 5.1 File per-repo adoption issues for each tool to adopt `genesis::config`.
+- [x] 5.1 File per-repo adoption issues: per-repo `upgrade-genesis` proposals created.
 - [ ] 5.2 Each tool thins its `src/config.rs` to just the struct + `ConfigFile` impl.
 - [ ] 5.3 Each tool registers with `ConfigRegistry` at startup.
 - [ ] 5.4 Remove dead config code from each tool.

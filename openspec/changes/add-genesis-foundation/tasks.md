@@ -49,4 +49,4 @@ in genesis. Each tool registers its checks with the `LinterRegistry`.
 ## 8. Stabilize and pin
 - [x] 8.1 Tag `v0.1.0` with the six modules stable.
 - [ ] 8.2 Verify `.wai/projects/genesis-foundation/research/tool-craft.md` Appendix A accuracy once dependents adopt (genesis-9o5 filed, P3).
-- [ ] 8.3 Open the per-repo adoption proposals (one per tool repo) — unblocked now that v0.1.0 is tagged.
+- [x] 8.3 Open the per-repo adoption proposals (one per tool repo) — `upgrade-genesis` proposals created in all 8 downstream repos.
