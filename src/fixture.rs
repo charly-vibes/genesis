@@ -104,6 +104,52 @@ impl Fixture {
             path.display()
         );
     }
+
+    /// Run a command as a subprocess in the fixture directory.
+    ///
+    /// Searches `PATH` for the binary. Returns stdout, stderr, and exit code.
+    pub fn run(&self, args: &[&str]) -> CommandOutput {
+        let (program, cmd_args) = if args.is_empty() {
+            ("", &[] as &[&str])
+        } else {
+            (args[0], &args[1..])
+        };
+
+        let output = Command::new(program)
+            .args(cmd_args)
+            .current_dir(&self.root)
+            .output()
+            .unwrap_or_else(|e| panic!("failed to run '{}' in fixture: {}", args.join(" "), e));
+
+        CommandOutput {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_code: output.status.code().unwrap_or(-1),
+        }
+    }
+}
+
+/// The result of running a command in a fixture.
+#[derive(Debug, Clone)]
+pub struct CommandOutput {
+    /// Standard output.
+    pub stdout: String,
+    /// Standard error.
+    pub stderr: String,
+    /// Exit code (or -1 if terminated by signal).
+    pub exit_code: i32,
+}
+
+impl CommandOutput {
+    /// Parse stdout as JSON.
+    pub fn json<'a, T: serde::Deserialize<'a>>(&'a self) -> Option<T> {
+        serde_json::from_str(&self.stdout).ok()
+    }
+
+    /// Returns `true` if the exit code is 0.
+    pub fn success(&self) -> bool {
+        self.exit_code == 0
+    }
 }
 
 impl Drop for Fixture {
@@ -432,5 +478,89 @@ mod tests {
         }
         // After Fixture is dropped, the temp dir should be gone
         assert!(!path.exists(), "temp dir should be cleaned up on drop");
+    }
+
+    // -- Fixture::run() ---------------------------------------------------
+
+    #[test]
+    fn test_run_echo_command() {
+        let fixture = Fixture::builder().build();
+        let output = fixture.run(&["echo", "hello world"]);
+        assert!(output.success());
+        assert!(output.stdout.contains("hello world"));
+    }
+
+    #[test]
+    fn test_run_failure_exit_code() {
+        let fixture = Fixture::builder().build();
+        let output = fixture.run(&["sh", "-c", "exit 42"]);
+        assert!(!output.success());
+        assert_eq!(output.exit_code, 42);
+    }
+
+    #[test]
+    fn test_run_with_stderr() {
+        let fixture = Fixture::builder().build();
+        let output = fixture.run(&["sh", "-c", "echo 'error msg' >&2"]);
+        assert!(output.success());
+        assert!(output.stderr.contains("error msg"));
+    }
+
+    #[test]
+    fn test_run_json_output() {
+        let fixture = Fixture::builder().build();
+        let output = fixture.run(&["echo", "{\"key\":\"value\"}"]);
+        let parsed: Option<serde_json::Value> = output.json();
+        assert!(parsed.is_some());
+        assert_eq!(parsed.unwrap()["key"], "value");
+    }
+
+    #[test]
+    fn test_run_in_fixture_directory() {
+        let fixture = Fixture::builder()
+            .with_file("test.txt", "fixture content")
+            .build();
+        let output = fixture.run(&["cat", "test.txt"]);
+        assert!(output.success());
+        assert!(output.stdout.contains("fixture content"));
+    }
+
+    #[test]
+    fn test_run_non_existent_command() {
+        let fixture = Fixture::builder().build();
+        let result = std::panic::catch_unwind(|| {
+            fixture.run(&["nonexistent_command_xyz123"]);
+        });
+        assert!(result.is_err(), "should panic on missing command");
+    }
+
+    // -- CommandOutput -----------------------------------------------------
+
+    #[test]
+    fn test_command_output_success() {
+        let ok = CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: 0,
+        };
+        assert!(ok.success());
+
+        let fail = CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: 1,
+        };
+        assert!(!fail.success());
+    }
+
+    #[test]
+    fn test_command_output_json_invalid() {
+        let output = CommandOutput {
+            stdout: "not json".into(),
+            stderr: String::new(),
+            exit_code: 0,
+        };
+        let result: Option<serde_json::Value> = output.json();
+        assert!(result.is_none());
     }
 }
