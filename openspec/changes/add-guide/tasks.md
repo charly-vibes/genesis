@@ -33,7 +33,11 @@
 - [x] 4.10 Integration tests with a mock CLI tool.
 
 ## 5. Downstream migration
-- [ ] 5.1 File adopt-guide issues for each tool.
-- [ ] 5.2 Each tool replaces its main.rs setup with `Guide::new(...)`.
-- [ ] 5.3 Each tool converts command handlers to return `Output<T>`.
-- [ ] 5.4 Remove dead error-handling code from each tool.
+- [x] 5.1 File adopt-guide issues for each tool.
+      (wai, dont, pretender, espectacular, testaruda done. vampiro tracked in vampiro-d8o.)
+- [x] 5.2 Each tool replaces its main.rs setup with `Guide::new(...)`.
+      (wai, dont, pretender, espectacular, testaruda done.)
+- [x] 5.3 Each tool converts command handlers to return `Output<T>`.
+      (wai, dont, pretender, espectacular, testaruda done.)
+- [x] 5.4 Remove dead error-handling code from each tool.
+      (wai, dont, pretender, espectacular, testaruda done.)

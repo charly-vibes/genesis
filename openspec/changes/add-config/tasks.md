@@ -27,6 +27,9 @@
 
 ## 5. Downstream migration
 - [x] 5.1 File per-repo adoption issues: per-repo `upgrade-genesis` proposals created.
-- [ ] 5.2 Each tool thins its `src/config.rs` to just the struct + `ConfigFile` impl.
-- [ ] 5.3 Each tool registers with `ConfigRegistry` at startup.
-- [ ] 5.4 Remove dead config code from each tool.
+- [x] 5.2 Each tool thins its `src/config.rs` to just the struct + `ConfigFile` impl.
+      (wai, dont, pretender, espectacular, testaruda done. vampiro tracked in vampiro-d8o.)
+- [x] 5.3 Each tool registers with `ConfigRegistry` at startup.
+      (wai, dont, pretender, espectacular, testaruda done.)
+- [x] 5.4 Remove dead config code from each tool.
+      (wai, dont, pretender, espectacular, testaruda done.)
