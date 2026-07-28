@@ -21,8 +21,16 @@ pre-commit:
     lint:
       glob: "*.rs"
       run: just lint
+    quality:
+      run: pretender check
+    test-select:
+      run: testaruda select --safe --base origin/main --head HEAD
 
 pre-push:
   commands:
     test:
       run: testaruda select --safe --base origin/main --head HEAD
+    quality:
+      run: pretender check
+    validate:
+      run: ah check
