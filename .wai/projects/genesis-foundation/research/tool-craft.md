@@ -47,7 +47,7 @@ domain CLI needs. Split the verbs accordingly.
 | Verb | Purpose | wai evidence | Suite status |
 |---|---|---|---|
 | `init` | Create the tool's on-disk state in the current repo | `commands/init.rs` | ✅ all 5 |
-| `doctor` | Health check with `--fix` that applies fixes | `commands/doctor/` | 🎯 (wai/pretender/dont/espectacular; **testaruda missing**) |
+| `doctor` | Health check with `--fix` that applies fixes | `commands/doctor/` | ✅ all 5 |
 | `config` | Inspect/edit tool config | `commands/config_cmd.rs` | ✅ all 5 |
 | `completions` | Shell completions | `cli.rs` `Commands::Completions` | ✅ all 5 |
 
@@ -170,9 +170,9 @@ reading prose. wai's pattern:
 `.wai/AGENTS.md` for the full reference) — progressive disclosure applied to
 agent instructions. 🎯 **Target**: every tool that participates in a
 managed-block system ships the injector (wai's `managed_block.rs`) and the
-block. Today only wai, dont, espectacular ship the injector; pretender and
-testaruda do not (this is the `wai-bdqw.7` fix). Also: testaruda ships no
-`llm.txt` (only `llms.txt`) — gap to close.
+block. Today only pretender still lacks the injector; testaruda now has it
+via genesis adoption (closes `wai-bdqw.7` for testaruda). testaruda also now
+ships `llm.txt`.
 
 ### 5.2 The session loop 🎯
 
@@ -295,11 +295,11 @@ AIX module audit across `wai`, `pretender`, `dont`, `espectacular`,
 | Artifact | wai | pretender | dont | espectacular | testaruda |
 |---|---|---|---|---|---|
 | `llms.txt` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `llm.txt` | ✓ | ✓ | ✓ | ✓ | ✗ |
+| `llm.txt` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `AGENTS.md` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `managed_block.rs` (injector) | ✓ | ✗ | ✓ | ✓ | ✗ |
-| `Suggestion` enum (self-heal) | ✓ | ✗ | ✗ | ✗ | ✗ |
-| `doctor` command | ✓ | ✓ | ✓ | ✓ | ✗ |
+| `managed_block.rs` (injector) | ✓ | ✗ | ✓ | ✓ | ✓ |
+| `Suggestion` enum (self-heal) | ✓ | ✗ | ✗ | ✗ | ✓ |
+| `doctor` command | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 **Reading the matrix.** A ✓ in every column = ✅ suite rule (law). Any row
 with a ✗ = 🎯 target; the gap is a ticket, not a defect in the tools that
