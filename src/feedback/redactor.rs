@@ -282,6 +282,14 @@ mod tests {
         assert_eq!(result, "PATH=/usr/bin:/bin");
     }
 
+    #[test]
+    fn test_redact_env_var_hex_path_not_redacted() {
+        // Long hex path should not be incorrectly redacted
+        let input = "BUILD_DIR=/a/b/c/d/e/f/g";
+        let result = env_var_value_redacted(input);
+        assert_eq!(result, "BUILD_DIR=/a/b/c/d/e/f/g");
+    }
+
     // ── Home path replacement ─────────────────────────────────────────
 
     #[test]

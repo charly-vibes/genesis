@@ -12,13 +12,12 @@
 //!
 //! For managed-block injection, use the `managed_block` module instead:
 //!
-//! ```rust,ignore
-//! use genesis::managed_block::{BlockDef, BlockRegistry, BlockInjector};
-//!
-//! let mut reg = BlockRegistry::new();
-//! reg.register(BlockDef::new("MY_TOOL"));
-//! let injector = BlockInjector::new(reg);
-//! injector.inject(&path, "MY_TOOL", "\n# Content\n");
+//! ```
+//! # use genesis::managed_block::{BlockDef, BlockRegistry, BlockInjector};
+//! # let mut reg = BlockRegistry::new();
+//! # reg.register(BlockDef::new("MY_TOOL"));
+//! # let injector = BlockInjector::new(reg);
+//! # injector.inject(&std::path::Path::new("test.md"), "MY_TOOL", "\n# Content\n");
 //! ```
 //!
 //! TODO: implement full AIX generation once design is finalized.

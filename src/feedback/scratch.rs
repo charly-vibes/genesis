@@ -93,11 +93,18 @@ pub fn write_scratch_best_effort(tool_name: &str, record: &ErrorRecord) {
 /// Read the last error scratch record for a tool.
 ///
 /// Returns `None` if the file doesn't exist, is empty, or can't be parsed.
+/// If concurrent writes caused interleaved lines, malformed lines are
+/// silently skipped (the last *parseable* line is returned).
 pub fn read_last_error(tool_name: &str) -> Option<ErrorRecord> {
     let path = scratch_path(tool_name);
     let content = std::fs::read_to_string(path).ok()?;
-    let last_line = content.lines().last()?;
-    serde_json::from_str(last_line).ok()
+    // Iterate in reverse to find the last parseable line
+    for line in content.lines().rev() {
+        if let Ok(record) = serde_json::from_str::<ErrorRecord>(line) {
+            return Some(record);
+        }
+    }
+    None
 }
 
 /// Read all error scratch records for a tool (newest last).

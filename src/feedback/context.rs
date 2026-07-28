@@ -130,6 +130,7 @@ pub fn format_context_bundle(bundle: &ContextBundle) -> String {
 }
 
 /// Get the gh version string.
+/// Returns `None` if `gh` is not found or fails.
 fn get_gh_version() -> Option<String> {
     std::process::Command::new("gh")
         .arg("--version")
@@ -141,7 +142,7 @@ fn get_gh_version() -> Option<String> {
                     .ok()
                     .map(|s| s.trim().to_string())
             } else {
-                Some("(gh not found)".to_string())
+                None
             }
         })
 }
