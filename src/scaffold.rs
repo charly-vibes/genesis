@@ -105,13 +105,11 @@ impl Scaffold {
     /// Creates the parent directory and writes the file if it doesn't exist.
     pub fn agent_command_file(self, path: impl AsRef<Path>, content: impl Into<String>) -> Self {
         let path = PathBuf::from(path.as_ref());
-        let parent = path.parent().map(|p| p.to_path_buf());
-        let s = if let Some(parent) = parent {
-            self.dir(parent)
+        if let Some(parent) = path.parent() {
+            self.dir(parent).default_config(path, content)
         } else {
-            self
-        };
-        s.default_config(path, content)
+            self.default_config(path, content)
+        }
     }
 
     /// Apply all collected operations.
@@ -150,6 +148,7 @@ impl Scaffold {
         // 3. Update .gitignore
         if !self.gitignore_entries.is_empty() {
             let gitignore_path = self.project_root.join(".gitignore");
+            let gitignore_existed = gitignore_path.exists();
 
             // Ensure parent directory exists
             if let Some(parent) = gitignore_path.parent() {
@@ -157,7 +156,7 @@ impl Scaffold {
             }
 
             let mut existing = String::new();
-            if gitignore_path.exists() {
+            if gitignore_existed {
                 existing = std::fs::read_to_string(&gitignore_path)?;
                 if !existing.ends_with('\n') {
                     existing.push('\n');
@@ -178,6 +177,17 @@ impl Scaffold {
                     content.push_str(entry);
                 }
                 std::fs::write(&gitignore_path, content)?;
+                if gitignore_existed {
+                    existed.push(gitignore_path);
+                } else {
+                    created.push(gitignore_path);
+                }
+            } else if gitignore_existed {
+                existed.push(gitignore_path);
+            } else {
+                // gitignore was created but had no new entries
+                // Keep it though — the file is now present
+                created.push(gitignore_path);
             }
         }
 

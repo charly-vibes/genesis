@@ -306,6 +306,14 @@ impl StatusBuilder {
         self.contributors.push(contributor);
     }
 
+    /// Convenience: register a tool's doctor as a status contributor.
+    ///
+    /// Equivalent to `builder.register(Box::new(DoctorStatusBridge::new(name, runner)))`.
+    pub fn register_doctor(&mut self, name: &'static str, runner: crate::doctor::DoctorRunner) {
+        self.contributors
+            .push(Box::new(DoctorStatusBridge::new(name, runner)));
+    }
+
     /// Build the aggregated status report.
     ///
     /// Contributors that return `Err` are included as error sections.

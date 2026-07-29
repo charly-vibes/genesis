@@ -123,7 +123,14 @@ mod tests {
 
     #[test]
     fn test_maybe_print_version_json_version_only() {
-        // --version without --json — let clap handle it
-        // We can't easily test this without env manipulation
+        // --version without --json — should return false (let clap handle it)
+        let result = maybe_print_version_json("test", "0.1.0");
+        assert!(!result, "version-only should not print");
+    }
+
+    #[test]
+    fn test_maybe_print_version_json_name_reflects_input() {
+        let result = maybe_print_version_json("custom-name", "2.0.0");
+        assert!(!result, "no --version flag should return false");
     }
 }

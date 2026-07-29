@@ -73,9 +73,9 @@ const VALID_KINDS: &[&str] = &["bug", "feature", "question", "chore"];
 ///
 /// The [`gh::GhResult`] on success, or an error message on failure.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if `kind` is invalid (validated with typo suggestions before this
+/// Returns an error if `kind` is invalid (validated with typo suggestions before this
 /// is ever reached, but a guard is in place anyway).
 pub fn handle_feedback(
     args: &FeedbackArgs,
@@ -124,10 +124,27 @@ pub fn handle_feedback(
             ));
         }
     } else {
-        return Err(
-            "No issue content specified. Use --from-last-error or pipe issue details into stdin."
-                .to_string(),
-        );
+        // Try reading from stdin (piped input, e.g., `echo "bug report" | tool feedback bug`)
+        use std::io::IsTerminal;
+        if !std::io::stdin().is_terminal() {
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).ok();
+            let input = input.trim().to_string();
+            if !input.is_empty() {
+                title.push_str("feedback report");
+                body_parts.push(format!("## Description\n\n{}\n\n", input));
+            } else {
+                return Err(
+                    "No issue content specified. Use --from-last-error or pipe content into stdin."
+                        .to_string(),
+                );
+            }
+        } else {
+            return Err(
+                "No issue content specified. Use --from-last-error or pipe content into stdin."
+                    .to_string(),
+            );
+        }
     }
 
     // ── Append context bundle ──────────────────────────────────────

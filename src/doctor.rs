@@ -343,13 +343,23 @@ pub trait DoctorCheck: Send + Sync {
 /// assert!(report.is_healthy());
 /// ```
 pub struct DoctorRunner {
+    tool_name: String,
     checks: Vec<Box<dyn DoctorCheck>>,
 }
 
 impl DoctorRunner {
     /// Create a new runner with the given checks.
     pub fn new(checks: Vec<Box<dyn DoctorCheck>>) -> Self {
-        Self { checks }
+        Self {
+            tool_name: "doctor".to_string(),
+            checks,
+        }
+    }
+
+    /// Set the tool name (fluent). Default: `"doctor"`.
+    pub fn with_tool_name(mut self, name: impl Into<String>) -> Self {
+        self.tool_name = name.into();
+        self
     }
 
     /// Add a check to the runner (fluent).
@@ -381,6 +391,13 @@ impl DoctorRunner {
     ///
     /// When `fix` is `true` and a check passes after fixing, it is reported
     /// as a passing check with a message indicating the fix was applied.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return `Err` for individual check failures —
+    /// those are captured and reported as fail entries in the [`DoctorReport`].
+    /// `Err` is only returned for systemic failures (e.g., filesystem errors
+    /// in the fix path that cannot be caught).
     pub fn run(
         &self,
         repo_root: &Path,
@@ -513,17 +530,47 @@ impl DoctorRunner {
             }
         }
 
-        Ok(DoctorReport::new("doctor", entries))
+        Ok(DoctorReport::new(&self.tool_name, entries))
     }
 }
 
 // ── Convenience builders ──────────────────────────────────────────────
+
+/// Adapter that wraps a [`LintCheck`](crate::suite_linter::LintCheck) as a [`DoctorCheck`].
+///
+/// Created via [`doctor::lint_to_doctor`]. The adapter delegates `run()`
+/// to the wrapped check and has no auto-fix support.
+pub struct LintCheckAdapter<C: crate::suite_linter::LintCheck>(pub C);
+
+impl<C: crate::suite_linter::LintCheck + 'static> DoctorCheck for LintCheckAdapter<C> {
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
+
+    fn description(&self) -> &'static str {
+        self.0.description()
+    }
+
+    fn run(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        self.0.run(repo_root)
+    }
+}
 
 /// Create a [`DoctorRunner`] from a slice of [`DoctorCheck`] trait objects.
 ///
 /// Convenience wrapper when you already have a `Vec<Box<dyn DoctorCheck>>`.
 pub fn runner(checks: Vec<Box<dyn DoctorCheck>>) -> DoctorRunner {
     DoctorRunner::new(checks)
+}
+
+/// Wrap an existing [`LintCheck`](crate::suite_linter::LintCheck) as a [`DoctorCheck`] (no auto-fix support).
+///
+/// This lets tools that already implement `LintCheck` use the doctor
+/// framework without rewriting their checks.
+pub fn lint_to_doctor<C: crate::suite_linter::LintCheck + 'static>(
+    check: C,
+) -> LintCheckAdapter<C> {
+    LintCheckAdapter(check)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
