@@ -13,6 +13,7 @@
 
 pub mod aix;
 pub mod config;
+pub mod doctor;
 pub mod envelope;
 pub mod feedback;
 pub mod fixture;
