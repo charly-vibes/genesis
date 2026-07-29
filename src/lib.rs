@@ -12,6 +12,7 @@
 //! - `suite_linter`  — suite-wide config lint checks (new)
 
 pub mod aix;
+pub mod cli;
 pub mod config;
 pub mod doctor;
 pub mod envelope;
