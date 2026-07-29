@@ -358,12 +358,13 @@ impl Default for StatusBuilder {
 /// ```rust,no_run
 /// use genesis::status::StatusBuilder;
 /// use genesis::doctor::DoctorRunner;
+/// use genesis::status::DoctorStatusBridge;
 ///
 /// let mut builder = StatusBuilder::new();
 ///
 /// // Register a tool's doctor as a status contributor
 /// let runner: DoctorRunner = DoctorRunner::new(vec![]);
-/// builder.register(Box::new(runner.into_status_contributor("my-tool")));
+/// builder.register(Box::new(DoctorStatusBridge::new("my-tool", runner)));
 /// ```
 pub struct DoctorStatusBridge {
     name: &'static str,

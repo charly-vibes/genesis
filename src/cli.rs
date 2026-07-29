@@ -15,6 +15,7 @@ use std::io::Write;
 ///
 /// ```rust,no_run
 /// use clap::Parser;
+/// use clap::CommandFactory;
 /// use genesis::cli::generate_completions;
 ///
 /// #[derive(Parser)]

@@ -20,7 +20,7 @@
 //!     .unwrap();
 //!
 //! for path in &result.created {
-//!     println!("created: {path}");
+//!     println!("created: {:?}", path);
 //! }
 //! ```
 

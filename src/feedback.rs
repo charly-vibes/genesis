@@ -20,6 +20,7 @@
 //!     "my-tool",
 //!     "0.1.0",
 //!     "owner/my-tool",
+//!     &std::env::current_dir().unwrap(),
 //! ).unwrap();
 //! ```
 
