@@ -20,6 +20,7 @@ pub mod feedback;
 pub mod fixture;
 pub mod guide;
 pub mod managed_block;
+pub mod scaffold;
 pub mod status;
 pub mod suggestions;
 pub mod suite_linter;
