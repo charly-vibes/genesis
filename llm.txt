@@ -11,23 +11,23 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly
 - **config**: `ConfigFile` trait, `ConfigRegistry`, `ConfigStore` — shared config management
 - **guide**: `Verbosity`, `Output`, `ErrorSink`, `GuideBuilder` — CLI scaffold
 - **fixture**: `Fixture` builder, assertions, `Fixture::run` — test scratch environments
-- **feedback**: Redactor, context-bundle serializer, error-scratch writer, gh invocation (new)
+- **feedback**: `handle_feedback()`, `FeedbackArgs` — agent issue reporting (new)
 - **suite_linter**: `LintCheck` trait, `LinterRegistry` — suite-wide config lint checks
+- **doctor**: `DoctorCheck` trait, `DoctorRunner`, `DoctorReport` — diagnostics with auto-fix (new)
+- **cli**: `generate_completions()`, `maybe_print_version_json()` — CLI helpers (new)
+- **status**: `StatusContributor` trait, `StatusBuilder`, `DoctorStatusBridge` — cross-tool dashboard (new)
+- **scaffold**: `Scaffold` builder — standardized init dir/config creation (new)
 
 ## Distribution
 
 ```toml
 [dependencies]
-genesis-vibes = "0.2"
+genesis-vibes = "0.3"
 ```
 
-Or git dependency for bleeding-edge:
+Or use a git dependency:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "https://github.com/charly-vibes/genesis", tag = "v0.2.0" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.3.0" }
 ```
-
-## Boundary rule
-
-A module is accepted only if >=2 tools need it; domain logic is never extracted.

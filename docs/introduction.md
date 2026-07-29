@@ -1,3 +1,19 @@
 # genesis
 
 Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
+
+## Modules
+
+- **envelope** — structured CLI output envelope (port from dont)
+- **suggestions** — self-healing error suggestions (port from wai)
+- **managed_block** — managed block injector (port from wai/dont/espectacular)
+- **aix** — AIX artifact generation helpers
+- **config** — shared config management (ConfigFile, ConfigRegistry, ConfigStore)
+- **guide** — CLI scaffold (Verbosity, Output, ErrorSink, GuideBuilder)
+- **fixture** — test scratch environments and runners
+- **feedback** — agent issue reporting (handle_feedback, FeedbackArgs)
+- **suite_linter** — suite-wide lint checks
+- **doctor** — diagnostic framework with auto-fix (DoctorCheck, DoctorRunner, DoctorReport)
+- **cli** — CLI helpers (generate_completions, maybe_print_version_json)
+- **status** — cross-tool status dashboard (StatusContributor, StatusBuilder)
+- **scaffold** — init scaffolding builder (Scaffold)

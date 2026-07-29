@@ -3,11 +3,16 @@
 //! Modules, each extracted only when >=2 tools need it:
 //!
 //! - `aix`           — AIX artifact generation (port from wai)
+//! - `cli`           — CLI helpers (completions, version-json pre-parse)
 //! - `config`        — shared config management
+//! - `doctor`        — diagnostic framework with auto-fix support (new)
 //! - `envelope`      — structured CLI output envelope (port from dont)
 //! - `feedback`      — agent issue reporting (new)
+//! - `fixture`       — test scratch environments and runners (new)
 //! - `guide`         — CLI scaffold for building guiding tools (new)
 //! - `managed_block` — managed block injector (port from wai/dont/espectacular)
+//! - `scaffold`      — init scaffolding for standardized setup (new)
+//! - `status`        — cross-tool status/prime dashboard (new)
 //! - `suggestions`   — self-healing error suggestions (port from wai)
 //! - `suite_linter`  — suite-wide config lint checks (new)
 

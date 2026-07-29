@@ -18,11 +18,8 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - `guide` — CLI scaffold
 - `fixture` — test scratch environments
 - `feedback` — agent issue reporting
-- `suite_linter` — suite-wide config lint checks
-
-## Usage
-
-```toml
-[dependencies]
-genesis-vibes = "0.2"
-```
+- `suite_linter` — suite-wide lint checks
+- `doctor` — diagnostics with auto-fix
+- `cli` — CLI helpers
+- `status` — cross-tool status dashboard
+- `scaffold` — init scaffolding

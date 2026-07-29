@@ -6,19 +6,10 @@
 
 genesis-vibes is the shared foundation the suite consistency evaluation
 (2026-07-27) and the tool-craft playbook point at. It generalizes
-`dont-2j6o` ("extract shared JSON envelope crate") from one module to the
-full set of cross-cutting pieces four-of-five tools are missing.
+`dont-2j6o` ("extract shared JSON envelope crate") from one module to
+the full set of cross-cutting pieces the suite needs.
 
 ## What it owns (and what it does not)
-
-| Module | Donor | Today present in |
-|---|---|---|
-| `envelope` | dont | dont only |
-| `suggestions` | wai | wai only |
-| `managed_block` | wai / dont / espectacular | 3 of 5 |
-| `aix` (llms.txt/llm.txt/AGENTS.md generation) | wai | partial |
-| `feedback` (redactor + context bundle + error scratch) | new | none |
-| `suite_linter` (the `wai doctor --suite` checks) | new (wai-bdqw.8) | none |
 
 **Boundary rule:** if only one tool uses it, it does not belong in the kit.
 Domain logic (metrics, stores, engines, analysis) stays in each tool.
@@ -29,14 +20,14 @@ Domain logic (metrics, stores, engines, analysis) stays in each tool.
 
 ```toml
 [dependencies]
-genesis-vibes = "0.2"
+genesis-vibes = "0.3"
 ```
 
 Or use a git dependency for bleeding-edge changes:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.2.0" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.3.0" }
 ```
 
 ## Modules
@@ -46,14 +37,69 @@ genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.2.0" }
 | `envelope` | stable | Structured CLI output envelope (ported from dont) |
 | `suggestions` | stable | Self-healing error suggestions, CommandRegistry (ported from wai) |
 | `managed_block` | stable | Managed block injector (ported from wai/dont/espectacular) |
-| `aix` | partial | AIX artifact generation (llms.txt/llm.txt/AGENTS.md helpers) |
+| `aix` | stable | AIX artifact generation (llms.txt/llm.txt/AGENTS.md helpers) |
 | `config` | stable | Shared config management via ConfigFile trait + ConfigRegistry |
 | `guide` | stable | CLI scaffold: Verbosity, Output, ErrorSink, GuideBuilder |
 | `fixture` | stable | Test scratch fixtures and dogfooding runners |
-| `feedback` | new | Agent issue reporting: redactor, context bundle, error scratch, gh invocation |
-| `suite_linter` | new | Suite-wide config lint checks via LintCheck trait |
+| `feedback` | stable | Agent issue reporting: redactor, context bundle, error scratch, gh invocation |
+| `suite_linter` | stable | Suite-wide config lint checks via LintCheck trait |
+| `doctor` | new | Diagnostic framework: DoctorCheck trait, DoctorRunner, DoctorReport with auto-fix |
+| `cli` | new | CLI helpers: generate_completions, maybe_print_version_json |
+| `status` | new | Cross-tool status/prime dashboard: StatusContributor trait, StatusBuilder |
+| `scaffold` | new | Init scaffolding: Scaffold builder for dirs, configs, gitignore, managed blocks |
+
+## Module details
+
+### `envelope`
+Structured JSON output with `ok`, `envelope_version`, `envelope_kind`, `data`, `warnings`, `hints`, `meta`.
+Every command returns `Envelope<T>`. Callers check `ok` first.
+
+### `suggestions`
+Typo detection via `SuggestionEngine` + `CommandRegistry`. Suggests `DidYouMean` and `Fix` corrections
+when a user types an unknown subcommand.
+
+### `managed_block`
+Injector for `<!-- BLOCK:START -->` / `<!-- BLOCK:END -->` managed blocks in AGENTS.md and other
+markdown files. Used by wai, dont, testaruda, espectacular, vampiro.
+
+### `aix`
+Helpers for generating `llms.txt`, `llm.txt`, and `AGENTS.md` agent blocks.
+
+### `config`
+`ConfigFile` trait with `read()`/`write()`/`validate()`, `ConfigRegistry` for tool registration,
+`ConfigStore` for discovery and validation.
+
+### `guide`
+`Guide` builder with `Guide::run()` for command dispatch, `ErrorSink` for self-healing error output,
+`Output<T>` for structured CLI output, `Verbosity` for progressive disclosure.
+
+### `fixture`
+`Fixture` builder with `with_file()`, `with_toml()`, `with_marker()`, `with_git_init()`, and
+`Fixture::run()` for dogfooding commands in test environments.
+
+### `feedback`
+`handle_feedback()` function that any tool calls from its `feedback` subcommand. Wraps scratch
+(error persistence), context (env bundle), redactor (privacy), and gh (GitHub issue creation).
+
+### `suite_linter`
+`LintCheck` trait + `LinterRegistry` for suite-wide config lint checks. Used by testaruda's doctor.
+
+### `doctor`
+`DoctorCheck` trait (with optional auto-fix), `DoctorRunner` (orchestrates checks with fix-verify cycle),
+`DoctorReport` (structured results with JSON envelope). Replaces each tool's custom CheckResult/DoctorPayload.
+
+### `cli`
+`generate_completions()` — one-liner for `clap_complete` shell completions.
+`maybe_print_version_json()` — pre-parse `--version --json` before clap processes args.
+
+### `status`
+`StatusContributor` trait for tools to register health state. `StatusBuilder` aggregates all
+contributors. `DoctorStatusBridge` wraps any `DoctorRunner` as a contributor automatically.
+
+### `scaffold`
+`Scaffold` builder for standardizing `init` commands: `.dir()`, `.default_config()`, `.gitignore_entry()`,
+`.managed_block()`, `.agent_command_file()`. Returns `ScaffoldResult` with created/existed paths.
 
 ## Status
 
-Implemented and published on crates.io (v0.2.0). Downstream adoption is tracked
-per-repo via `upgrade-genesis` openspec changes.
+Published on crates.io (v0.3.0). All 6 Rust tools in the suite depend on genesis.
