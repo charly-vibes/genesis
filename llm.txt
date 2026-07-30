@@ -9,7 +9,7 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly
 - **managed_block**: `<!-- …:START -->`/`<!-- …:END -->` injector (port from wai/dont/espectacular)
 - **aix**: `llms.txt`/`llm.txt` generation, agent block injection (port from wai)
 - **config**: `ConfigFile` trait, `ConfigRegistry`, `ConfigStore` — shared config management
-- **guide**: `Verbosity`, `Output`, `ErrorSink`, `GuideBuilder` — CLI scaffold
+- **guide**: `Verbosity`, `CliVerbosity`, `OutputFormat`, `CliFormat`, `Output`, `ErrorSink`, `GuideBuilder`, `Guide` — CLI scaffold with progressive-disclosure verbosity, TTY-aware output format, and format-dispatching commands
 - **fixture**: `Fixture` builder, assertions, `Fixture::run` — test scratch environments
 - **feedback**: `handle_feedback()`, `FeedbackArgs` — agent issue reporting (new)
 - **suite_linter**: `LintCheck` trait, `LinterRegistry` — suite-wide config lint checks
@@ -17,17 +17,18 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly
 - **cli**: `generate_completions()`, `maybe_print_version_json()` — CLI helpers (new)
 - **status**: `StatusContributor` trait, `StatusBuilder`, `DoctorStatusBridge` — cross-tool dashboard (new)
 - **scaffold**: `Scaffold` builder — standardized init dir/config creation (new)
+- **discovery**: `scan()`, `register()`, `unregister()`, `Manifest` — tool discovery via `.genesis/tools.toml` manifest (new)
 
 ## Distribution
 
 ```toml
 [dependencies]
-genesis-vibes = "0.3"
+genesis-vibes = "0.4"
 ```
 
 Or use a git dependency:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.3.0" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.4.0" }
 ```

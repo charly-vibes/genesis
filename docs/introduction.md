@@ -9,7 +9,7 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - **managed_block** — managed block injector (port from wai/dont/espectacular)
 - **aix** — AIX artifact generation helpers
 - **config** — shared config management (ConfigFile, ConfigRegistry, ConfigStore)
-- **guide** — CLI scaffold (Verbosity, Output, ErrorSink, GuideBuilder)
+- **guide** — CLI scaffold (Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, ErrorSink, GuideBuilder, Guide)
 - **fixture** — test scratch environments and runners
 - **feedback** — agent issue reporting (handle_feedback, FeedbackArgs)
 - **suite_linter** — suite-wide lint checks
@@ -17,3 +17,4 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - **cli** — CLI helpers (generate_completions, maybe_print_version_json)
 - **status** — cross-tool status dashboard (StatusContributor, StatusBuilder)
 - **scaffold** — init scaffolding builder (Scaffold)
+- **discovery** — tool discovery via .genesis/tools.toml manifest (scan, register, unregister, Manifest)

@@ -15,7 +15,7 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - `managed_block` — managed block injector
 - `aix` — AIX artifact generation
 - `config` — shared config management
-- `guide` — CLI scaffold
+- `guide` — CLI scaffold (Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, Guide)
 - `fixture` — test scratch environments
 - `feedback` — agent issue reporting
 - `suite_linter` — suite-wide lint checks
@@ -23,3 +23,4 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - `cli` — CLI helpers
 - `status` — cross-tool status dashboard
 - `scaffold` — init scaffolding
+- `discovery` — tool discovery via .genesis/tools.toml manifest

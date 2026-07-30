@@ -20,14 +20,14 @@ Domain logic (metrics, stores, engines, analysis) stays in each tool.
 
 ```toml
 [dependencies]
-genesis-vibes = "0.3"
+genesis-vibes = "0.4"
 ```
 
 Or use a git dependency for bleeding-edge changes:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.3.0" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.4.0" }
 ```
 
 ## Modules
@@ -39,7 +39,7 @@ genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.3.0" }
 | `managed_block` | stable | Managed block injector (ported from wai/dont/espectacular) |
 | `aix` | stable | AIX artifact generation (llms.txt/llm.txt/AGENTS.md helpers) |
 | `config` | stable | Shared config management via ConfigFile trait + ConfigRegistry |
-| `guide` | stable | CLI scaffold: Verbosity, Output, ErrorSink, GuideBuilder |
+| `guide` | stable | CLI scaffold: Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, ErrorSink, GuideBuilder, Guide |
 | `fixture` | stable | Test scratch fixtures and dogfooding runners |
 | `feedback` | stable | Agent issue reporting: redactor, context bundle, error scratch, gh invocation |
 | `suite_linter` | stable | Suite-wide config lint checks via LintCheck trait |
@@ -47,6 +47,7 @@ genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.3.0" }
 | `cli` | new | CLI helpers: generate_completions, maybe_print_version_json |
 | `status` | new | Cross-tool status/prime dashboard: StatusContributor trait, StatusBuilder |
 | `scaffold` | new | Init scaffolding: Scaffold builder for dirs, configs, gitignore, managed blocks |
+| `discovery` | new | Tool discovery via .genesis/tools.toml manifest: scan, register, unregister |
 
 ## Module details
 
@@ -70,8 +71,18 @@ Helpers for generating `llms.txt`, `llm.txt`, and `AGENTS.md` agent blocks.
 `ConfigStore` for discovery and validation.
 
 ### `guide`
-`Guide` builder with `Guide::run()` for command dispatch, `ErrorSink` for self-healing error output,
-`Output<T>` for structured CLI output, `Verbosity` for progressive disclosure.
+`Guide` builder with `Guide::run()` and `Guide::run_formatted()` for command dispatch,
+`ErrorSink` for self-healing error output, `Output<T>` for structured CLI output,
+`Verbosity` for progressive disclosure.
+
+**v0.4.0 additions:**
+- `CliVerbosity` — embeddable clap args struct for `-v`/`-vv`/`-vvv` + `-q`/`--quiet`
+- `CliFormat` — embeddable clap args struct for `--json`/`--human` with TTY auto-detect
+  (JSON for agents/pipes, Human for interactive terminals)
+- `OutputFormat` enum (`Human` | `Json`)
+- `Output::emit(format, ...)` — format-dispatching output
+- `Verbosity::from_verbose_count(u8)` — canonical clap count → Verbosity mapping
+- `Verbosity::help_footer()` — "Use -v for..." progressive-disclosure hint
 
 ### `fixture`
 `Fixture` builder with `with_file()`, `with_toml()`, `with_marker()`, `with_git_init()`, and
@@ -99,6 +110,14 @@ contributors. `DoctorStatusBridge` wraps any `DoctorRunner` as a contributor aut
 ### `scaffold`
 `Scaffold` builder for standardizing `init` commands: `.dir()`, `.default_config()`, `.gitignore_entry()`,
 `.managed_block()`, `.agent_command_file()`. Returns `ScaffoldResult` with created/existed paths.
+
+### `discovery`
+Tool discovery via `.genesis/tools.toml` manifest. Genesis-based tools self-declare during `init`
+so orchestration tools like wai discover them without hardcoding.
+- `scan(project)` → `Vec<DetectedTool>`
+- `register(project, name, desc, type, path)` — add/update entry
+- `unregister(project, name)` — remove entry
+- `list_tools(project)`, `has_manifest(project)`
 
 ## Status
 
