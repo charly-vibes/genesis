@@ -5,6 +5,7 @@
 //! - `aix`           — AIX artifact generation (port from wai)
 //! - `cli`           — CLI helpers (completions, version-json pre-parse)
 //! - `config`        — shared config management
+//! - `discovery`     — tool discovery via `.genesis/tools.toml` manifest (new)
 //! - `doctor`        — diagnostic framework with auto-fix support (new)
 //! - `envelope`      — structured CLI output envelope (port from dont)
 //! - `feedback`      — agent issue reporting (new)
@@ -19,6 +20,7 @@
 pub mod aix;
 pub mod cli;
 pub mod config;
+pub mod discovery;
 pub mod doctor;
 pub mod envelope;
 pub mod feedback;

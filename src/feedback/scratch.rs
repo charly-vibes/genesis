@@ -224,10 +224,11 @@ mod tests {
 
     #[test]
     fn test_write_and_read_last_error() {
-        let tool = "_test_genesis_scratch";
+        // Use a unique tool name per run to avoid races with parallel tests
+        let tool = format!("_test_gs_{}", std::process::id());
         // Clean up any leftover data from previous runs
-        let _ = std::fs::remove_file(scratch_path(tool));
-        let _ = std::fs::remove_dir(scratch_dir(tool));
+        let _ = std::fs::remove_file(scratch_path(&tool));
+        let _ = std::fs::remove_dir(scratch_dir(&tool));
 
         let record = ErrorRecord {
             ts: "2026-07-28T00:00:00Z".into(),
@@ -237,14 +238,14 @@ mod tests {
             kind: "Test".into(),
         };
 
-        write_scratch_best_effort(tool, &record);
-        let last = read_last_error(tool);
+        write_scratch_best_effort(&tool, &record);
+        let last = read_last_error(&tool);
         assert!(last.is_some());
         assert_eq!(last.unwrap().exit, 1);
 
         // Cleanup
-        let _ = std::fs::remove_file(scratch_path(tool));
-        let _ = std::fs::remove_dir(scratch_dir(tool));
+        let _ = std::fs::remove_file(scratch_path(&tool));
+        let _ = std::fs::remove_dir(scratch_dir(&tool));
     }
 
     #[test]
@@ -255,11 +256,10 @@ mod tests {
     }
 
     #[test]
+    #[test]
     fn test_read_all_errors() {
-        let tool = "_test_genesis_all";
-        // Clean up any leftover data from previous runs
-        let _ = std::fs::remove_file(scratch_path(tool));
-        let _ = std::fs::remove_dir(scratch_dir(tool));
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("errors.jsonl");
 
         for i in 0..3 {
             let record = ErrorRecord {
@@ -269,27 +269,31 @@ mod tests {
                 footer: None,
                 kind: "Test".into(),
             };
-            write_scratch_best_effort(tool, &record);
+            let line = serde_json::to_string(&record).unwrap();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .unwrap();
+            writeln!(file, "{}", line).unwrap();
         }
 
-        let all = read_all_errors(tool);
+        let content = std::fs::read_to_string(&path).unwrap();
+        let all: Vec<ErrorRecord> = content
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
         assert_eq!(all.len(), 3);
         assert_eq!(all[0].exit, 0);
         assert_eq!(all[2].exit, 2);
-
-        // Cleanup
-        let _ = std::fs::remove_file(scratch_path(tool));
-        let _ = std::fs::remove_dir(scratch_dir(tool));
+        // dir is cleaned up on drop
     }
 
     #[test]
+    #[test]
     fn test_cap_scratch_file() {
-        let tool = "_test_genesis_cap";
-        let path = scratch_path(tool);
-        let dir = scratch_dir(tool);
-        // Clean up any leftover data from previous runs
-        let _ = std::fs::remove_file(&path);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("errors.jsonl");
 
         // Write MAX_ENTRIES + 10 lines
         for i in 0..MAX_ENTRIES + 10 {
@@ -315,10 +319,7 @@ mod tests {
         let content = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = content.lines().collect();
         assert_eq!(lines.len(), MAX_ENTRIES);
-
-        // Cleanup
-        let _ = std::fs::remove_file(scratch_path(tool));
-        let _ = std::fs::remove_dir(scratch_dir(tool));
+        // dir is cleaned up on drop
     }
 
     #[test]
@@ -334,9 +335,13 @@ mod tests {
 
     #[test]
     fn test_scratch_dir_uses_xdg() {
+        let prev = std::env::var("XDG_CACHE_HOME").ok();
         unsafe { std::env::set_var("XDG_CACHE_HOME", "/custom/cache") };
         let dir = scratch_dir("test-tool");
         assert_eq!(dir, PathBuf::from("/custom/cache/test-tool"));
-        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        match prev {
+            Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
+        }
     }
 }

@@ -1,21 +1,29 @@
 //! CLI scaffold for building guiding tools.
 //!
-//! Provides `Verbosity`, `Output`, and plumbing to assemble
-//! genesis modules into a coherent CLI experience.
+//! Provides `Verbosity`, `Output`, `CliVerbosity`, `OutputFormat`, `CliFormat`,
+//! and plumbing to assemble genesis modules into a coherent CLI experience.
 //!
 //! ## Usage
 //!
 //! ```rust
-//! use genesis::guide::{Verbosity, Output};
+//! use genesis::guide::{Verbosity, Output, CliVerbosity};
 //!
 //! let output = Output::success("done")
 //!     .with_next_step("Run doctor")
 //!     .with_warning("check your config");
 //!
-//! let verbosity = Verbosity::from(2u8);
+//! // From clap's `-v` count:
+//! let verbosity = Verbosity::from_verbose_count(2);
 //! let mut out = std::io::stdout();
 //! let mut err = std::io::stderr();
 //! output.print(verbosity, &mut out, &mut err).unwrap();
+//!
+//! // Or embed the clap args struct:
+//! #[derive(clap::Args)]
+//! struct MyCli {
+//!     #[command(flatten)]
+//!     pub verbose: CliVerbosity,
+//! }
 //! ```
 
 use crate::feedback::scratch as scratch_mod;
@@ -43,6 +51,33 @@ impl Verbosity {
     /// The maximum verbosity level we recognise.
     pub const MAX: u8 = 3;
 
+    /// Create a `Verbosity` from clap's `-v` count.
+    ///
+    /// This is the canonical way to wire up clap's `ArgAction::Count`:
+    ///
+    /// ```rust
+    /// use genesis::guide::Verbosity;
+    ///
+    /// // Maps -v=0 -> Normal (default), -v -> Verbose, -vv -> Debug
+    /// let v = Verbosity::from_verbose_count(0);
+    /// assert_eq!(v, Verbosity::Normal);
+    ///
+    /// let v = Verbosity::from_verbose_count(2);
+    /// assert_eq!(v, Verbosity::Debug);
+    /// ```
+    ///
+    /// The difference from `Verbosity::from(0u8)` (which returns `Quiet`)
+    /// is that `from_verbose_count(0)` returns `Normal`, because `-v`
+    /// absence should mean default, not silence. Use the separate
+    /// `-q`/`--quiet` flag for `Quiet`.
+    pub fn from_verbose_count(count: u8) -> Self {
+        match count {
+            0 => Verbosity::Normal,
+            1 => Verbosity::Verbose,
+            _ => Verbosity::Debug,
+        }
+    }
+
     /// Returns `true` if `level` should be displayed at this verbosity.
     ///
     /// A level is shown when the output's verbosity threshold is <= the
@@ -54,6 +89,14 @@ impl Verbosity {
     /// Return the numeric value.
     pub fn as_u8(self) -> u8 {
         self as u8
+    }
+
+    /// Return a help footer hinting at progressive-disclosure verbosity.
+    ///
+    /// Wai's convention: `-v` for advanced options, `-vv` for environment
+    /// variables, `-vvv` for internals.
+    pub fn help_footer() -> &'static str {
+        "Use -v for advanced options, -vv for environment variables, -vvv for internals."
     }
 }
 
@@ -77,6 +120,257 @@ impl std::fmt::Display for Verbosity {
             Verbosity::Debug => write!(f, "debug"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// CliVerbosity
+// ---------------------------------------------------------------------------
+
+/// Clap-derivable args struct for `-v`/`-vv`/`-vvv` / `-q`.
+///
+/// Requires your crate to depend on `clap` with the `derive` feature
+/// (already satisfied if you depend on `genesis`, which pulls in clap).
+///
+/// Embed this in your clap CLI struct with `#[command(flatten)]`:
+///
+/// ```rust,no_run
+/// use clap::Parser;
+/// use genesis::guide::CliVerbosity;
+///
+/// #[derive(Parser)]
+/// struct Cli {
+///     #[command(flatten)]
+///     pub verbose: CliVerbosity,
+/// }
+///
+/// let cli = Cli::parse();
+/// let verbosity = cli.verbose.verbosity();
+/// ```
+///
+/// Both flags are marked `global = true` so they are accepted before
+/// or after any subcommand, matching wai's CLI ergonomics.
+///
+/// The `-q`/`--quiet` flag overrides the `-v` count: if `--quiet` is set,
+/// verbosity is `Quiet` regardless of `-v`.
+#[derive(Debug, Clone, Copy, clap::Args)]
+pub struct CliVerbosity {
+    /// Increase output verbosity (-v, -vv, -vvv)
+    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
+    pub verbose: u8,
+
+    /// Suppress non-error output
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
+}
+
+impl CliVerbosity {
+    /// Resolve the effective `Verbosity` from the clap args.
+    ///
+    /// `--quiet` takes precedence: if set, returns `Quiet`.
+    /// Otherwise, `-v` count maps via `Verbosity::from_verbose_count`.
+    pub fn verbosity(&self) -> Verbosity {
+        if self.quiet {
+            Verbosity::Quiet
+        } else {
+            Verbosity::from_verbose_count(self.verbose)
+        }
+    }
+
+    /// Return the raw clap `-v` count.
+    ///
+    /// Use this when you need the full wai-style 3-level progressive
+    /// disclosure that `Verbosity` can't express (e.g. `>= 3` checks
+    /// for internals vs env vars):
+    ///
+    /// ```rust,no_run
+    /// # use genesis::guide::CliVerbosity;
+    /// # let cli = CliVerbosity { verbose: 2, quiet: false };
+    /// if cli.raw_count() >= 3 {
+    ///     // show internals
+    /// } else if cli.raw_count() >= 2 {
+    ///     // show env vars
+    /// }
+    /// ```
+    pub fn raw_count(&self) -> u8 {
+        self.verbose
+    }
+}
+
+#[cfg(test)]
+mod cli_verbosity_tests {
+    use super::*;
+
+    #[test]
+    fn default_is_normal() {
+        let cv = CliVerbosity {
+            verbose: 0,
+            quiet: false,
+        };
+        assert_eq!(cv.verbosity(), Verbosity::Normal);
+    }
+
+    #[test]
+    fn verbose_count_one() {
+        let cv = CliVerbosity {
+            verbose: 1,
+            quiet: false,
+        };
+        assert_eq!(cv.verbosity(), Verbosity::Verbose);
+    }
+
+    #[test]
+    fn verbose_count_two() {
+        let cv = CliVerbosity {
+            verbose: 2,
+            quiet: false,
+        };
+        assert_eq!(cv.verbosity(), Verbosity::Debug);
+    }
+
+    #[test]
+    fn verbose_count_three() {
+        let cv = CliVerbosity {
+            verbose: 3,
+            quiet: false,
+        };
+        assert_eq!(cv.verbosity(), Verbosity::Debug);
+    }
+
+    #[test]
+    fn quiet_overrides_verbose() {
+        let cv = CliVerbosity {
+            verbose: 3,
+            quiet: true,
+        };
+        assert_eq!(cv.verbosity(), Verbosity::Quiet);
+    }
+
+    #[test]
+    fn quiet_without_verbose() {
+        let cv = CliVerbosity {
+            verbose: 0,
+            quiet: true,
+        };
+        assert_eq!(cv.verbosity(), Verbosity::Quiet);
+    }
+
+    #[test]
+    fn raw_count_preserves_value() {
+        let cv = CliVerbosity {
+            verbose: 2,
+            quiet: false,
+        };
+        assert_eq!(cv.raw_count(), 2);
+
+        let cv = CliVerbosity {
+            verbose: 3,
+            quiet: false,
+        };
+        assert_eq!(cv.raw_count(), 3);
+    }
+
+    #[test]
+    fn raw_count_ignores_quiet() {
+        let cv = CliVerbosity {
+            verbose: 3,
+            quiet: true,
+        };
+        // raw_count returns the clap count regardless of --quiet
+        assert_eq!(cv.raw_count(), 3);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OutputFormat & CliFormat
+// ---------------------------------------------------------------------------
+
+/// Output format selection for CLI commands.
+///
+/// - `Human` — pretty-printed, human-readable output.
+/// - `Json` — machine-readable JSON envelope (default for non-TTY).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputFormat {
+    /// Human-readable, pretty-printed output.
+    Human,
+    /// Machine-readable JSON envelope.
+    Json,
+}
+
+/// Clap-derivable args struct for `--json` / `--human`.
+///
+/// Embed this in your clap CLI struct with `#[command(flatten)]`:
+///
+/// ```rust,no_run
+/// use clap::Parser;
+/// use genesis::guide::CliFormat;
+///
+/// #[derive(Parser)]
+/// struct Cli {
+///     #[command(flatten)]
+///     pub format: CliFormat,
+/// }
+///
+/// let cli = Cli::parse();
+/// let fmt = cli.format.format();  // auto-detects TTY vs pipe/agent
+/// ```
+///
+/// When neither `--json` nor `--human` is set, the format is auto-detected:
+/// - stdout is a terminal (TTY) → `Human`
+/// - stdout is piped or redirected → `Json`
+///
+/// This ensures agents and CI pipelines always receive machine-readable
+/// JSON by default, while humans at a terminal get readable output.
+#[derive(Debug, Clone, Copy, clap::Args)]
+pub struct CliFormat {
+    /// Output machine-readable JSON (default when stdout is not a TTY)
+    #[arg(short = 'j', long, global = true)]
+    pub json: bool,
+
+    /// Output human-readable text (default when stdout is a TTY)
+    #[arg(long, global = true, conflicts_with = "json")]
+    pub human: bool,
+}
+
+impl CliFormat {
+    /// Resolve the effective output format.
+    ///
+    /// - `--json` → `Json`
+    /// - `--human` → `Human`
+    /// - Neither → auto-detect: `Human` if stdout is a TTY, `Json` otherwise
+    pub fn format(&self) -> OutputFormat {
+        if self.json {
+            OutputFormat::Json
+        } else if self.human {
+            OutputFormat::Human
+        } else {
+            // Auto-detect: JSON for agents/pipes, human for terminals
+            use std::io::IsTerminal;
+            if std::io::stdout().is_terminal() {
+                OutputFormat::Human
+            } else {
+                OutputFormat::Json
+            }
+        }
+    }
+
+    /// Returns `true` if JSON output is explicitly requested or auto-detected.
+    pub fn is_json(&self) -> bool {
+        self.json || (!self.human && is_stdout_piped())
+    }
+
+    /// Returns `true` if human output is explicitly requested or auto-detected.
+    pub fn is_human(&self) -> bool {
+        self.human || (!self.json && is_stdout_terminal())
+    }
+}
+
+fn is_stdout_terminal() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdout().is_terminal()
+}
+
+fn is_stdout_piped() -> bool {
+    !is_stdout_terminal()
 }
 
 /// A guided CLI output value.
@@ -217,6 +511,39 @@ impl<T: Debug> Output<T> {
             .collect();
 
         crate::envelope::Envelope::success(kind, &self.data, warnings, hints.unwrap_or_default())
+    }
+
+    /// Emit this output in the requested format.
+    ///
+    /// - `Human` — calls `print()` with the current verbosity.
+    /// - `Json` — serializes via `to_envelope()` and writes a JSON line to stdout.
+    ///
+    /// Errors are always written to stderr regardless of format.
+    pub fn emit(
+        &self,
+        format: OutputFormat,
+        current_verbosity: Verbosity,
+        stdout: &mut impl Write,
+        stderr: &mut impl Write,
+    ) -> std::io::Result<()>
+    where
+        T: Serialize,
+    {
+        match format {
+            OutputFormat::Human => self.print(current_verbosity, stdout, stderr),
+            OutputFormat::Json => {
+                // Always print errors to stderr even in JSON mode.
+                if self.is_error {
+                    for warning in &self.warnings {
+                        writeln!(stderr, "{}", warning)?;
+                    }
+                }
+                let envelope = self.to_envelope();
+                let json = serde_json::to_string(&envelope).map_err(std::io::Error::other)?;
+                writeln!(stdout, "{}", json)?;
+                Ok(())
+            }
+        }
     }
 }
 
@@ -422,9 +749,30 @@ impl GuideBuilder {
         self
     }
 
-    /// Set the maximum verbosity level.
+    /// Set the maximum verbosity level (by raw count).
+    ///
+    /// Prefer [`with_verbosity`](GuideBuilder::with_verbosity) when you
+    /// already have a resolved `Verbosity` (e.g. from `CliVerbosity`).
     pub fn max_verbosity(mut self, level: u8) -> Self {
         self.verbosity = level.min(Verbosity::MAX);
+        self
+    }
+
+    /// Set the verbosity from a resolved `Verbosity` value.
+    ///
+    /// Use this when you've already parsed clap flags via `CliVerbosity`:
+    ///
+    /// ```rust,no_run
+    /// use genesis::guide::{Guide, CliVerbosity};
+    /// # use clap::Parser;
+    /// # #[derive(Parser)] struct Cli { #[command(flatten)] verbose: CliVerbosity }
+    /// # let cli = Cli::parse();
+    /// let guide = Guide::builder("my-tool", "0.1.0")
+    ///     .with_verbosity(cli.verbose.verbosity())
+    ///     .build();
+    /// ```
+    pub fn with_verbosity(mut self, verbosity: Verbosity) -> Self {
+        self.verbosity = verbosity.as_u8();
         self
     }
 
@@ -489,6 +837,11 @@ impl Guide {
         self.verbosity
     }
 
+    /// Update the verbosity after construction (e.g. from clap args).
+    pub fn set_verbosity(&mut self, verbosity: Verbosity) {
+        self.verbosity = verbosity;
+    }
+
     /// The command registry.
     pub fn registry(&self) -> &CommandRegistry {
         &self.registry
@@ -507,6 +860,34 @@ impl Guide {
                 let mut stdout = std::io::stdout();
                 let mut stderr = std::io::stderr();
                 if let Err(e) = output.print(self.verbosity, &mut stdout, &mut stderr) {
+                    let _ = writeln!(&mut stderr, "error printing output: {}", e);
+                    return 1;
+                }
+                if output.is_error { 1 } else { 0 }
+            }
+            Err(err) => {
+                let sink = ErrorSink::new(&self.name).with_verbosity(self.verbosity);
+                let mut stderr = std::io::stderr();
+                sink.handle(err.as_ref(), &mut stderr);
+                1
+            }
+        }
+    }
+
+    /// Run a command handler, dispatching to human or JSON output.
+    ///
+    /// Like `run()`, but uses `Output::emit()` to respect the requested
+    /// output format.
+    pub fn run_formatted<T, F>(&self, format: OutputFormat, f: F) -> i32
+    where
+        T: Debug + Serialize,
+        F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
+    {
+        match f() {
+            Ok(output) => {
+                let mut stdout = std::io::stdout();
+                let mut stderr = std::io::stderr();
+                if let Err(e) = output.emit(format, self.verbosity, &mut stdout, &mut stderr) {
                     let _ = writeln!(&mut stderr, "error printing output: {}", e);
                     return 1;
                 }

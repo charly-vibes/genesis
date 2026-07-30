@@ -206,6 +206,11 @@ mod tests {
         tempfile::tempdir().expect("tempdir")
     }
 
+    /// Unique tool name per test to avoid races with parallel tests.
+    fn test_tool(label: &str) -> String {
+        format!("test-{}-{}", label, std::process::id())
+    }
+
     fn write_scratch(tool: &str, exit_code: i32) {
         let record = ErrorRecord {
             ts: "2026-07-29T12:00:00Z".into(),
@@ -220,18 +225,20 @@ mod tests {
     #[test]
     fn test_handle_feedback_dry_run() {
         let dir = tmp();
-        write_scratch("test-tool", 1);
+        let tool = test_tool("dry-run");
+        write_scratch(&tool, 1);
 
         let args = FeedbackArgs::new("bug", true, true);
-        let result = handle_feedback(&args, "test-tool", "0.1.0", "owner/repo", dir.path());
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
         assert!(result.is_ok(), "dry run should succeed: {:?}", result);
     }
 
     #[test]
     fn test_handle_feedback_from_last_error_no_scratch() {
         let dir = tmp();
+        let tool = test_tool("no-scratch");
         let args = FeedbackArgs::new("bug", true, true);
-        let result = handle_feedback(&args, "no-such-tool", "0.1.0", "owner/repo", dir.path());
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
         assert!(result.is_err(), "should fail when no scratch exists");
         assert!(
             result.unwrap_err().contains("No recent error"),
@@ -242,8 +249,9 @@ mod tests {
     #[test]
     fn test_handle_feedback_no_from_last_error() {
         let dir = tmp();
+        let tool = test_tool("no-from-last");
         let args = FeedbackArgs::new("bug", true, false);
-        let result = handle_feedback(&args, "test-tool", "0.1.0", "owner/repo", dir.path());
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
         assert!(result.is_err(), "should fail without --from-last-error");
         assert!(
             result.unwrap_err().contains("--from-last-error"),
@@ -254,8 +262,9 @@ mod tests {
     #[test]
     fn test_handle_feedback_invalid_kind() {
         let dir = tmp();
+        let tool = test_tool("invalid-kind");
         let args = FeedbackArgs::new("invalid-kind", true, true);
-        let result = handle_feedback(&args, "test-tool", "0.1.0", "owner/repo", dir.path());
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
         assert!(result.is_err(), "should reject invalid kind");
         let err = result.unwrap_err();
         assert!(err.contains("unknown kind"), "should say 'unknown kind'");
@@ -264,8 +273,9 @@ mod tests {
     #[test]
     fn test_handle_feedback_typo_suggestion_for_kind() {
         let dir = tmp();
+        let tool = test_tool("typo");
         let args = FeedbackArgs::new("featuer", true, true);
-        let result = handle_feedback(&args, "test-tool", "0.1.0", "owner/repo", dir.path());
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
         assert!(result.is_err(), "should reject typo kind");
         let err = result.unwrap_err();
         // Should contain a 'Did you mean' suggestion
@@ -281,8 +291,9 @@ mod tests {
         for kind in VALID_KINDS {
             let args = FeedbackArgs::new(kind.to_string(), true, true);
             let dir = tmp();
-            write_scratch("test-tool", 1);
-            let result = handle_feedback(&args, "test-tool", "0.1.0", "owner/repo", dir.path());
+            let tool = test_tool("valid-kind");
+            write_scratch(&tool, 1);
+            let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
             assert!(
                 result.is_ok(),
                 "kind '{}' should be valid: {:?}",
@@ -296,9 +307,10 @@ mod tests {
     fn test_dry_run_prints_to_stderr() {
         // Verify dry_run returns FallbackUrl (not actually creating issue)
         let dir = tmp();
-        write_scratch("test-tool", 1);
+        let tool = test_tool("dry-run-2");
+        write_scratch(&tool, 1);
         let args = FeedbackArgs::new("bug", true, true);
-        let result = handle_feedback(&args, "test-tool", "0.1.0", "owner/repo", dir.path());
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
         match result {
             Ok(gh::GhResult::FallbackUrl(url)) => {
                 assert!(url.contains("github.com"), "URL should contain github.com");
