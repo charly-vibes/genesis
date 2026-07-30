@@ -1,3 +1,11 @@
+> *"Cuando todo era nada*
+> *Era nada el principio*
+> *Él era el Principio*
+> *Y de la noche hizo luz*
+> *Y fue el Cielo*
+> *Y esto que está aquí"*
+> — Vox Dei
+
 # genesis
 
 Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
