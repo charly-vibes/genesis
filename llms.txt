@@ -15,7 +15,7 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - `managed_block` — managed block injector
 - `aix` — AIX artifact generation
 - `config` — shared config management
-- `guide` — CLI scaffold (Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, Guide)
+- `guide` — CLI scaffold (Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, Guide). Format auto-detect: JSON for non-TTY stdout (agents/pipes), Human for terminals.
 - `fixture` — test scratch environments
 - `feedback` — agent issue reporting
 - `suite_linter` — suite-wide lint checks

@@ -9,7 +9,7 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly
 - **managed_block**: `<!-- …:START -->`/`<!-- …:END -->` injector (port from wai/dont/espectacular)
 - **aix**: `llms.txt`/`llm.txt` generation, agent block injection (port from wai)
 - **config**: `ConfigFile` trait, `ConfigRegistry`, `ConfigStore` — shared config management
-- **guide**: `Verbosity`, `CliVerbosity`, `OutputFormat`, `CliFormat`, `Output`, `ErrorSink`, `GuideBuilder`, `Guide` — CLI scaffold with progressive-disclosure verbosity, TTY-aware output format, and format-dispatching commands
+- **guide**: `Verbosity`, `CliVerbosity`, `OutputFormat`, `CliFormat`, `Output`, `ErrorSink`, `GuideBuilder`, `Guide` — CLI scaffold with progressive-disclosure verbosity, TTY-aware output format (`--json`/`--human`; auto-detects: JSON for non-TTY stdout, Human for terminals), and format-dispatching commands via `Output::emit()` / `Guide::run_formatted()`
 - **fixture**: `Fixture` builder, assertions, `Fixture::run` — test scratch environments
 - **feedback**: `handle_feedback()`, `FeedbackArgs` — agent issue reporting (new)
 - **suite_linter**: `LintCheck` trait, `LinterRegistry` — suite-wide config lint checks

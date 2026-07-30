@@ -77,12 +77,20 @@ Helpers for generating `llms.txt`, `llm.txt`, and `AGENTS.md` agent blocks.
 
 **v0.4.0 additions:**
 - `CliVerbosity` — embeddable clap args struct for `-v`/`-vv`/`-vvv` + `-q`/`--quiet`
-- `CliFormat` — embeddable clap args struct for `--json`/`--human` with TTY auto-detect
-  (JSON for agents/pipes, Human for interactive terminals)
+- `CliFormat` — embeddable clap args struct for `--json`/`--human`
 - `OutputFormat` enum (`Human` | `Json`)
-- `Output::emit(format, ...)` — format-dispatching output
-- `Verbosity::from_verbose_count(u8)` — canonical clap count → Verbosity mapping
+- `Output::emit(format, ...)` — format-dispatching output, calls human `print()` or JSON envelope
+- `Verbosity::from_verbose_count(u8)` — canonical clap count to Verbosity mapping
 - `Verbosity::help_footer()` — "Use -v for..." progressive-disclosure hint
+
+The key design: **JSON is the default for non-TTY contexts.** When neither `--json` nor
+`--human` is specified, `CliFormat::format()` auto-detects:
+- stdout is a **TTY** (interactive shell) → `Human` (readable, colored output)
+- stdout is **piped/redirected** (agent, CI, `|`, `> file`) → `Json` (machine-readable `Envelope`)
+
+This means agents and CI pipelines always get parseable JSON without any flags,
+while a human at a terminal gets readable output. Either can be overridden explicitly
+with `--json` or `--human`.
 
 ### `fixture`
 `Fixture` builder with `with_file()`, `with_toml()`, `with_marker()`, `with_git_init()`, and
