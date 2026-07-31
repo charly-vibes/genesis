@@ -24,6 +24,13 @@ let env: Envelope<&str> = Envelope::ok("operation completed", None);
 let output = Output::success("done")
     .with_data(vec!["item1", "item2"])
     .with_warning("config file is deprecated, migrate to config.toml");
+
+// Constructing with a specific envelope kind
+let list_env: Envelope<Vec<String>> = Envelope::new(
+    genesis::envelope::EnvelopeKind::List,
+    Some(vec!["a".into(), "b".into()]),
+    None,
+);
 ```
 
 ## Adding warnings and hints
@@ -84,9 +91,9 @@ if envelope.ok {
             println!("  - {item}");
         }
     }
-} else {
-    eprintln!("Error: {}", envelope.error.unwrap().message);
-    eprintln!("Fix: {}", envelope.error.unwrap().remediation);
+} else if let Some(err) = &envelope.error {
+    eprintln!("Error: {}", err.message);
+    eprintln!("Fix: {}", err.remediation);
 }
 ```
 

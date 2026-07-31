@@ -14,7 +14,7 @@
 
 **Decision:** `ErrorResult::new()` returns `Err` if the remediation string is empty.
 
-**Rationale:** An error without a suggested fix is a dead end for the user — and worse, a dead end for an AI agent that cannot ask for clarification. The invariant (3.2.5) forces every error site to include a recovery path.
+**Rationale:** An error without a suggested fix is a dead end for the user — and worse, a dead end for an AI agent that cannot ask for clarification. The `ErrorResult` constructor enforces that every error includes a recovery path.
 
 **Trade-off:** Some errors genuinely have no remediation (e.g., disk full). In those cases, the remediation should say something like "Free up disk space and retry" — a general suggestion is better than none.
 

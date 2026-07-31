@@ -48,3 +48,6 @@ genesis-vibes is the shared foundation of the charly-vibes suite. It generalizes
 | **status** | new | Cross-tool status dashboard |
 | **scaffold** | new | Init scaffolding builder |
 | **discovery** | new | Tool discovery via manifest |
+
+> **Status:** "stable" modules have a settled API. "new" modules are functional
+> but their API may evolve in minor version bumps.

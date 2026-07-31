@@ -78,14 +78,15 @@ fn list_items(format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
 
 ## Progressive-disclosure verbosity
 
-The verbosity levels control what the user sees:
+The verbosity levels control what the user sees. `CliVerbosity` maps the `-v` count
+via `Verbosity::from_verbose_count()`:
 
-| Count | Level | Shows |
-| :--- | :--- | :--- |
-| `-q` | Quiet | Errors only |
-| _(none)_ | Normal | Result + next step |
-| `-v` | Verbose | + warnings + context |
-| `-vv` | Debug | + internals + trace |
+| Count | `-v` flags | Level | Shows |
+| :--- | :--- | :--- | :--- |
+| 0 | `-q` / `--quiet` | Quiet | Errors only |
+| 1 | _(none)_ | Normal | Result + next step |
+| 2 | `-v` | Verbose | + warnings + context |
+| 3+ | `-vv` / `-vvv` | Debug | + internals + trace |
 
 Use `Verbosity::help_footer()` to display a hint in your CLI help text:
 
@@ -94,6 +95,27 @@ fn main() {
     println!("{}", Verbosity::help_footer()); // "Use -v for..."
 }
 ```
+
+## Assembling a CLI with GuideBuilder
+
+`GuideBuilder` (created via `Guide::builder()`) collects all genesis modules into
+a coherent CLI runner. It registers valid commands for typo detection, sets up
+verbosity, and prepares config integration:
+
+```rust,no_run
+use genesis::guide::Guide;
+
+let guide = Guide::builder("my-tool", env!("CARGO_PKG_VERSION"))
+    .about("Does something useful")
+    .commands(&["init", "doctor", "status"])
+    .build();
+
+// Run a command with format-aware output
+// guide.run(|g| { ... });
+// guide.run_formatted(format, |g| { ... });
+```
+
+> See the source code of `wai` or `dont` for complete `Guide` usage examples.
 
 ## Error handling with `ErrorSink`
 

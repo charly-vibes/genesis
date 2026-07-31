@@ -14,7 +14,7 @@ This guide explains how to add diagnostic checks to your tool's `doctor` subcomm
 Create a struct that implements `DoctorCheck`:
 
 ```rust
-use genesis::doctor::{DoctorCheck, DoctorRunner, DoctorReport};
+use genesis::doctor::{DoctorCheck, DoctorRunner};
 use genesis::suite_linter::{LintResult, Severity};
 use std::path::Path;
 
@@ -108,11 +108,19 @@ let report = runner.run(&repo, true)?; // true = run fixes
 `DoctorReport` is serializable, so you can emit it as a JSON envelope:
 
 ```rust
+use genesis::doctor::DoctorReport;
 use genesis::envelope::Envelope;
 
+let report: DoctorReport = /* ... */;
 let envelope = Envelope::from(report);
 envelope.print(&mut std::io::stdout())?;
 ```
+
+## Panic isolation
+
+If a `DoctorCheck::run()` panics, the runner propagates the panic — it does not
+catch it. Wrap checks in `std::panic::catch_unwind` if you need panic isolation
+for individual checks.
 
 ## Troubleshooting: Common Fail-States
 

@@ -94,9 +94,9 @@ fn test_reads_config() {
 }
 ```
 
-## Using assertions
+## Verifying fixture contents
 
-`Fixture` provides convenience assertion methods:
+Check that the fixture has the expected structure using standard Rust assertions:
 
 ```rust
 let fixture = Fixture::new()
@@ -104,10 +104,12 @@ let fixture = Fixture::new()
     .with_file("data.txt", "hello")
     .build()?;
 
-// Check that the fixture has the expected structure
 assert!(fixture.path(".wai").exists());
 assert!(fixture.path("data.txt").exists());
 ```
+
+> **Note:** The fixture directory is automatically cleaned up when the `Fixture`
+> value is dropped (it uses `tempfile::TempDir` internally).
 
 ## Troubleshooting: Common Fail-States
 

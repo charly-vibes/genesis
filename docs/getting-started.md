@@ -55,7 +55,7 @@ Embed `CliFormat` into your clap args to get automatic TTY detection:
 
 ```rust
 use clap::Parser;
-use genesis::guide::{CliFormat, OutputFormat, Output};
+use genesis::guide::{CliFormat, Output};
 
 #[derive(Parser)]
 #[command(name = "my-tool")]
@@ -66,7 +66,7 @@ struct Cli {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let format = cli.format.format();
+    let format: genesis::guide::OutputFormat = cli.format.format();
 
     let output = Output::success("done").with_data(vec!["item1", "item2"]);
     output.emit(format, &mut std::io::stdout(), &mut std::io::stderr())?;
@@ -82,19 +82,29 @@ Either can be overridden with `--json` or `--human`.
 
 ## Step 4: Print version as JSON
 
-Pre-parse `--version --json` before clap processes the rest of the args:
+Pre-parse `--version --json` before clap processes the rest of the args. The function
+calls `std::process::exit()` internally if the flag is matched, so execution never
+continues to the clap setup:
 
 ```rust
 use genesis::cli::maybe_print_version_json;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Early exit for `--version --json` without clap parsing everything
+    // If `--version --json` is passed, this prints the version envelope and exits.
+    // If not, it returns immediately and execution continues.
     maybe_print_version_json("my-tool", env!("CARGO_PKG_VERSION"));
 
     // ... rest of your clap setup
     Ok(())
 }
 ```
+
+> **Note:** The examples in Step 3 require `clap` with the `derive` feature in your
+> `Cargo.toml`:
+> ```toml
+> [dependencies]
+> clap = { version = "4", features = ["derive"] }
+> ```
 
 ## Recap & Next Steps
 
