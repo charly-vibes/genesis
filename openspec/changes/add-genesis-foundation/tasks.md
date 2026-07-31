@@ -42,7 +42,7 @@ wiring, badge↔block match) belong in each tool's own `doctor` command, not
 in genesis. Each tool registers its checks with the `LinterRegistry`.
 
 ## 7. AIX generation (`aix` module)
-- [ ] 7.1 Extract `llms.txt`/`llm.txt` generation from wai into genesis. *(Not yet — full LLM generation deferred; `aix.rs` has only `agents_block` helper.)*
+- [x] 7.1 Implement `llms.txt`/`llm.txt` generation in `aix` module (ProjectMeta, ModuleEntry, LlmSection, generate_llms_txt, generate_llm_txt, section helpers, write helpers). Self-hosts via `just aix-gen`.
 - [x] 7.1b Genesis bootstrap: hand-written `AGENTS.md`, `llms.txt`, `llm.txt` exist.
 - [x] 7.2 Provide an `agents_block(name, body)` helper for managed-block injection.
 

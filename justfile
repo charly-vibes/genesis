@@ -60,7 +60,7 @@ docs:
 # === CI Pipeline ===
 
 # Full CI pipeline — mirrors .github/workflows/ci.yml exactly
-ci: fmt-check lint test docs build-release
+ci: fmt-check lint test docs build-release aix-check
 
 # Validate specs (via espectacular)
 validate:
@@ -69,6 +69,14 @@ validate:
 # Publish to crates.io (run after `just ci` passes)
 publish:
     cargo publish
+
+# Regenerate llms.txt and llm.txt from aix module metadata
+aix-gen:
+    cargo run --example gen-aix
+
+# Verify AIX artifacts are up to date (CI use: "just aix-check" fails if stale)
+aix-check: aix-gen
+    git diff --exit-code llms.txt llm.txt
 
 # Session start
 prime:

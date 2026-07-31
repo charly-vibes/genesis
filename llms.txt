@@ -1,15 +1,12 @@
 # genesis-vibes
 
-Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
+> Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 
 ## Quick start
 
 - [Repository](https://github.com/charly-vibes/genesis)
-- [crates.io](https://crates.io/crates/genesis-vibes)
 - [Documentation](https://charly-vibes.github.io/genesis/)
-- [Getting Started](https://charly-vibes.github.io/genesis/getting-started.html)
-- [How-to Guides](https://charly-vibes.github.io/genesis/)
-- [Modules Reference](https://charly-vibes.github.io/genesis/reference/modules.html)
+- [crates.io](https://crates.io/crates/genesis-vibes)
 
 ## Modules
 
@@ -18,7 +15,7 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - `managed_block` — managed block injector
 - `aix` — AIX artifact generation
 - `config` — shared config management
-- `guide` — CLI scaffold (Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, Guide). Format auto-detect: JSON for non-TTY stdout (agents/pipes), Human for terminals.
+- `guide` — CLI scaffold (Verbosity, CliVerbosity, OutputFormat, CliFormat, Output, ErrorSink, GuideBuilder, Guide). Format auto-detect: JSON for non-TTY stdout, Human for terminals.
 - `fixture` — test scratch environments
 - `feedback` — agent issue reporting
 - `suite_linter` — suite-wide lint checks
@@ -27,3 +24,4 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - `status` — cross-tool status dashboard
 - `scaffold` — init scaffolding
 - `discovery` — tool discovery via .genesis/tools.toml manifest
+
