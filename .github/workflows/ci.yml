@@ -37,5 +37,8 @@ jobs:
         uses: extractions/setup-just@v2
 
       # Run the exact same command as local development
+      - name: Install mdBook
+        uses: taiki-e/install-action@mdbook
+
       - name: Run CI pipeline
         run: just ci

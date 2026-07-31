@@ -51,10 +51,16 @@ fmt-check:
 lint:
     cargo clippy -- -D warnings
 
+# === Docs Commands ===
+
+# Build the mdBook documentation locally (requires mdbook)
+docs:
+    mdbook build
+
 # === CI Pipeline ===
 
 # Full CI pipeline — mirrors .github/workflows/ci.yml exactly
-ci: fmt-check lint test build-release
+ci: fmt-check lint test docs build-release
 
 # Validate specs (via espectacular)
 validate:
@@ -73,3 +79,7 @@ prime:
 # Session close
 close:
     wai close
+
+# Live preview docs at localhost:3000 (requires mdbook)
+docs-serve:
+    mdbook serve
