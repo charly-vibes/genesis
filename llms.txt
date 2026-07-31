@@ -7,6 +7,9 @@ Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.
 - [Repository](https://github.com/charly-vibes/genesis)
 - [crates.io](https://crates.io/crates/genesis-vibes)
 - [Documentation](https://charly-vibes.github.io/genesis/)
+- [Getting Started](https://charly-vibes.github.io/genesis/getting-started.html)
+- [How-to Guides](https://charly-vibes.github.io/genesis/)
+- [Modules Reference](https://charly-vibes.github.io/genesis/reference/modules.html)
 
 ## Modules
 

@@ -17,6 +17,16 @@ genesis-vibes is the shared foundation the suite consistency evaluation
 `dont-2j6o` ("extract shared JSON envelope crate") from one module to
 the full set of cross-cutting pieces the suite needs.
 
+## Documentation
+
+Full documentation is available at **[charly-vibes.github.io/genesis/](https://charly-vibes.github.io/genesis/)** —
+built with mdBook and deployed to GitHub Pages on every push to `main`.
+
+- [Getting Started](https://charly-vibes.github.io/genesis/getting-started.html) — add genesis-vibes to your project
+- [How-to Guides](https://charly-vibes.github.io/genesis/) — envelope, CLI, doctor, fixtures
+- [Modules Reference](https://charly-vibes.github.io/genesis/reference/modules.html) — full API reference
+- [Architecture & Design](https://charly-vibes.github.io/genesis/explanation/architecture.html) — rationale and trade-offs
+
 ## What it owns (and what it does not)
 
 **Boundary rule:** if only one tool uses it, it does not belong in the kit.
