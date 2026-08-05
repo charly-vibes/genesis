@@ -214,7 +214,10 @@ impl DoctorReport {
     }
 
     /// Serialize to a JSON envelope with kind `Doctor`.
-    pub fn to_envelope(&self) -> Envelope<&Self> {
+    ///
+    /// `cli_version` must be the caller's own CLI version (see
+    /// [`crate::envelope::Envelope::success`]).
+    pub fn to_envelope(&self, cli_version: &str) -> Envelope<&Self> {
         let hints = self
             .checks
             .iter()
@@ -238,7 +241,7 @@ impl DoctorReport {
             })
             .collect();
 
-        Envelope::success(EnvelopeKind::Doctor, self, warnings, hints)
+        Envelope::success(cli_version, EnvelopeKind::Doctor, self, warnings, hints)
     }
 }
 
@@ -837,19 +840,21 @@ mod tests {
             CheckEntry::fail("b", "d", "missing config", Some("tool init".into())),
         ];
         let report = DoctorReport::new("test", checks);
-        let envelope = report.to_envelope();
+        let envelope = report.to_envelope("my-tool/1.0.0");
         assert!(envelope.ok);
         assert_eq!(envelope.envelope_kind, EnvelopeKind::Doctor);
+        assert_eq!(envelope.cli_version, "my-tool/1.0.0");
     }
 
     #[test]
     fn test_report_to_envelope_serializes_json() {
         let checks = vec![CheckEntry::pass("a", "d", "ok")];
         let report = DoctorReport::new("test", checks);
-        let envelope = report.to_envelope();
+        let envelope = report.to_envelope("my-tool/1.0.0");
         let json = serde_json::to_string(&envelope).unwrap();
         assert!(json.contains("doctor"));
         assert!(json.contains("test"));
+        assert!(json.contains("my-tool/1.0.0"));
     }
 
     // ── DoctorRunner: pass/warn/fail patterns ─────────────────────────
@@ -1098,7 +1103,7 @@ mod tests {
             CheckEntry::pass("ok", "d", "good"),
         ];
         let report = DoctorReport::new("test", checks);
-        let envelope = report.to_envelope();
+        let envelope = report.to_envelope("my-tool/1.0.0");
         let hints = envelope.hints.unwrap_or_default();
         assert!(!hints.is_empty());
         assert_eq!(hints[0].command, "tool init");
@@ -1108,7 +1113,7 @@ mod tests {
     fn test_empty_report_to_envelope_has_no_hints() {
         let checks = vec![CheckEntry::pass("ok", "d", "good")];
         let report = DoctorReport::new("test", checks);
-        let envelope = report.to_envelope();
+        let envelope = report.to_envelope("my-tool/1.0.0");
         assert!(envelope.hints.unwrap_or_default().is_empty());
     }
 }

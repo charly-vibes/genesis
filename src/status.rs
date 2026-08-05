@@ -211,7 +211,10 @@ impl MultiToolStatus {
     }
 
     /// Serialize to a JSON envelope.
-    pub fn to_envelope(&self) -> Envelope<&Self> {
+    ///
+    /// `cli_version` must be the caller's own CLI version (see
+    /// [`crate::envelope::Envelope::success`]).
+    pub fn to_envelope(&self, cli_version: &str) -> Envelope<&Self> {
         let warnings: Vec<Warning> = self
             .sections
             .iter()
@@ -224,7 +227,7 @@ impl MultiToolStatus {
             })
             .collect();
 
-        Envelope::success(EnvelopeKind::Ok, self, warnings, vec![])
+        Envelope::success(cli_version, EnvelopeKind::Ok, self, warnings, vec![])
     }
 }
 
@@ -687,8 +690,9 @@ mod tests {
                 },
             ],
         };
-        let envelope = report.to_envelope();
+        let envelope = report.to_envelope("my-tool/1.0.0");
         assert!(envelope.ok);
+        assert_eq!(envelope.cli_version, "my-tool/1.0.0");
     }
 
     #[test]
@@ -696,9 +700,10 @@ mod tests {
         let report = MultiToolStatus {
             sections: vec![StatusSection::healthy("tool", "ok")],
         };
-        let envelope = report.to_envelope();
+        let envelope = report.to_envelope("my-tool/1.0.0");
         let json = serde_json::to_string(&envelope).unwrap();
         assert!(json.contains("health"));
+        assert!(json.contains("my-tool/1.0.0"));
         // No warnings expected since sections are healthy
     }
 

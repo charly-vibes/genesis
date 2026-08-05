@@ -11,27 +11,32 @@ This guide explains how to use genesis's structured output envelope for consiste
 
 ## Constructing a success envelope
 
-Use `Envelope::ok()` or the `Output` helper for common cases:
+Use `Envelope::success()` (always passing your tool's own CLI version as the
+first argument) or the `Output` helper for common cases:
 
 ```rust
 use genesis::envelope::Envelope;
 use genesis::guide::Output;
 
-// Direct envelope construction
-let env: Envelope<&str> = Envelope::ok("operation completed", None);
+// Direct envelope construction — cli_version is YOUR tool's version
+let env: Envelope<&str> = Envelope::success(
+    env!("CARGO_PKG_VERSION"), // your tool, not genesis-vibes
+    genesis::envelope::EnvelopeKind::Ok,
+    "operation completed",
+    vec![], // warnings
+    vec![], // hints
+);
 
 // Using the Output helper (recommended for CLI commands)
 let output = Output::success("done")
     .with_data(vec!["item1", "item2"])
     .with_warning("config file is deprecated, migrate to config.toml");
-
-// Constructing with a specific envelope kind
-let list_env: Envelope<Vec<String>> = Envelope::new(
-    genesis::envelope::EnvelopeKind::List,
-    Some(vec!["a".into(), "b".into()]),
-    None,
-);
 ```
+
+**`cli_version` is caller-supplied.** It identifies the tool that emits the
+envelope (e.g. `env!("CARGO_PKG_VERSION")` in *your* crate). Genesis never
+injects its own package version — there is no zero-argument constructor. See
+the [migration contract in the reference](../reference/modules.md#cli-version-ownership-contract).```
 
 ## Adding warnings and hints
 
@@ -86,14 +91,15 @@ Consumers always check `ok` first:
 let envelope: Envelope<Vec<String>> = /* ... */;
 
 if envelope.ok {
-    if let Some(items) = envelope.data {
-        for item in items {
-            println!("  - {item}");
-        }
+    for item in &envelope.data {
+        println!("  - {item}");
     }
-} else if let Some(err) = &envelope.error {
-    eprintln!("Error: {}", err.message);
-    eprintln!("Fix: {}", err.remediation);
+} else {
+    // EnvelopeKind::Error — data is an ErrorResult
+    eprintln!("Error: {} ({})", envelope.data.message, envelope.data.code);
+    if let Some(remediation) = envelope.data.remediation.first() {
+        eprintln!("  → {}", remediation.command);
+    }
 }
 ```
 

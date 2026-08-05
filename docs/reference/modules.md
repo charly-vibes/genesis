@@ -6,7 +6,7 @@
 
 | Module | Status | Key Types / Traits | Entry Point |
 | :--- | :--- | :--- | :--- |
-| `envelope` | stable | `Envelope<T>`, `EnvelopeKind`, `ErrorResult`, `set_author()` | `Envelope::ok()`, `Envelope::error()` |
+| `envelope` | stable | `Envelope<T>`, `EnvelopeKind`, `ErrorResult`, `set_author()` | `Envelope::success()`, `Envelope::error()` |
 | `guide` | stable | `Verbosity`, `Output`, `CliVerbosity`, `CliFormat`, `OutputFormat`, `ErrorSink`, `GuideBuilder`, `Guide` | `Output::success()`, `Output::emit()` |
 | `suggestions` | stable | `Suggestion`, `SuggestionEngine`, `CommandRegistry` | `SuggestionEngine::new()` |
 | `managed_block` | stable | `BlockDef`, `BlockInjector`, `BlockRegistry` | `BlockInjector::new()` |
@@ -44,6 +44,42 @@ Structured CLI output envelope. Every command returns an `Envelope<T>`.
 | Function | Description |
 | :--- | :--- |
 | `set_author(author: String)` | Set global author for envelope metadata. Call once at startup. |
+
+### Constructors
+
+| Constructor | Description |
+| :--- | :--- |
+| `Envelope::success(cli_version, kind, data, warnings, hints)` | Success envelope |
+| `Envelope::success_with_tx(cli_version, kind, data, warnings, hints, tx)` | Success envelope with transaction id |
+| `Envelope::error(cli_version, err, warnings)` | Error envelope |
+
+### CLI version ownership contract
+
+`cli_version` is **caller-supplied at construction** — the first argument to every
+constructor. It must be the version of the tool that *emits* the envelope
+(typically `env!("CARGO_PKG_VERSION")` in the downstream tool's own crate).
+
+Genesis-vibes never injects its own package version: the misleading
+genesis-derived `CLI_VERSION` default was removed in the version that
+introduced this change. There is no zero-argument constructor that silently
+emits genesis's version — pass your own version explicitly.
+
+**Migration path (for tools adopting the new contract):**
+
+1. At each `Envelope::success` / `success_with_tx` / `error` call site, add the
+tool's own version as the first argument:
+
+   ```rust
+   Envelope::success(env!("CARGO_PKG_VERSION"), EnvelopeKind::Ok, data, vec![], vec![])
+   ```
+
+2. For envelope-producing helpers (`GuideOutput::to_envelope`,
+`DoctorReport::to_envelope`, `StatusReport::to_envelope`), the `cli_version`
+parameter is now required and must be threaded from the caller.
+3. Remove any `use genesis::envelope::CLI_VERSION` — the constant no longer
+exists.
+4. Verify with `cargo test` that serialized envelopes carry the tool's own
+version, not genesis-vibes' version.
 
 ---
 

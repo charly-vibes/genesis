@@ -479,8 +479,11 @@ impl<T: Debug> Output<T> {
 
     /// Convert this output into a JSON envelope for `--json` mode.
     ///
+    /// `cli_version` must be the caller's own CLI version (see
+    /// [`crate::envelope::Envelope::success`]).
+    ///
     /// Requires `T: Serialize`.
-    pub fn to_envelope(&self) -> crate::envelope::Envelope<&T>
+    pub fn to_envelope(&self, cli_version: &str) -> crate::envelope::Envelope<&T>
     where
         T: Serialize,
     {
@@ -510,7 +513,13 @@ impl<T: Debug> Output<T> {
             })
             .collect();
 
-        crate::envelope::Envelope::success(kind, &self.data, warnings, hints.unwrap_or_default())
+        crate::envelope::Envelope::success(
+            cli_version,
+            kind,
+            &self.data,
+            warnings,
+            hints.unwrap_or_default(),
+        )
     }
 
     /// Emit this output in the requested format.
@@ -521,6 +530,7 @@ impl<T: Debug> Output<T> {
     /// Errors are always written to stderr regardless of format.
     pub fn emit(
         &self,
+        cli_version: &str,
         format: OutputFormat,
         current_verbosity: Verbosity,
         stdout: &mut impl Write,
@@ -538,7 +548,7 @@ impl<T: Debug> Output<T> {
                         writeln!(stderr, "{}", warning)?;
                     }
                 }
-                let envelope = self.to_envelope();
+                let envelope = self.to_envelope(cli_version);
                 let json = serde_json::to_string(&envelope).map_err(std::io::Error::other)?;
                 writeln!(stdout, "{}", json)?;
                 Ok(())
@@ -887,7 +897,13 @@ impl Guide {
             Ok(output) => {
                 let mut stdout = std::io::stdout();
                 let mut stderr = std::io::stderr();
-                if let Err(e) = output.emit(format, self.verbosity, &mut stdout, &mut stderr) {
+                if let Err(e) = output.emit(
+                    &self.version,
+                    format,
+                    self.verbosity,
+                    &mut stdout,
+                    &mut stderr,
+                ) {
                     let _ = writeln!(&mut stderr, "error printing output: {}", e);
                     return 1;
                 }
@@ -1145,16 +1161,17 @@ mod tests {
     #[test]
     fn test_to_envelope_success() {
         let output: Output<&str> = Output::success("hello").with_next_step("run doctor");
-        let envelope = output.to_envelope();
+        let envelope = output.to_envelope("my-tool/1.0.0");
 
         assert!(envelope.ok);
         assert_eq!(envelope.data, &"hello");
+        assert_eq!(envelope.cli_version, "my-tool/1.0.0");
     }
 
     #[test]
     fn test_to_envelope_includes_warnings() {
         let output: Output<&str> = Output::success("data").with_warning("warn1");
-        let envelope = output.to_envelope();
+        let envelope = output.to_envelope("my-tool/1.0.0");
 
         assert!(!envelope.warnings.is_empty());
         assert_eq!(envelope.warnings[0].message, "warn1");
@@ -1163,7 +1180,7 @@ mod tests {
     #[test]
     fn test_to_envelope_includes_hints() {
         let output: Output<&str> = Output::success("data").with_next_step("run doctor");
-        let envelope = output.to_envelope();
+        let envelope = output.to_envelope("my-tool/1.0.0");
 
         assert!(envelope.hints.is_some());
         let hints = envelope.hints.unwrap();
@@ -1173,11 +1190,12 @@ mod tests {
     #[test]
     fn test_to_envelope_serializes_to_json() {
         let output: Output<&str> = Output::success("hello").with_next_step("run doctor");
-        let envelope = output.to_envelope();
+        let envelope = output.to_envelope("my-tool/1.0.0");
 
         let json = serde_json::to_string(&envelope).unwrap();
         assert!(json.contains("hello"));
         assert!(json.contains("run doctor"));
+        assert!(json.contains("my-tool/1.0.0"));
     }
 
     // -- ErrorSink ---------------------------------------------------------

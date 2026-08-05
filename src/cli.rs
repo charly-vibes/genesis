@@ -66,6 +66,7 @@ pub fn maybe_print_version_json(name: &str, version: &str) -> bool {
     if has_json {
         use crate::envelope::{Envelope, EnvelopeKind};
         let envelope = Envelope::success(
+            version,
             EnvelopeKind::Version,
             serde_json::json!({
                 "name": name,

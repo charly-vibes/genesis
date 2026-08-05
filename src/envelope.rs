@@ -10,8 +10,9 @@
 //!   `DontCompletions`, `EvalExport`). Replaced with generic: `Ok`, `Error`,
 //!   `Empty`, `List`, `Check`, `Doctor`, `Version`, `Stats`, `Info`, `Warning`.
 //! - `data` is generic over `T: Serialize` (already was in dont).
-//! - `CLI_VERSION` now reads `env!("CARGO_PKG_VERSION")` from genesis.
 //! - `ENVELOPE_VERSION` reset to `"0.1"` for genesis's own versioning.
+//! - `cli_version` is caller-supplied at construction — downstream tools pass their own
+//!   CLI version, not genesis-vibes' package version.
 //!
 //! ## Design notes (carried verbatim from dont-2j6o)
 //!
@@ -46,11 +47,9 @@ fn current_author() -> Option<String> {
     CURRENT_AUTHOR.get().cloned()
 }
 
-/// Envelope protocol version — bump when the shape changes.
+/// Envelope protocol version — bump when the envelope shape changes. This
+/// is distinct from `cli_version`, which identifies the emitting tool.
 pub const ENVELOPE_VERSION: &str = "0.1";
-
-/// CLI version, injected at compile time from `Cargo.toml`.
-pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Discriminator for the kind of data carried in the envelope.
 ///
@@ -185,7 +184,15 @@ pub struct Envelope<T: Serialize> {
 
 impl<T: Serialize> Envelope<T> {
     /// Create a success envelope.
+    ///
+    /// `cli_version` must be the caller's own CLI version (e.g., from `env!("CARGO_PKG_VERSION")`
+    /// in the downstream tool's crate). Do **not** pass genesis-vibes' version — this field
+    /// identifies the emitting tool, not the genesis library.
+    ///
+    /// Correct: `Envelope::success(env!("CARGO_PKG_VERSION"), …)` in your own crate.
+    /// Wrong: hardcoding `"0.5.0"` or anything derived from genesis-vibes' `Cargo.toml`.
     pub fn success(
+        cli_version: &str,
         kind: EnvelopeKind,
         data: T,
         warnings: Vec<Warning>,
@@ -194,7 +201,7 @@ impl<T: Serialize> Envelope<T> {
         Self {
             ok: true,
             envelope_version: ENVELOPE_VERSION.to_string(),
-            cli_version: CLI_VERSION.to_string(),
+            cli_version: cli_version.to_string(),
             envelope_kind: kind,
             data,
             warnings,
@@ -210,14 +217,17 @@ impl<T: Serialize> Envelope<T> {
     }
 
     /// Create a success envelope with a transaction id.
+    ///
+    /// `cli_version` must be the caller's own CLI version. See [`Envelope::success`].
     pub fn success_with_tx(
+        cli_version: &str,
         kind: EnvelopeKind,
         data: T,
         warnings: Vec<Warning>,
         hints: Vec<HintEntry>,
         tx: Option<u64>,
     ) -> Self {
-        let mut env = Self::success(kind, data, warnings, hints);
+        let mut env = Self::success(cli_version, kind, data, warnings, hints);
         env.meta.tx = tx;
         env
     }
@@ -225,11 +235,13 @@ impl<T: Serialize> Envelope<T> {
 
 impl Envelope<ErrorResult> {
     /// Create an error envelope.
-    pub fn error(err: ErrorResult, warnings: Vec<Warning>) -> Self {
+    ///
+    /// `cli_version` must be the caller's own CLI version. See [`Envelope::success`].
+    pub fn error(cli_version: &str, err: ErrorResult, warnings: Vec<Warning>) -> Self {
         Self {
             ok: false,
             envelope_version: ENVELOPE_VERSION.to_string(),
-            cli_version: CLI_VERSION.to_string(),
+            cli_version: cli_version.to_string(),
             envelope_kind: EnvelopeKind::Error,
             data: err,
             warnings,
@@ -254,11 +266,11 @@ mod tests {
 
     #[test]
     fn test_success_envelope_has_required_fields() {
-        let env = Envelope::success(EnvelopeKind::Ok, "hello", vec![], vec![]);
+        let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
 
         assert!(env.ok, "success envelope must have ok=true");
         assert_eq!(env.envelope_version, "0.1");
-        assert_eq!(env.cli_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(env.cli_version, "my-tool/1.0.0");
         assert_eq!(env.envelope_kind, EnvelopeKind::Ok);
         assert_eq!(env.data, "hello");
         assert!(env.warnings.is_empty());
@@ -285,24 +297,26 @@ mod tests {
         )
         .unwrap();
 
-        let env = Envelope::error(err, vec![]);
+        let env = Envelope::error("my-tool/1.0.0", err, vec![]);
 
         assert!(!env.ok, "error envelope must have ok=false");
         assert_eq!(env.envelope_kind, EnvelopeKind::Error);
         assert_eq!(env.data.code, "E001");
         assert_eq!(env.data.message, "something went wrong");
+        assert_eq!(env.cli_version, "my-tool/1.0.0");
         assert!(env.hints.is_none());
     }
 
     #[test]
     fn test_envelope_serializes_to_json() {
-        let env = Envelope::success(EnvelopeKind::Ok, "hello", vec![], vec![]);
+        let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
 
         let json = serde_json::to_string(&env).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["envelope_version"], "0.1");
+        assert_eq!(parsed["cli_version"], "my-tool/1.0.0");
         assert_eq!(parsed["envelope_kind"], "ok");
         assert_eq!(parsed["data"], "hello");
         assert!(parsed.get("hints").is_some()); // serialized even if empty
@@ -328,10 +342,11 @@ mod tests {
         )
         .unwrap();
 
-        let env = Envelope::error(err, vec![]);
+        let env = Envelope::error("my-tool/1.0.0", err, vec![]);
         let json = serde_json::to_string_pretty(&env).unwrap();
 
         assert!(json.contains("E001"));
+        assert!(json.contains("my-tool/1.0.0"));
         assert!(json.contains("rule-1"));
         assert!(json.contains("must be > 0"));
         assert!(json.contains("fix --force"));
@@ -390,7 +405,7 @@ mod tests {
     #[test]
     fn test_set_author_appears_in_meta() {
         set_author("test-user".into());
-        let env = Envelope::success(EnvelopeKind::Ok, (), vec![], vec![]);
+        let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, (), vec![], vec![]);
         assert_eq!(env.meta.author.as_deref(), Some("test-user"));
     }
 
@@ -398,13 +413,79 @@ mod tests {
 
     #[test]
     fn test_success_with_tx_includes_tx_in_meta() {
-        let env = Envelope::success_with_tx(EnvelopeKind::Ok, (), vec![], vec![], Some(42));
+        let env = Envelope::success_with_tx(
+            "my-tool/1.0.0",
+            EnvelopeKind::Ok,
+            (),
+            vec![],
+            vec![],
+            Some(42),
+        );
         assert_eq!(env.meta.tx, Some(42));
     }
 
     #[test]
     fn test_success_with_tx_none_omits_tx() {
-        let env = Envelope::success_with_tx(EnvelopeKind::Ok, (), vec![], vec![], None);
+        let env =
+            Envelope::success_with_tx("my-tool/1.0.0", EnvelopeKind::Ok, (), vec![], vec![], None);
         assert!(env.meta.tx.is_none());
+    }
+
+    // ── Caller-supplied CLI version ──────────────────────────────────
+
+    #[test]
+    fn test_success_preserves_caller_cli_version() {
+        let env = Envelope::success(
+            "downstream-tool/2.0.0",
+            EnvelopeKind::Ok,
+            "data",
+            vec![],
+            vec![],
+        );
+        assert_eq!(env.cli_version, "downstream-tool/2.0.0");
+    }
+
+    #[test]
+    fn test_error_preserves_caller_cli_version() {
+        let err = ErrorResult::new(
+            "E001",
+            "msg",
+            None,
+            None,
+            None,
+            vec![],
+            vec![RemediationEntry {
+                command: "fix".into(),
+                description: "run fix".into(),
+            }],
+        )
+        .unwrap();
+        let env = Envelope::error("downstream-tool/2.0.0", err, vec![]);
+        assert_eq!(env.cli_version, "downstream-tool/2.0.0");
+    }
+
+    #[test]
+    fn test_success_with_tx_preserves_caller_cli_version() {
+        let env = Envelope::success_with_tx(
+            "downstream/3.0.0",
+            EnvelopeKind::Ok,
+            (),
+            vec![],
+            vec![],
+            Some(1),
+        );
+        assert_eq!(env.cli_version, "downstream/3.0.0");
+    }
+
+    #[test]
+    fn test_cli_version_is_not_genesis_package_version() {
+        // Verify that a caller-supplied version is distinct from what
+        // genesis-vibes' own CARGO_PKG_VERSION would be.
+        let caller_version = "my-custom-tool/0.1.0";
+        let env = Envelope::success(caller_version, EnvelopeKind::Ok, (), vec![], vec![]);
+        assert_eq!(env.cli_version, caller_version);
+        // genesis-vibes' own package version is something like "0.5.0"
+        // — the caller's version should not equal that.
+        assert_ne!(env.cli_version, env!("CARGO_PKG_VERSION"));
     }
 }
