@@ -37,6 +37,10 @@ test-verbose:
 test-name name:
     cargo test {{name}} -- --nocapture
 
+# Compile doc snippets against the real API (tests/doc_examples.rs mirrors mdBook snippets)
+doc-test:
+    cargo test --test doc_examples
+
 # === Lint Commands ===
 
 # Format code

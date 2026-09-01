@@ -40,3 +40,8 @@ regex = "1"
 tempfile = "3"
 
 [dev-dependencies]
+# Doc-example tests (tests/doc_examples.rs) mirror the mdBook snippets and
+# need clap derive + serde_json directly. clap/serde_json are regular deps
+# of genesis, but integration tests can only import dev-dependencies.
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
