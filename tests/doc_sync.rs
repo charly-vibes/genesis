@@ -34,6 +34,10 @@ fn markdown_files() -> Vec<(String, String)> {
         let entries = fs::read_dir(dir).expect("read docs dir");
         for entry in entries {
             let path = entry.expect("dir entry").path();
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+            if name.as_deref() == Some("_book") {
+                continue; // mdBook build output — may hold stale copies
+            }
             if path.is_dir() {
                 visit(&path, out);
             } else if path.extension().is_some_and(|e| e == "md") {
