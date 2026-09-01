@@ -65,16 +65,28 @@ fn greet(name: &str, verbosity: Verbosity) -> Result<(), Box<dyn std::error::Err
 Use `Output::emit()` to let the format decide — human-readable text or JSON envelope:
 
 ```rust
-use genesis::guide::{Output, OutputFormat, CliFormat};
+use genesis::guide::{Output, OutputFormat, Verbosity};
 
-fn list_items(format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
-    let output = Output::success("3 items found")
-        .with_data(vec!["item1", "item2", "item3"]);
+fn list_items(
+    cli_version: &str,
+    format: OutputFormat,
+    verbosity: Verbosity,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let output = Output::success(vec!["item1", "item2", "item3"]);
 
-    output.emit(format, &mut std::io::stdout(), &mut std::io::stderr())?;
+    output.emit(
+        cli_version,
+        format,
+        verbosity,
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
+    )?;
     Ok(())
 }
 ```
+
+> `emit()` takes your tool's `cli_version` and the current `Verbosity`, and
+> requires the data payload to implement `Serialize` (needed for the JSON branch).
 
 ## Progressive-disclosure verbosity
 
@@ -119,16 +131,33 @@ let guide = Guide::builder("my-tool", env!("CARGO_PKG_VERSION"))
 
 ## Error handling with `ErrorSink`
 
-`ErrorSink` wraps errors with self-healing suggestions:
+`ErrorSink` handles errors with self-healing suggestions — it prints the error,
+optionally persists it to the error scratch, and optionally suggests the tool's
+feedback subcommand:
 
-```rust
+```rust,no_run
 use genesis::guide::ErrorSink;
 use genesis::suggestions::Suggestion;
 
-let mut sink = ErrorSink::new();
-sink.add_error("File not found", Some(Suggestion::DidYouMean("config.toml".to_string())));
-sink.emit_output(&mut std::io::stderr());
+let sink = ErrorSink::new("my-tool");
+let err = std::io::Error::new(std::io::ErrorKind::NotFound, "config.toml not found");
+
+// Print the error with a suggestion footer to stderr
+let mut stderr = std::io::stderr();
+sink.handle(&err, &mut stderr);
+
+// Or with an explicit suggestion footer override
+let fix = Suggestion::Fix {
+    description: "create a default config".to_string(),
+    command: Some("my-tool init".to_string()),
+};
+sink.handle_with_footer(&err, &fix, &mut stderr);
 ```
+
+`ErrorSink` is configurable: `scratch` persists the last error, `suggest` prints
+a `Suggestion::Fix` footer, `context` includes the full `ContextBundle`, and
+`feedback_subcommand` names the subcommand to suggest (set `None` to disable).
+Verbosity is honored via the `verbosity` field.
 
 ## Troubleshooting: Common Fail-States
 

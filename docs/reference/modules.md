@@ -107,7 +107,7 @@ CLI scaffold: verbosity, output format, error handling, and command dispatch.
 | Function | Description |
 | :--- | :--- |
 | `Output::success(msg)` | Create a success output |
-| `Output::emit(format, stdout, stderr)` | Format-dispatching output (JSON or human) |
+| `Output::emit(cli_version, format, verbosity, stdout, stderr)` | Format-dispatching output (JSON or human) |
 | `Verbosity::from_verbose_count(u8)` | Canonical clap count to Verbosity mapping |
 | `Verbosity::help_footer()` | "Use -v for..." progressive-disclosure hint |
 

@@ -28,15 +28,14 @@ let env: Envelope<&str> = Envelope::success(
 );
 
 // Using the Output helper (recommended for CLI commands)
-let output = Output::success("done")
-    .with_data(vec!["item1", "item2"])
+let output = Output::success(vec!["item1", "item2"])
     .with_warning("config file is deprecated, migrate to config.toml");
 ```
 
 **`cli_version` is caller-supplied.** It identifies the tool that emits the
 envelope (e.g. `env!("CARGO_PKG_VERSION")` in *your* crate). Genesis never
 injects its own package version — there is no zero-argument constructor. See
-the [migration contract in the reference](../reference/modules.md#cli-version-ownership-contract).```
+the [CLI version ownership contract](../reference/modules.md#cli-version-ownership-contract).
 
 ## Adding warnings and hints
 
@@ -50,21 +49,33 @@ let output = Output::success("Project initialized")
 
 ## Returning errors
 
-`ErrorResult` enforces **Invariant 3.2.5**: every error must include a remediation suggestion. The constructor returns `Err` if remediation is empty.
+`ErrorResult` enforces **Invariant 3.2.5**: every error must include a remediation suggestion. The constructor returns `Err` if `remediation` is empty.
 
 ```rust
-use genesis::envelope::ErrorResult;
+use genesis::envelope::{ErrorResult, RemediationEntry};
 
 // Good — remediation is non-empty
 let err = ErrorResult::new(
-    "config file not found",
-    "Run `my-tool init` to create a default config",
+    "E_CONFIG_NOT_FOUND",                      // code
+    "config file not found",                   // message
+    None,                                      // rule_name
+    None,                                      // spec_ref
+    None,                                      // entity_id
+    vec![],                                    // unmet_clauses
+    vec![RemediationEntry {
+        command: "my-tool init".to_string(),
+        description: "Create a default config".to_string(),
+    }],
 )?;
 
-// Bad — this returns Err(EmptyRemediation)
-let err = ErrorResult::new("something broke", "");
-// => ErrorResult::new("something broke", "") returns Err(...)
+// Bad — this returns Err
+let err = ErrorResult::new("E_BROKE", "something broke", None, None, None, vec![], vec![]);
+// => Err("remediation must be non-empty (Invariant 3.2.5)")
 ```
+
+Each `RemediationEntry` pairs a runnable `command` with a short `description`.
+Consumers render them after the error message — see
+[Reading the envelope](#reading-the-envelope) below.
 
 ## Choosing the envelope kind
 
@@ -88,17 +99,29 @@ let err = ErrorResult::new("something broke", "");
 Consumers always check `ok` first:
 
 ```rust
+use genesis::envelope::ErrorResult;
+
+// A success envelope carries whatever payload the command produced
 let envelope: Envelope<Vec<String>> = /* ... */;
 
 if envelope.ok {
     for item in &envelope.data {
         println!("  - {item}");
     }
-} else {
-    // EnvelopeKind::Error — data is an ErrorResult
-    eprintln!("Error: {} ({})", envelope.data.message, envelope.data.code);
-    if let Some(remediation) = envelope.data.remediation.first() {
-        eprintln!("  → {}", remediation.command);
+}
+```
+
+An error envelope (`Envelope::error(...)`) carries an `ErrorResult` as its data —
+check `ok` first, then render the remediation entries:
+
+```rust
+let envelope: Envelope<ErrorResult> = /* ... from a failed command ... */;
+
+if !envelope.ok {
+    let err = &envelope.data;
+    eprintln!("Error [{}]: {}", err.code, err.message);
+    for entry in &err.remediation {
+        eprintln!("  → {} — {}", entry.command, entry.description);
     }
 }
 ```
