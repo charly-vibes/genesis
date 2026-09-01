@@ -37,9 +37,9 @@ test-verbose:
 test-name name:
     cargo test {{name}} -- --nocapture
 
-# Compile doc snippets against the real API (tests/doc_examples.rs mirrors mdBook snippets)
+# Compile doc snippets + drift guards (doc_examples.rs mirrors, doc_sync.rs guards)
 doc-test:
-    cargo test --test doc_examples
+    cargo test --test doc_examples --test doc_sync
 
 # === Lint Commands ===
 

@@ -9,13 +9,14 @@
 //! - `step2_output`              → docs/getting-started.md, Step 2
 //! - `step3_emit_cli_format`     → docs/getting-started.md, Step 3
 //! - `step4_version_json`        → docs/getting-started.md, Step 4
+//! - `step4_version_json_from_args` → src/cli.rs, maybe_print_version_json_from
 //! - `guide_emit_dispatch`       → docs/how-to/guide.md, "Format-dispatching with emit()"
 //! - `guide_error_sink`          → docs/how-to/guide.md, "Error handling with ErrorSink"
 //! - `envelope_error_result`     → docs/how-to/envelope.md, "Returning errors"
 //! - `envelope_read_envelope`    → docs/how-to/envelope.md, "Reading the envelope" (success)
 //! - `envelope_read_error_envelope` → docs/how-to/envelope.md, "Reading the envelope" (error)
 
-use genesis::cli::maybe_print_version_json;
+use genesis::cli::{maybe_print_version_json, maybe_print_version_json_from};
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
 use genesis::guide::{CliFormat, CliVerbosity, ErrorSink, Output, OutputFormat, Verbosity};
 
@@ -113,15 +114,63 @@ fn step3_emit_cli_format() {
 }
 
 /// docs/getting-started.md, Step 4 — pre-parse `--version --json`.
-///
-/// Only the negative branch is asserted here: the positive branch reads
-/// `std::env::args()`, which we can't manipulate for the test runner.
 #[test]
 fn step4_version_json() {
     // No `--version` in the test runner's args → returns false and continues.
-    // (The positive branch reads `std::env::args()` directly and is not
-    // testable in-process — see the decouple-args follow-up ticket.)
     assert!(!maybe_print_version_json("my-tool", "0.1.0"));
+}
+
+/// docs/getting-started.md, Step 4 — the explicit-args variant covers all
+/// branches in-process (genesis-r0p): args come in, output goes to a writer.
+#[test]
+fn step4_version_json_from_args() {
+    // `--version --json` → prints the version envelope to the writer, true
+    let mut out: Vec<u8> = Vec::new();
+    let printed = maybe_print_version_json_from(
+        "my-tool",
+        "1.2.3",
+        &[
+            "my-tool".to_string(),
+            "--version".to_string(),
+            "--json".to_string(),
+        ],
+        &mut out,
+    );
+    assert!(printed, "--version --json must report handled");
+
+    let parsed: serde_json::Value =
+        serde_json::from_slice(&out).expect("version envelope is valid JSON");
+    assert_eq!(parsed["envelope_kind"], serde_json::json!("version"));
+    assert_eq!(parsed["data"]["version"], serde_json::json!("1.2.3"));
+
+    // `-V -j` short forms also trigger
+    let mut out: Vec<u8> = Vec::new();
+    let printed = maybe_print_version_json_from(
+        "my-tool",
+        "1.2.3",
+        &["my-tool".to_string(), "-V".to_string(), "-j".to_string()],
+        &mut out,
+    );
+    assert!(printed);
+    assert!(!out.is_empty());
+
+    // Plain `--version` (no --json) → left for clap, false, nothing printed
+    let mut out: Vec<u8> = Vec::new();
+    let printed = maybe_print_version_json_from(
+        "my-tool",
+        "1.2.3",
+        &["my-tool".to_string(), "--version".to_string()],
+        &mut out,
+    );
+    assert!(!printed, "plain --version is clap's job");
+    assert!(out.is_empty());
+
+    // No version flag at all → false
+    let mut out: Vec<u8> = Vec::new();
+    let printed =
+        maybe_print_version_json_from("my-tool", "1.2.3", &["my-tool".to_string()], &mut out);
+    assert!(!printed);
+    assert!(out.is_empty());
 }
 
 /// docs/how-to/guide.md — "Format-dispatching with emit()".

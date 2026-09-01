@@ -42,6 +42,9 @@ pub fn generate_completions(
 ///
 /// Returns `true` if the version was printed and the caller should exit.
 ///
+/// Reads from [`std::env::args`]. For a testable variant that takes explicit
+/// args and an output writer, see [`maybe_print_version_json_from`].
+///
 /// # Example
 ///
 /// ```rust,no_run
@@ -54,7 +57,35 @@ pub fn generate_completions(
 /// ```
 pub fn maybe_print_version_json(name: &str, version: &str) -> bool {
     let args: Vec<String> = std::env::args().collect();
+    let mut stdout = std::io::stdout().lock();
+    maybe_print_version_json_from(name, version, &args, &mut stdout)
+}
 
+/// [`maybe_print_version_json`] with explicit args and output writer.
+///
+/// Behavior is identical: returns `true` only when `--version` was combined
+/// with `--json`/`-j` (in which case the version envelope was written to
+/// `out`); plain `--version` and no-flag invocations return `false` and write
+/// nothing, leaving version handling to clap.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use genesis::cli::maybe_print_version_json_from;
+///
+/// let args: Vec<String> = std::env::args().collect();
+/// let mut out = std::io::stdout().lock();
+/// if maybe_print_version_json_from("my-tool", "0.1.0", &args, &mut out) {
+///     return;
+/// }
+/// // ... proceed to Cli::parse()
+/// ```
+pub fn maybe_print_version_json_from(
+    name: &str,
+    version: &str,
+    args: &[String],
+    out: &mut impl Write,
+) -> bool {
     let has_version = args.iter().any(|a| a == "--version" || a == "-V");
 
     if !has_version {
@@ -75,7 +106,8 @@ pub fn maybe_print_version_json(name: &str, version: &str) -> bool {
             vec![],
             vec![],
         );
-        println!("{}", serde_json::to_string(&envelope).unwrap());
+        writeln!(out, "{}", serde_json::to_string(&envelope).unwrap())
+            .expect("write version envelope");
         true
     } else {
         // Plain --version: let clap handle it

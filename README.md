@@ -97,7 +97,7 @@ Helpers for generating `llms.txt`, `llm.txt`, and `AGENTS.md` agent blocks.
 - `CliVerbosity` — embeddable clap args struct for `-v`/`-vv`/`-vvv` + `-q`/`--quiet`
 - `CliFormat` — embeddable clap args struct for `--json`/`--human`
 - `OutputFormat` enum (`Human` | `Json`)
-- `Output::emit(format, ...)` — format-dispatching output, calls human `print()` or JSON envelope
+- `Output::emit(...)` — format-dispatching output, calls human `print()` or JSON envelope
 - `Verbosity::from_verbose_count(u8)` — canonical clap count to Verbosity mapping
 - `Verbosity::help_footer()` — "Use -v for..." progressive-disclosure hint
 

@@ -131,7 +131,7 @@ if !envelope.ok {
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
 | Compile error: `ErrorResult::new` returns `Err` | Empty remediation string | Provide a non-empty remediation suggestion |
-| Envelope not printed in JSON format | CLI not using `CliFormat` or `Output::emit()` | Use `Output::emit(format, ...)` instead of `output.print(...)` |
+| Envelope not printed in JSON format | CLI not using `CliFormat` or `Output::emit()` | Use `Output::emit(cli_version, format, verbosity, ...)` instead of `output.print(...)` |
 | Warnings not showing | Verbosity set to `Normal` or `Quiet` | Bump to `Verbose` to see warnings |
 
 ## Further Exploration
