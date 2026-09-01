@@ -11,6 +11,7 @@
 - [Building a CLI with Guide](how-to/guide.md)
 - [Adding a DoctorCheck](how-to/doctor.md)
 - [Writing Tests with Fixture](how-to/fixture.md)
+- [Creating Agent Evals](how-to/evals.md)
 
 ---
 
