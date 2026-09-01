@@ -12,12 +12,12 @@
 //! - `guide_emit_dispatch`       → docs/how-to/guide.md, "Format-dispatching with emit()"
 //! - `guide_error_sink`          → docs/how-to/guide.md, "Error handling with ErrorSink"
 //! - `envelope_error_result`     → docs/how-to/envelope.md, "Returning errors"
-//! - `envelope_read_envelope`    → docs/how-to/envelope.md, "Reading the envelope"
+//! - `envelope_read_envelope`    → docs/how-to/envelope.md, "Reading the envelope" (success)
+//! - `envelope_read_error_envelope` → docs/how-to/envelope.md, "Reading the envelope" (error)
 
 use genesis::cli::maybe_print_version_json;
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
 use genesis::guide::{CliFormat, CliVerbosity, ErrorSink, Output, OutputFormat, Verbosity};
-use std::process::ExitCode;
 
 /// Buffered stdout/stderr pair so tests don't write to the real terminal.
 struct Streams {
@@ -119,8 +119,9 @@ fn step3_emit_cli_format() {
 #[test]
 fn step4_version_json() {
     // No `--version` in the test runner's args → returns false and continues.
+    // (The positive branch reads `std::env::args()` directly and is not
+    // testable in-process — see the decouple-args follow-up ticket.)
     assert!(!maybe_print_version_json("my-tool", "0.1.0"));
-    let _ = ExitCode::SUCCESS; // the doc example returns Ok(()) when this returns true
 }
 
 /// docs/how-to/guide.md — "Format-dispatching with emit()".
