@@ -25,3 +25,4 @@
 
 - [Architecture](explanation/architecture.md)
 - [Design Decisions](explanation/design-decisions.md)
+- [Removed & Renamed APIs](explanation/removed-apis.md)
