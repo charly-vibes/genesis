@@ -23,6 +23,7 @@ pub mod config;
 pub mod discovery;
 pub mod doctor;
 pub mod envelope;
+pub mod evals;
 pub mod feedback;
 pub mod fixture;
 pub mod guide;
