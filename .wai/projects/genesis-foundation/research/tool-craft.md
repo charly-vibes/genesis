@@ -26,7 +26,7 @@ not slogans — each has a concrete mechanism. Adopt all four.
 | Principle | wai mechanism (evidence) | Rule | Status |
 |---|---|---|---|
 | **Desire Path Alignment** | `wai status` computes a `Pattern` (e.g. `ReadyToImplement`) and prints a `command:` the user can copy-paste. See `docs/src/advanced/workflow-detection.md`. | The default command of every tool *suggests the next command* based on state, not just report state. | 🎯 (wai only; port via `wai-bdqw` subtree) |
-| **Self-Healing Errors** | `Suggestion` enum (`src/suggestions.rs`): `DidYouMean`, `WrongOrder`, `ContextHint`, `Fix`. `doctor::CheckResult` carries a `fix: Option<String>` *and* a `fix_fn` that can apply it. | Every error path emits a fix or a "Run: …" footer. Never a bare "error: X". | 🎯 (only wai has `Suggestion`; `doctor` in 4/5) |
+| **Self-Healing Errors** | `Suggestion` enum (`src/suggestions.rs`): `DidYouMean`, `WrongOrder`, `ContextHint`, `Fix`. `doctor::CheckResult` carries a `fix: Option<String>` *and* a `fix_fn` that can apply it. | Every error path emits a fix or a "Run: …" footer. Never a bare "error: X". | 🎯 (only wai, dont, testaruda have `Suggestion`; `doctor` in 5/5) |
 | **Progressive Disclosure** | `-v` / `-vv` / `-vvv` reveal tiers; `help::HelpContent` splits `options` vs `advanced_options` vs `internals`; `init` asks only for a project name. | Simple by default, powerful when asked. Three verbosity tiers, one JSON escape hatch. | 🎯 (wai pattern; adopt suite-wide) |
 | **Context-Aware** | Plugins auto-detected by workspace markers (`.beads/`, `openspec/`); suggestions adapt. See `workflow-detection.md`. | Detect, don't configure. A tool in a repo with `.wai/` should know wai is present. | 🎯 (reciprocal awareness not yet built; `wai-bdqw.1`/`.2`–`.5`) |
 
@@ -120,7 +120,7 @@ written down. Pin it here. 🎯 — `wai doctor --suite` (`wai-bdqw.8`) will lin
 ## 4. Self-healing errors and next-step guidance
 
 wai's `Suggestion` enum is the canonical shape. 🎯 **Target**: every tool
-reproduces it (only wai does today — see Appendix A.3).
+reproduces it (wai, dont, and testaruda do today — see Appendix A.3).
 
 ```rust
 enum Suggestion {
@@ -279,7 +279,7 @@ AIX module audit across `wai`, `pretender`, `dont`, `espectacular`,
 | Verb | wai | pretender | dont | espectacular | testaruda |
 |---|---|---|---|---|---|
 | `init` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `doctor` | ✓ | ✓ | ✓ | ✓ | ✗ |
+| `doctor` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `config` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `completions` | ✓ | ✓ | ✓ | ✓ | ✓ |
 
@@ -298,13 +298,13 @@ AIX module audit across `wai`, `pretender`, `dont`, `espectacular`,
 | `llm.txt` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `AGENTS.md` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `managed_block.rs` (injector) | ✓ | ✗ | ✓ | ✓ | ✓ |
-| `Suggestion` enum (self-heal) | ✓ | ✗ | ✗ | ✗ | ✓ |
+| `Suggestion` enum (self-heal) | ✓ | ✗ | ✓ | ✗ | ✓ |
 | `doctor` command | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 **Reading the matrix.** A ✓ in every column = ✅ suite rule (law). Any row
 with a ✗ = 🎯 target; the gap is a ticket, not a defect in the tools that
-diverge. The `Suggestion` enum row is the clearest case: only wai has it, so
-"every tool reproduces it" is a target, not a current rule.
+diverge. The `Suggestion` enum row is the clearest case: wai, dont, and
+testaruda have it, so "every tool reproduces it" is a target, not a current rule.
 
 ### A.4 Provenance (git history)
 
