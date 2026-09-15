@@ -129,6 +129,23 @@ let guide = Guide::builder("my-tool", env!("CARGO_PKG_VERSION"))
 
 > See the source code of `wai` or `dont` for complete `Guide` usage examples.
 
+### Exit codes
+
+`Guide::run` and `Guide::run_formatted` follow a documented exit-code
+contract, stable across versions:
+
+| Exit | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | User-facing error — the handler returned `Err`, or the `Output` is an error envelope |
+| `2` | Internal failure — I/O error while emitting output (not the user's fault) |
+
+Panics are never masked: there is no panic hook, and stack traces are
+never swallowed. A panicking command unwinds with Rust's default
+runtime behavior (typically exit `101`). Eval harnesses and shell
+scripts can therefore distinguish "graceful failure with hint
+envelope" (`1`) from "crashed" (any other nonzero).
+
 ## Error handling with `ErrorSink`
 
 `ErrorSink` handles errors with self-healing suggestions — it prints the error,

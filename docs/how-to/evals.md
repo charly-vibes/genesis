@@ -101,7 +101,7 @@ Prefer these checks, in order of reliability:
 | Check | How | Example |
 |---|---|---|
 | Envelope assertions | Parse the captured stdout JSON | `envelope.ok == false`, `envelope.hints` non-empty and mentioning the suggested fix |
-| Exit codes | Subprocess status | `0` success vs. the tool's error code — note the current contract is coarse: `guide::run` exits `1` for *every* user-facing error (no gradation), and panics unwind to Rust's default `101` with no documented guarantee. Track [genesis-u40](https://github.com/charly-vibes/genesis) for a refined exit-code contract; until then, treat "exited nonzero with a parseable error envelope" as the portable assertion |
+| Exit codes | Subprocess status | `0` success, `1` user-facing error (graceful failure — parse the error envelope for hints), `2` internal failure (I/O while emitting output); panics unwind with Rust's default behavior (typically `101`) and are never masked. Contract documented on `Guide::run` ([genesis-u40](https://github.com/charly-vibes/genesis)). Assert `1` for "graceful failure with hint envelope" vs. any other nonzero for "crashed" |
 | Managed-block boundary audits | Line-level diff of `AGENTS.md` | Changes occur only between `<!-- my-tool:START -->` and `<!-- my-tool:END -->` |
 | State-transcript diffs | Parse your tool's state/log files | Transitions obey the state machine; no direct hand-edits of state files |
 
