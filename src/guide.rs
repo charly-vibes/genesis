@@ -867,9 +867,10 @@ impl Guide {
     /// - `exit: 1` — user-facing error (handler returned `Err`, or the
     ///   `Output` is an error envelope); stable, backward-compatible
     /// - `exit: 2` — internal failure (I/O error while emitting output)
-    /// - panics unwind with Rust's default behavior (`abort`/`101` via the
-    ///   runtime); no panic hook is installed and stack traces are never
-    ///   swallowed
+    /// - panics unwind with Rust's default runtime behavior (exit `101`);
+    ///   if the tool opts into `panic = "abort"`, the process aborts
+    ///   instead (no `101` guarantee). No panic hook is installed and
+    ///   stack traces are never swallowed
     ///
     /// Eval harnesses can distinguish "graceful failure with hint
     /// envelope" (`1`) from "crashed" (nonzero other than `1`). See
@@ -889,6 +890,9 @@ impl Guide {
     /// Enables testing of the internal-failure (`exit: 2`) path without
     /// replacing process-level streams. See [`Guide::run`] for the
     /// exit-code contract.
+    ///
+    /// Diagnostics on emission failure are best-effort: they are written
+    /// to the provided `stderr`, so a broken stderr loses them silently.
     pub fn run_with_writers<T, F>(
         &self,
         f: F,
@@ -936,6 +940,9 @@ impl Guide {
     /// Enables testing of the internal-failure (`exit: 2`) path without
     /// replacing process-level streams. See [`Guide::run`] for the
     /// exit-code contract.
+    ///
+    /// Diagnostics on emission failure are best-effort: they are written
+    /// to the provided `stderr`, so a broken stderr loses them silently.
     pub fn run_formatted_with_writers<T, F>(
         &self,
         format: OutputFormat,

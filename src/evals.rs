@@ -119,6 +119,9 @@ pub enum EvalsError {
     /// Captured stdout is JSON but has no usable `ok` field.
     #[error("stdout JSON has no boolean `ok` field")]
     NoOkField,
+    /// Fixture materialization failed.
+    #[error("failed to materialize eval fixture: {0}")]
+    Fixture(#[source] crate::fixture::FixtureError),
 }
 
 /// The observable outcome of a tool invocation, parsed from its stdout.
@@ -308,12 +311,33 @@ impl Scenario {
     }
 
     /// Replay the fake-agent transcript and apply all deterministic checks.
-    pub fn run(&self, replay: Vec<AgentStep>) -> ScenarioReport {
+    ///
+    /// Returns [`EvalsError::Fixture`] if the fixture directory cannot be
+    /// materialized — no panic path.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use genesis::evals::{AgentStep, CheckOutcome, Scenario};
+    ///
+    /// let scenario = Scenario::new("status-is-ok", "prompt")
+    ///     .check("always-passes", |_| CheckOutcome::pass());
+    /// let replay = vec![AgentStep {
+    ///     command: "my-tool status".into(),
+    ///     stdout: r#"{"ok": true}"#.into(),
+    ///     stderr: String::new(),
+    ///     exit_code: 0,
+    ///     executed: true,
+    /// }];
+    /// let report = scenario.run(replay).expect("fixture");
+    /// assert!(report.passed);
+    /// ```
+    pub fn run(&self, replay: Vec<AgentStep>) -> Result<ScenarioReport, EvalsError> {
         let mut builder = crate::fixture::Fixture::new();
         for (path, content) in &self.fixture_files {
             builder = builder.with_file(path, content);
         }
-        let fixture = builder.build().expect("eval fixture temp dir");
+        let fixture = builder.build().map_err(EvalsError::Fixture)?;
         let result = ScenarioResult {
             steps: replay,
             fixture_root: fixture.root().to_path_buf(),
@@ -326,13 +350,13 @@ impl Scenario {
                 fail @ CheckOutcome::Fail { .. } => Some((c.name.clone(), fail)),
             })
             .collect();
-        ScenarioReport {
+        Ok(ScenarioReport {
             name: self.name.clone(),
             passed: failures.is_empty(),
             failures,
             fixture_root: result.fixture_root,
             _fixture: fixture,
-        }
+        })
     }
 }
 
@@ -375,8 +399,10 @@ pub fn error_envelope_with_hint(
 }
 
 /// Assert `steps[i]` exited 0 with an `ok:true` envelope — the graceful
-/// recovery. Agent fault (`ERR_ENVELOPE_HINT_BLINDNESS`) if the agent
-/// ended on a failing envelope, tool fault otherwise.
+/// recovery. Tool fault if the recovery envelope still fails: the agent
+/// may have followed the hint and the fix itself was ineffective, so this
+/// is *not* an agent-fault signal. Hint-blindness is classified by
+/// [`agent_followed_hint`].
 pub fn ok_envelope(step: usize) -> impl Fn(&ScenarioResult) -> CheckOutcome {
     move |result| {
         let Some(s) = result.steps.get(step) else {
@@ -388,10 +414,10 @@ pub fn ok_envelope(step: usize) -> impl Fn(&ScenarioResult) -> CheckOutcome {
                 "step {step} emitted ok:true but exited {}",
                 s.exit_code
             )),
-            Ok(EnvelopeOutcome::Error { .. }) => CheckOutcome::agent_fault(
-                ErrorTaxonomy::EnvelopeHintBlindness,
-                format!("step {step} still failed; the suggested fix was not effective"),
-            ),
+            Ok(EnvelopeOutcome::Error { code, .. }) => CheckOutcome::tool_fault(format!(
+                "step {step} still failed (code {:?}); the suggested fix was issued but ineffective",
+                code
+            )),
             Err(e) => CheckOutcome::tool_fault(format!("step {step}: {e}")),
         }
     }
@@ -581,7 +607,7 @@ mod tests {
             },
         ];
 
-        let report = scenario.run(replay);
+        let report = scenario.run(replay).expect("fixture");
         assert!(report.passed, "failures: {:?}", report.failures);
         assert!(report.failures.is_empty());
         // Fixture materialized for checks.
@@ -610,7 +636,7 @@ mod tests {
                 executed: true,
             },
         ];
-        let report = scenario.run(replay);
+        let report = scenario.run(replay).expect("fixture");
         assert!(!report.passed);
         assert_eq!(report.failures.len(), 1);
         let (_, outcome) = &report.failures[0];
@@ -635,7 +661,7 @@ mod tests {
             exit_code: 0,
             executed: false,
         }];
-        let report = scenario.run(replay);
+        let report = scenario.run(replay).expect("fixture");
         assert!(!report.passed);
         let (_, outcome) = &report.failures[0];
         match outcome {
@@ -643,6 +669,58 @@ mod tests {
                 taxonomy: Some(t), ..
             } => assert_eq!(*t, ErrorTaxonomy::ToolExecutionHallucination),
             other => panic!("expected agent fault, got {other:?}"),
+        }
+    }
+
+    /// A failing recovery envelope is a TOOL fault (fix issued but
+    /// ineffective), not ERR_ENVELOPE_HINT_BLINDNESS.
+    #[test]
+    fn ok_envelope_failing_recovery_is_tool_fault_not_blindness() {
+        let scenario = Scenario::new("ineffective-fix", "prompt")
+            .check("recovery-ok-envelope", ok_envelope(1));
+        let replay = vec![
+            AgentStep {
+                command: "my-tool check".into(),
+                stdout: error_envelope_stdout("my-tool fix"),
+                stderr: String::new(),
+                exit_code: 1,
+                executed: true,
+            },
+            AgentStep {
+                command: "my-tool fix".into(),
+                stdout: error_envelope_stdout("my-tool fix"),
+                stderr: String::new(),
+                exit_code: 1,
+                executed: true,
+            },
+        ];
+        let report = scenario.run(replay).expect("fixture");
+        assert!(!report.passed);
+        let (_, outcome) = &report.failures[0];
+        match outcome {
+            CheckOutcome::Fail { taxonomy: None, .. } => {}
+            other => panic!("expected tool fault, got {other:?}"),
+        }
+    }
+
+    /// Step-indexed checks against an empty replay report tool faults,
+    /// not panics.
+    #[test]
+    fn empty_replay_yields_tool_faults_for_step_checks() {
+        let scenario = Scenario::new("empty", "prompt")
+            .check(
+                "step0-hint-envelope",
+                error_envelope_with_hint(0, "my-tool fix"),
+            )
+            .check("step0-ok-envelope", ok_envelope(0));
+        let report = scenario.run(vec![]).expect("fixture");
+        assert!(!report.passed);
+        assert_eq!(report.failures.len(), 2);
+        for (_, outcome) in &report.failures {
+            match outcome {
+                CheckOutcome::Fail { taxonomy: None, .. } => {}
+                other => panic!("expected tool fault, got {other:?}"),
+            }
         }
     }
 
@@ -660,7 +738,7 @@ mod tests {
             exit_code: 1,
             executed: true,
         }];
-        let report = scenario.run(replay);
+        let report = scenario.run(replay).expect("fixture");
         assert!(!report.passed);
         let (_, outcome) = &report.failures[0];
         match outcome {
