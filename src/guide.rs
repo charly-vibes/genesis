@@ -860,25 +860,57 @@ impl Guide {
     /// Run a command handler, wrapping its `Output`.
     ///
     /// Handles printing, error formatting, and exit code.
+    ///
+    /// # Exit-code contract
+    ///
+    /// - `exit: 0` — success
+    /// - `exit: 1` — user-facing error (handler returned `Err`, or the
+    ///   `Output` is an error envelope); stable, backward-compatible
+    /// - `exit: 2` — internal failure (I/O error while emitting output)
+    /// - panics unwind with Rust's default behavior (`abort`/`101` via the
+    ///   runtime); no panic hook is installed and stack traces are never
+    ///   swallowed
+    ///
+    /// Eval harnesses can distinguish "graceful failure with hint
+    /// envelope" (`1`) from "crashed" (nonzero other than `1`). See
+    /// `docs/how-to/evals.md` Step 3.
     pub fn run<T, F>(&self, f: F) -> i32
+    where
+        T: Debug,
+        F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
+    {
+        let mut stdout = std::io::stdout();
+        let mut stderr = std::io::stderr();
+        self.run_with_writers(f, &mut stdout, &mut stderr)
+    }
+
+    /// Like [`Guide::run`], but writes to the provided streams.
+    ///
+    /// Enables testing of the internal-failure (`exit: 2`) path without
+    /// replacing process-level streams. See [`Guide::run`] for the
+    /// exit-code contract.
+    pub fn run_with_writers<T, F>(
+        &self,
+        f: F,
+        stdout: &mut impl Write,
+        stderr: &mut impl Write,
+    ) -> i32
     where
         T: Debug,
         F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
     {
         match f() {
             Ok(output) => {
-                let mut stdout = std::io::stdout();
-                let mut stderr = std::io::stderr();
-                if let Err(e) = output.print(self.verbosity, &mut stdout, &mut stderr) {
-                    let _ = writeln!(&mut stderr, "error printing output: {}", e);
-                    return 1;
+                if let Err(e) = output.print(self.verbosity, stdout, stderr) {
+                    let _ = writeln!(stderr, "error printing output: {}", e);
+                    // Internal failure (I/O), not a user-facing error.
+                    return 2;
                 }
                 if output.is_error { 1 } else { 0 }
             }
             Err(err) => {
                 let sink = ErrorSink::new(&self.name).with_verbosity(self.verbosity);
-                let mut stderr = std::io::stderr();
-                sink.handle(err.as_ref(), &mut stderr);
+                sink.handle(err.as_ref(), stderr);
                 1
             }
         }
@@ -887,32 +919,46 @@ impl Guide {
     /// Run a command handler, dispatching to human or JSON output.
     ///
     /// Like `run()`, but uses `Output::emit()` to respect the requested
-    /// output format.
+    /// output format. See [`Guide::run`] for the exit-code contract
+    /// (`exit: 2` marks internal failures here as well).
     pub fn run_formatted<T, F>(&self, format: OutputFormat, f: F) -> i32
+    where
+        T: Debug + Serialize,
+        F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
+    {
+        let mut stdout = std::io::stdout();
+        let mut stderr = std::io::stderr();
+        self.run_formatted_with_writers(format, f, &mut stdout, &mut stderr)
+    }
+
+    /// Like [`Guide::run_formatted`], but writes to the provided streams.
+    ///
+    /// Enables testing of the internal-failure (`exit: 2`) path without
+    /// replacing process-level streams. See [`Guide::run`] for the
+    /// exit-code contract.
+    pub fn run_formatted_with_writers<T, F>(
+        &self,
+        format: OutputFormat,
+        f: F,
+        stdout: &mut impl Write,
+        stderr: &mut impl Write,
+    ) -> i32
     where
         T: Debug + Serialize,
         F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
     {
         match f() {
             Ok(output) => {
-                let mut stdout = std::io::stdout();
-                let mut stderr = std::io::stderr();
-                if let Err(e) = output.emit(
-                    &self.version,
-                    format,
-                    self.verbosity,
-                    &mut stdout,
-                    &mut stderr,
-                ) {
-                    let _ = writeln!(&mut stderr, "error printing output: {}", e);
-                    return 1;
+                if let Err(e) = output.emit(&self.version, format, self.verbosity, stdout, stderr) {
+                    let _ = writeln!(stderr, "error printing output: {}", e);
+                    // Internal failure (I/O), not a user-facing error.
+                    return 2;
                 }
                 if output.is_error { 1 } else { 0 }
             }
             Err(err) => {
                 let sink = ErrorSink::new(&self.name).with_verbosity(self.verbosity);
-                let mut stderr = std::io::stderr();
-                sink.handle(err.as_ref(), &mut stderr);
+                sink.handle(err.as_ref(), stderr);
                 1
             }
         }
@@ -1314,6 +1360,60 @@ mod tests {
         let exit: i32 = guide.run(|| -> Result<Output<String>, Box<dyn std::error::Error>> {
             Err("something went wrong".into())
         });
+        assert_eq!(exit, 1);
+    }
+
+    /// Always-failing writer used to exercise the internal-failure path.
+    struct FailingWriter;
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("simulated I/O failure"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_guide_run_print_failure_returns_two() {
+        let guide = Guide::builder("test", "0.1").build();
+        let mut stdout = FailingWriter;
+        let mut stderr = Vec::new();
+        let exit: i32 = guide.run_with_writers(
+            || -> Result<Output<&str>, Box<dyn std::error::Error>> { Ok(Output::success("ok")) },
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(exit, 2);
+    }
+
+    #[test]
+    fn test_guide_run_formatted_print_failure_returns_two() {
+        let guide = Guide::builder("test", "0.1").build();
+        let mut stdout = FailingWriter;
+        let mut stderr = Vec::new();
+        let exit: i32 = guide.run_formatted_with_writers(
+            OutputFormat::Json,
+            || -> Result<Output<&str>, Box<dyn std::error::Error>> { Ok(Output::success("ok")) },
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(exit, 2);
+    }
+
+    #[test]
+    fn test_guide_run_with_writers_user_error_still_returns_one() {
+        let guide = Guide::builder("test", "0.1").build();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let exit: i32 = guide.run_with_writers(
+            || -> Result<Output<String>, Box<dyn std::error::Error>> {
+                Ok(Output::failure("nope"))
+            },
+            &mut stdout,
+            &mut stderr,
+        );
         assert_eq!(exit, 1);
     }
 
