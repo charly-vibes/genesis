@@ -256,7 +256,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_read_all_errors() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("errors.jsonl");
@@ -289,7 +288,6 @@ mod tests {
         // dir is cleaned up on drop
     }
 
-    #[test]
     #[test]
     fn test_cap_scratch_file() {
         let dir = tempfile::tempdir().expect("tempdir");
