@@ -18,6 +18,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     previous output (the `receipt` key is omitted; golden-file tested), and
     `parse_envelope` accepts enriched envelopes with no change to its
     return type. No action required.
+- **AIX token-cost estimate + bounded generation** ([genesis-35d]):
+  `estimate_token_cost(&str) -> TokenCost` (chars/4 heuristic, documented
+  ±25% band, heuristic name ships with the estimate) and budget-bounded
+  variants `generate_llms_txt_bounded` / `generate_llm_txt_bounded` that
+  degrade content deterministically (truncate descriptions → drop raw
+  sections → drop tables, headings always survive) instead of overflowing.
+  - **Compatibility note for downstream tools:** fully additive. Existing
+    `generate_llms_txt` / `generate_llm_txt` signatures and output are
+    unchanged (golden-file pinned). No action required.
 
 ### Changed
 
@@ -36,3 +45,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [genesis-u40]: https://github.com/charly-vibes/genesis
 [genesis-f2o]: https://github.com/charly-vibes/genesis
+[genesis-35d]: https://github.com/charly-vibes/genesis

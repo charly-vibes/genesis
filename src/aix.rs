@@ -285,6 +285,150 @@ pub fn generate_llm_txt(title: &str, description: &str, sections: &[LlmSection])
     out
 }
 
+// ── Token cost + bounded generation ─────────────────────────────────────
+
+/// Name of the token-count heuristic shipped with every estimate, so an
+/// approximation is never mistaken for an actual count (design D2).
+pub const TOKEN_COST_HEURISTIC: &str = "chars/4";
+
+/// A heuristic token-cost estimate for a generated artifact.
+///
+/// `heuristic` names the approximation (`chars/4`) so callers can never
+/// mistake the estimate for a tokenizer count. The chars/4 heuristic carries
+/// a documented **±25% error band** against typical English prose in
+/// cl100k-class vocabularies — good enough for budget arbitration, not for
+/// billing. If the ablation metric ever outgrows it, the planned escape hatch
+/// is a pluggable `TokenEstimator` trait (design D2 risks), not a new dep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenCost {
+    /// Estimated token count.
+    pub estimate: usize,
+    /// Name of the heuristic that produced the estimate.
+    pub heuristic: &'static str,
+}
+
+/// Estimate the token cost of any generated artifact via the chars/4
+/// heuristic (ceiling division), labeled with the heuristic name.
+pub fn estimate_token_cost(s: &str) -> TokenCost {
+    TokenCost {
+        estimate: s.chars().count().div_ceil(4),
+        heuristic: TOKEN_COST_HEURISTIC,
+    }
+}
+
+/// Truncate prose to its first sentence (up to and including the first `.`
+/// followed by whitespace or end of string). Text without a sentence break
+/// is returned whole. Deterministic by construction.
+fn first_sentence(s: &str) -> &str {
+    let trimmed = s.trim();
+    match trimmed.find(". ") {
+        Some(i) => trimmed[..i + 1].trim_end(),
+        None => trimmed,
+    }
+}
+
+/// Generate `llms.txt` under a declared token budget (chars/4 estimate).
+///
+/// Deterministic degradation ladder (design D2) — the artifact shrinks in
+/// fixed granularity steps instead of overflowing or being refused:
+///
+/// 1. under budget → byte-identical to [`generate_llms_txt`]
+/// 2. truncate module descriptions to their first sentence
+/// 3. drop module descriptions entirely — module names (headings) survive
+///
+/// Stage 3 is the floor: the minimal artifact is returned even if it still
+/// exceeds the budget (a verbose artifact beats a missing one).
+pub fn generate_llms_txt_bounded(
+    meta: &ProjectMeta,
+    modules: &[ModuleEntry],
+    budget: usize,
+) -> String {
+    let full = generate_llms_txt(meta, modules);
+    if estimate_token_cost(&full).estimate <= budget {
+        return full;
+    }
+
+    let stage1: Vec<ModuleEntry> = modules
+        .iter()
+        .map(|m| ModuleEntry::new(&m.name, first_sentence(&m.description)))
+        .collect();
+    let truncated = generate_llms_txt(meta, &stage1);
+    if estimate_token_cost(&truncated).estimate <= budget {
+        return truncated;
+    }
+
+    let stage2: Vec<ModuleEntry> = modules
+        .iter()
+        .map(|m| ModuleEntry::new(&m.name, ""))
+        .collect();
+    generate_llms_txt(meta, &stage2)
+}
+
+/// Generate `llm.txt` under a declared token budget (chars/4 estimate).
+///
+/// Deterministic degradation ladder (design D2):
+///
+/// 1. under budget → byte-identical to [`generate_llm_txt`]
+/// 2. truncate the description and heading bodies to their first sentences
+/// 3. drop raw (optional) sections — before any table is touched
+/// 4. drop table content, keeping table headings — headings survive all
+///    degradation levels
+///
+/// Stage 4 is the floor: returned even if still over budget.
+pub fn generate_llm_txt_bounded(
+    title: &str,
+    description: &str,
+    sections: &[LlmSection],
+    budget: usize,
+) -> String {
+    let full = generate_llm_txt(title, description, sections);
+    if estimate_token_cost(&full).estimate <= budget {
+        return full;
+    }
+
+    let truncate_bodies = |sections: &[LlmSection]| -> Vec<LlmSection> {
+        sections
+            .iter()
+            .map(|s| match s {
+                LlmSection::Heading { heading, body } => LlmSection::Heading {
+                    heading: heading.clone(),
+                    body: first_sentence(body).to_string(),
+                },
+                other => other.clone(),
+            })
+            .collect()
+    };
+    let short_description = first_sentence(description);
+
+    let stage1 = truncate_bodies(sections);
+    let out1 = generate_llm_txt(title, short_description, &stage1);
+    if estimate_token_cost(&out1).estimate <= budget {
+        return out1;
+    }
+
+    let stage2: Vec<LlmSection> = stage1
+        .iter()
+        .filter(|s| !matches!(s, LlmSection::Raw(_)))
+        .cloned()
+        .collect();
+    let out2 = generate_llm_txt(title, short_description, &stage2);
+    if estimate_token_cost(&out2).estimate <= budget {
+        return out2;
+    }
+
+    let stage3: Vec<LlmSection> = stage2
+        .iter()
+        .map(|s| match s {
+            LlmSection::Table { heading, .. } => LlmSection::Heading {
+                heading: heading.clone(),
+                body: String::new(),
+            },
+            other => other.clone(),
+        })
+        .collect();
+    generate_llm_txt(title, short_description, &stage3)
+}
+
 /// Write a complete `llm.txt` file at the given path.
 ///
 /// Creates or overwrites the file. Returns the number of bytes written.

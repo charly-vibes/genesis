@@ -1,0 +1,14 @@
+# my-tool
+
+> One-line tagline.
+
+## Quick start
+
+- [Repository](https://github.com/example/my-tool)
+- [Documentation](https://example.com/docs)
+
+## Modules
+
+- `module_a` — Handles the primary workload with care. This second sentence is extra detail that padding measures will remove.
+- `module_b` — Auxiliary support routines. Second sentence with more words that only matters when the budget is generous.
+

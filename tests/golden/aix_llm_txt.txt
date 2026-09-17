@@ -1,0 +1,15 @@
+# my-tool
+
+Top-level description.
+
+## Overview
+
+The overview explains the tool. This second sentence is detail a tight budget drops.
+
+## Key Commands
+
+| cmd | desc |
+|-----|------|
+| foo | bar |
+
+Raw appendix content that is optional.

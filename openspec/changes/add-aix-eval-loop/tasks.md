@@ -13,12 +13,12 @@ scenario first, then implement, then tidy in a separate commit.
 
 ## 2. AIX token cost + budget (design D2)
 
-- [ ] 2.1 Define `TokenCost { estimate, heuristic }`; `estimate_token_cost(&str)` free fn (chars/4); unit tests (monotonicity on added modules).
-- [ ] 2.2 Verify existing `generate_llms_txt` / `generate_llm_txt` compile unchanged; golden-file test pinning current output.
-- [ ] 2.3 Implement `generate_llms_txt_bounded(meta, modules, budget)` degradation stage 1: truncate module descriptions to first sentence. Test: under-budget input is byte-identical to unbudgeted.
-- [ ] 2.4 Implement `generate_llm_txt_bounded(title, description, sections, budget)`; degradation stage 2: drop raw/optional sections before tables; headings always survive. Test each level independently on both generators.
-- [ ] 2.5 Determinism test: same inputs + budget → byte-identical outputs (10 iterations).
-- [ ] 2.6 Document heuristic ±25% band in rustdoc + modules.md.
+- [x] 2.1 Define `TokenCost { estimate, heuristic }`; `estimate_token_cost(&str)` free fn (chars/4); unit tests (monotonicity on added modules).
+- [x] 2.2 Verify existing `generate_llms_txt` / `generate_llm_txt` compile unchanged; golden-file test pinning current output.
+- [x] 2.3 Implement `generate_llms_txt_bounded(meta, modules, budget)` degradation stage 1: truncate module descriptions to first sentence. Test: under-budget input is byte-identical to unbudgeted.
+- [x] 2.4 Implement `generate_llm_txt_bounded(title, description, sections, budget)`; degradation stage 2: drop raw/optional sections before tables; headings always survive. Test each level independently on both generators.
+- [x] 2.5 Determinism test: same inputs + budget → byte-identical outputs (10 iterations).
+- [x] 2.6 Document heuristic ±25% band in rustdoc + modules.md.
 
 ## 3. Evals distractors + doc-drift check (design D3)
 

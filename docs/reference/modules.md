@@ -10,7 +10,7 @@
 | `guide` | stable | `Verbosity`, `Output`, `CliVerbosity`, `CliFormat`, `OutputFormat`, `ErrorSink`, `GuideBuilder`, `Guide` | `Output::success()`, `Output::emit()` |
 | `suggestions` | stable | `Suggestion`, `SuggestionEngine`, `CommandRegistry` | `SuggestionEngine::new()` |
 | `managed_block` | stable | `BlockDef`, `BlockInjector`, `BlockRegistry` | `BlockInjector::new()` |
-| `aix` | stable | AIX artifact generation helpers | `llms.txt`, `llm.txt`, `AGENTS.md` generation |
+| `aix` | stable | `ProjectMeta`, `ModuleEntry`, `LlmSection`, `TokenCost` | `generate_llms_txt()`, `generate_llm_txt_bounded()`, `estimate_token_cost()` |
 | `config` | stable | `ConfigFile` trait, `ConfigRegistry`, `ConfigStore` | `ConfigFile::read()` |
 | `fixture` | stable | `Fixture`, `FixtureError` | `Fixture::new()` |
 | `feedback` | stable | `handle_feedback()`, `FeedbackArgs` | `handle_feedback()` |
@@ -234,13 +234,50 @@ Shared config management with validation and error reporting.
 
 **Signature:** `genesis::aix`
 
-AIX artifact generation helpers for `llms.txt`, `llm.txt`, and `AGENTS.md` blocks.
+AIX artifact generation helpers for `llms.txt`, `llm.txt`, and `AGENTS.md` blocks,
+plus token-cost estimation and budget-bounded generation (add-aix-eval-loop §2).
+
+### Key Types
+
+| Type | Description |
+| :--- | :--- |
+| `ProjectMeta` | Project name, tagline, repository/documentation/crates.io links |
+| `ModuleEntry` | One module listing: name + description |
+| `LlmSection` | `llm.txt` section: `Heading`, `Table`, or `Raw` |
+| `TokenCost` | Heuristic token estimate + the heuristic's name (`chars/4`) |
 
 ### Functions
 
 | Function | Description |
 | :--- | :--- |
+| `generate_llms_txt(meta, modules)` | Generate `llms.txt` from project metadata and modules |
+| `generate_llm_txt(title, description, sections)` | Generate `llm.txt` from sections |
+| `generate_llms_txt_bounded(meta, modules, budget)` | `llms.txt` under a token budget; deterministic degradation ladder |
+| `generate_llm_txt_bounded(title, description, sections, budget)` | `llm.txt` under a token budget; deterministic degradation ladder |
+| `estimate_token_cost(s)` | chars/4 token estimate (ceiling division), labeled with the heuristic name |
 | `agents_block(name, body)` | Generate an agent block with body content |
+
+### Token-cost heuristic
+
+`estimate_token_cost` uses the **chars/4 heuristic** (ceiling division) with a
+documented **±25% error band** against typical English prose in cl100k-class
+vocabularies — good enough for budget arbitration, not for billing. The
+heuristic name ships inside every `TokenCost` so an approximation is never
+mistaken for a tokenizer count. No tokenizer dependency is pulled in.
+
+### Budget degradation ladder
+
+Both bounded generators degrade **deterministically** instead of overflowing
+or refusing. Granularity steps, in order:
+
+1. at or under budget → byte-identical to the unbudgeted generator
+2. truncate descriptions to their first sentence
+3. drop optional (`Raw`) sections
+4. drop table content — headings always survive; module names are the floor
+
+The floor artifact is returned even if it still exceeds the budget: a verbose
+artifact beats a missing one. Existing `generate_llms_txt` / `generate_llm_txt`
+signatures are untouched (golden-file pinned in `tests/aix_bounded.rs`).
 
 ---
 
