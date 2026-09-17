@@ -5,6 +5,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Envelope receipt metadata** ([genesis-f2o]): `Envelope` gains optional
+  `receipt: Option<ReceiptMeta>` with a `with_receipt()` builder, recording
+  the terminal outcome (`TerminalOutcome`: `Success`/`Failure`/`Timeout`/
+  `Cancelled`), retry identity (`attempt: u32`, optional
+  `idempotency_key`), and user-visible `evidence` of a command run
+  (add-aix-eval-loop §1).
+  - **Compatibility note for downstream tools:** fully additive. Envelopes
+    constructed without `with_receipt()` serialize byte-identically to
+    previous output (the `receipt` key is omitted; golden-file tested), and
+    `parse_envelope` accepts enriched envelopes with no change to its
+    return type. No action required.
+
 ### Changed
 
 - **Exit-code contract refinement** ([genesis-u40]): `Guide::run` and
@@ -21,3 +35,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     (previously indistinguishable), update those assertions to `2`.
 
 [genesis-u40]: https://github.com/charly-vibes/genesis
+[genesis-f2o]: https://github.com/charly-vibes/genesis

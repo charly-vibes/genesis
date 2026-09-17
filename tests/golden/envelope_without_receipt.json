@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "envelope_version": "0.1",
+  "cli_version": "my-tool/1.0.0",
+  "envelope_kind": "ok",
+  "data": "hello",
+  "warnings": [],
+  "hints": [],
+  "meta": {
+    "duration_ms": 0,
+    "tx": null,
+    "request_id": null
+  }
+}

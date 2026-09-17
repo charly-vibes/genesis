@@ -164,6 +164,47 @@ pub struct HintEntry {
     pub description: String,
 }
 
+/// Terminal outcome of a command run, recorded in a [`ReceiptMeta`].
+///
+/// Every external boundary needs an ending — silence cannot be neutral
+/// (B173). Timeout is explicit so a deadline hit is never mistaken for a
+/// silent failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalOutcome {
+    /// The run completed successfully.
+    Success,
+    /// The run completed with a failure.
+    Failure,
+    /// The run hit its deadline. Independent of the envelope's `ok` field:
+    /// a delivered result with a timed-out follow-up is representable.
+    Timeout,
+    /// The run was cancelled before reaching a terminal state.
+    Cancelled,
+}
+
+/// Receipt metadata recording the terminal outcome, retry identity, and
+/// user-visible evidence of a command run (add-aix-eval-loop D1).
+///
+/// Attached to an envelope via [`Envelope::with_receipt`]; tools decide
+/// which commands qualify as mutating and what evidence means for them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReceiptMeta {
+    /// How the run ended.
+    pub terminal_outcome: TerminalOutcome,
+    /// 1-based attempt counter; retried runs of the same mutating command
+    /// carry increasing numbers.
+    pub attempt: u32,
+    /// Optional key shared by attempts of the same logical command, so
+    /// duplicates and retries are distinguishable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+    /// Optional verifiable statement of the user-visible edge
+    /// ("file X exists at path Y") — not free-form narrative.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<String>,
+}
+
 /// The universal CLI output envelope.
 ///
 /// Every command returns this. Callers check `ok` first, then inspect `data`.
@@ -179,6 +220,11 @@ pub struct Envelope<T: Serialize> {
     pub hints: Option<Vec<HintEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ephemeral: Option<bool>,
+    /// Optional receipt metadata — opt-in via [`Envelope::with_receipt`].
+    /// Absent from serialized output unless set, so envelopes without a
+    /// receipt are byte-identical to pre-receipt output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ReceiptMeta>,
     pub meta: Meta,
 }
 
@@ -207,6 +253,7 @@ impl<T: Serialize> Envelope<T> {
             warnings,
             hints: Some(hints),
             ephemeral: None,
+            receipt: None,
             meta: Meta {
                 duration_ms: 0,
                 tx: None,
@@ -231,6 +278,25 @@ impl<T: Serialize> Envelope<T> {
         env.meta.tx = tx;
         env
     }
+
+    /// Attach receipt metadata (builder style, consumes and returns `self`).
+    ///
+    /// ```
+    /// use genesis::envelope::{Envelope, EnvelopeKind, ReceiptMeta, TerminalOutcome};
+    ///
+    /// let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "done", vec![], vec![])
+    ///     .with_receipt(ReceiptMeta {
+    ///         terminal_outcome: TerminalOutcome::Success,
+    ///         attempt: 1,
+    ///         idempotency_key: None,
+    ///         evidence: Some("file exists at /tmp/out.txt".into()),
+    ///     });
+    /// assert!(env.receipt.is_some());
+    /// ```
+    pub fn with_receipt(mut self, receipt: ReceiptMeta) -> Self {
+        self.receipt = Some(receipt);
+        self
+    }
 }
 
 impl Envelope<ErrorResult> {
@@ -247,6 +313,7 @@ impl Envelope<ErrorResult> {
             warnings,
             hints: None,
             ephemeral: None,
+            receipt: None,
             meta: Meta {
                 duration_ms: 0,
                 tx: None,
@@ -475,6 +542,115 @@ mod tests {
             Some(1),
         );
         assert_eq!(env.cli_version, "downstream/3.0.0");
+    }
+
+    // ── Receipt metadata (add-aix-eval-loop §1) ─────────────────────
+
+    #[test]
+    fn test_terminal_outcome_variants_serialize_snake_case() {
+        let cases = vec![
+            (TerminalOutcome::Success, "success"),
+            (TerminalOutcome::Failure, "failure"),
+            (TerminalOutcome::Timeout, "timeout"),
+            (TerminalOutcome::Cancelled, "cancelled"),
+        ];
+
+        for (outcome, expected) in cases {
+            let json = serde_json::to_string(&outcome).unwrap();
+            assert_eq!(json, format!("\"{}\"", expected), "variant {:?}", outcome);
+            let back: TerminalOutcome = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, outcome, "round-trip of {:?}", outcome);
+        }
+    }
+
+    #[test]
+    fn test_receipt_meta_round_trips() {
+        let receipt = ReceiptMeta {
+            terminal_outcome: TerminalOutcome::Timeout,
+            attempt: 3,
+            idempotency_key: Some("deploy-config-v2".into()),
+            evidence: Some("file exists at /tmp/out.txt".into()),
+        };
+
+        let json = serde_json::to_string(&receipt).unwrap();
+        let back: ReceiptMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, receipt);
+    }
+
+    /// Exhaustive over the receipt field space: every terminal outcome ×
+    /// optionality of `idempotency_key` and `evidence`. Stands in for a
+    /// property test without adding a proptest dev-dependency.
+    #[test]
+    fn test_receipt_round_trip_preserves_all_fields() {
+        for outcome in [
+            TerminalOutcome::Success,
+            TerminalOutcome::Failure,
+            TerminalOutcome::Timeout,
+            TerminalOutcome::Cancelled,
+        ] {
+            for key in [None, Some("idem-key".to_string())] {
+                for evidence in [None, Some("verifiable statement".to_string())] {
+                    let receipt = ReceiptMeta {
+                        terminal_outcome: outcome,
+                        attempt: 7,
+                        idempotency_key: key.clone(),
+                        evidence: evidence.clone(),
+                    };
+                    let json = serde_json::to_string(&receipt).unwrap();
+                    let back: ReceiptMeta = serde_json::from_str(&json).unwrap();
+                    assert_eq!(back, receipt, "round-trip with {:?}", outcome);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_envelope_without_receipt_has_no_receipt_key() {
+        let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
+        let json = serde_json::to_string(&env).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.get("receipt").is_none());
+    }
+
+    #[test]
+    fn test_with_receipt_builder_round_trips_through_parse_envelope() {
+        let receipt = ReceiptMeta {
+            terminal_outcome: TerminalOutcome::Failure,
+            attempt: 1,
+            idempotency_key: Some("mutating-cmd".into()),
+            evidence: Some("no file was written".into()),
+        };
+        let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![])
+            .with_receipt(receipt);
+        assert!(env.receipt.is_some());
+
+        let json = serde_json::to_string(&env).unwrap();
+        // parse_envelope is lenient (reads `ok` only) — enriched envelopes
+        // must parse with no change to its return type.
+        let outcome = crate::evals::parse_envelope(&json).unwrap();
+        assert_eq!(outcome, crate::evals::EnvelopeOutcome::Ok);
+
+        // Full serde round-trip preserves the receipt.
+        let back: Envelope<String> = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.receipt.as_ref().map(|r| r.terminal_outcome),
+            Some(TerminalOutcome::Failure)
+        );
+        assert_eq!(back.receipt.as_ref().map(|r| r.attempt), Some(1));
+    }
+
+    #[test]
+    fn test_receipt_optional_fields_omitted_when_none() {
+        let receipt = ReceiptMeta {
+            terminal_outcome: TerminalOutcome::Success,
+            attempt: 1,
+            idempotency_key: None,
+            evidence: None,
+        };
+        let json = serde_json::to_string(&receipt).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.get("idempotency_key").is_none());
+        assert!(parsed.get("evidence").is_none());
     }
 
     #[test]

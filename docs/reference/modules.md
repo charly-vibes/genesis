@@ -6,7 +6,7 @@
 
 | Module | Status | Key Types / Traits | Entry Point |
 | :--- | :--- | :--- | :--- |
-| `envelope` | stable | `Envelope<T>`, `EnvelopeKind`, `ErrorResult`, `set_author()` | `Envelope::success()`, `Envelope::error()` |
+| `envelope` | stable | `Envelope<T>`, `EnvelopeKind`, `ErrorResult`, `ReceiptMeta`, `TerminalOutcome`, `set_author()` | `Envelope::success()`, `Envelope::error()`, `Envelope::with_receipt()` |
 | `guide` | stable | `Verbosity`, `Output`, `CliVerbosity`, `CliFormat`, `OutputFormat`, `ErrorSink`, `GuideBuilder`, `Guide` | `Output::success()`, `Output::emit()` |
 | `suggestions` | stable | `Suggestion`, `SuggestionEngine`, `CommandRegistry` | `SuggestionEngine::new()` |
 | `managed_block` | stable | `BlockDef`, `BlockInjector`, `BlockRegistry` | `BlockInjector::new()` |
@@ -33,11 +33,13 @@ Structured CLI output envelope. Every command returns an `Envelope<T>`.
 
 | Type | Description |
 | :--- | :--- |
-| `Envelope<T>` | Generic output envelope with `ok`, `data`, `error`, `warnings`, `hints`, `meta` |
+| `Envelope<T>` | Generic output envelope with `ok`, `data`, `error`, `warnings`, `hints`, `meta`, optional `receipt` |
 | `EnvelopeKind` | Closed enum: `Ok`, `Error`, `Empty`, `List`, `Check`, `Doctor`, `Version`, `Stats`, `Info`, `Warning` |
 | `ErrorResult` | Error with mandatory `remediation` field (constructor returns `Err` if empty) |
 | `Meta` | Observability metadata: `duration`, `transaction_id`, `request_id`, `author` |
 | `Warning` | Non-blocking concern with message |
+| `ReceiptMeta` | Optional receipt metadata: terminal outcome, retry identity, user-visible evidence |
+| `TerminalOutcome` | How a run ended: `Success`, `Failure`, `Timeout`, `Cancelled` |
 
 ### Functions
 
@@ -52,6 +54,7 @@ Structured CLI output envelope. Every command returns an `Envelope<T>`.
 | `Envelope::success(cli_version, kind, data, warnings, hints)` | Success envelope |
 | `Envelope::success_with_tx(cli_version, kind, data, warnings, hints, tx)` | Success envelope with transaction id |
 | `Envelope::error(cli_version, err, warnings)` | Error envelope |
+| `Envelope::with_receipt(receipt)` | Builder: attach `ReceiptMeta` (consumes and returns the envelope) |
 
 ### CLI version ownership contract
 
@@ -80,6 +83,38 @@ parameter is now required and must be threaded from the caller.
 exists.
 4. Verify with `cargo test` that serialized envelopes carry the tool's own
 version, not genesis-vibes' version.
+
+### Receipt metadata (opt-in)
+
+`Envelope` carries an optional `receipt: Option<ReceiptMeta>` recording the
+terminal outcome, retry identity, and user-visible evidence of a command run
+(add-aix-eval-loop D1). It is **additive and opt-in**:
+
+- Envelopes constructed without `with_receipt()` serialize **byte-identically**
+  to pre-receipt output — the `receipt` key is omitted entirely
+  (golden-file tested in `tests/envelope_golden.rs`). No downstream change
+  is required.
+- `TerminalOutcome` classifies how a run ended: `Success`, `Failure`,
+  `Timeout`, or `Cancelled`. Timeout is explicit, not silent failure, and is
+  independent of the envelope's `ok` field (a delivered result with a
+  timed-out follow-up is representable).
+- `attempt: u32` and optional `idempotency_key` make retries of mutating
+  commands distinguishable. Which commands qualify is a per-tool policy —
+  genesis ships the mechanism, not the policy.
+- `evidence: Option<String>` is a verifiable statement of the user-visible
+  edge ("file X exists at path Y"), not free-form narrative.
+
+```rust
+use genesis::envelope::{Envelope, EnvelopeKind, ReceiptMeta, TerminalOutcome};
+
+let env = Envelope::success(env!("CARGO_PKG_VERSION"), EnvelopeKind::Ok, data, vec![], vec![])
+    .with_receipt(ReceiptMeta {
+        terminal_outcome: TerminalOutcome::Success,
+        attempt: 1,
+        idempotency_key: Some("deploy-config".into()),
+        evidence: Some("file exists at /tmp/out.txt".into()),
+    });
+```
 
 ---
 

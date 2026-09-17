@@ -5,11 +5,11 @@ scenario first, then implement, then tidy in a separate commit.
 
 ## 1. Envelope receipt metadata (design D1)
 
-- [ ] 1.1 Define `TerminalOutcome` enum (Success/Failure/Timeout/Cancelled) + `ReceiptMeta` struct; unit test round-trip serialization.
-- [ ] 1.2 Add `receipt: Option<ReceiptMeta>` with `skip_serializing_if`; golden-file test (committed serde snapshot) proving envelopes without receipt serialize byte-identically to pre-change output.
-- [ ] 1.3 Add `Envelope::with_receipt()` builder; test `parse_envelope` accepts enriched envelopes with unchanged return type.
-- [ ] 1.4 Property test: serde round-trip preserves all receipt fields.
-- [ ] 1.5 Update docs/reference/modules.md envelope section + CHANGELOG compat note.
+- [x] 1.1 Define `TerminalOutcome` enum (Success/Failure/Timeout/Cancelled) + `ReceiptMeta` struct; unit test round-trip serialization.
+- [x] 1.2 Add `receipt: Option<ReceiptMeta>` with `skip_serializing_if`; golden-file test (committed serde snapshot) proving envelopes without receipt serialize byte-identically to pre-change output.
+- [x] 1.3 Add `Envelope::with_receipt()` builder; test `parse_envelope` accepts enriched envelopes with unchanged return type.
+- [x] 1.4 Property test: serde round-trip preserves all receipt fields.
+- [x] 1.5 Update docs/reference/modules.md envelope section + CHANGELOG compat note.
 
 ## 2. AIX token cost + budget (design D2)
 
