@@ -39,9 +39,9 @@ scenario first, then implement, then tidy in a separate commit.
 
 ## 5. Tidy + validation
 
-- [ ] 5.1 Refactor pass: extract shared fixture-env logic if 3.x introduced duplication; clippy --all-targets clean.
-- [ ] 5.2 Full suite green; `pretender check` clean.
-- [ ] 5.3 `openspec validate add-aix-eval-loop --strict` clean; mark tasks complete.
+- [x] 5.1 Refactor pass: extract shared fixture-env logic if 3.x introduced duplication; clippy --all-targets clean.
+- [x] 5.2 Full suite green; `pretender check` clean.
+- [x] 5.3 `openspec validate add-aix-eval-loop --strict` clean; mark tasks complete.
 
 ## Dependencies
 
