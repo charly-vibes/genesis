@@ -390,6 +390,12 @@ impl Scenario {
         self
     }
 
+    /// Add several fixture files at once — the Vec form of [`fixture_file`].
+    pub fn fixture_files_from(mut self, files: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.fixture_files.extend(files);
+        self
+    }
+
     /// Declare a distractor file (path relative to the fixture root).
     ///
     /// Like a fixture file, the distractor is materialized into the replay

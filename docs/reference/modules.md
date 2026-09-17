@@ -370,6 +370,23 @@ redactor (privacy), and gh (GitHub issue creation) into a single command.
 | `feedback::redactor` | Privacy redaction |
 | `feedback::scratch` | Error persistence from previous runs |
 
+### Converting feedback to regression scenarios
+
+Captured feedback becomes a replayable [`evals`](#evals) scenario
+(add-aix-eval-loop §4, design D4) — the aix-gap bundle → regression path:
+
+- `Scenario::from_feedback_context(bundle, fixtures)` embeds the recorded
+  failure signature (command, exit code, footer hint) as the
+  `reproduces-recorded-failure` check. Bundle-only conversion (empty
+  `fixtures`) yields a prompt-only scenario; caller-supplied `(path, content)`
+  pairs become scenario fixtures via the existing fixture mechanism (the
+  converting tool knows which files were in play — genesis never re-snapshots
+  the working tree).
+- `feedback::from_last_error(tool_name, fixtures)` wraps
+  `scratch::read_last_error`; a missing record returns the typed
+  `ConversionError::NoScratchRecord`, never a panic.
+- Conversion + replay run in-process: no LLM call, no subprocess runner.
+
 ---
 
 ## suite_linter

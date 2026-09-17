@@ -31,11 +31,11 @@ scenario first, then implement, then tidy in a separate commit.
 
 ## 4. Feedback → Scenario conversion (design D4)
 
-- [ ] 4.1 Implement `Scenario::from_feedback_context(bundle, fixtures)` bundle-only case (command + expected error envelope with footer hint); test replay against recorded steps.
-- [ ] 4.2 Implement fixture path: caller-supplied (path, content) pairs become scenario fixtures; test converted scenario replays.
-- [ ] 4.3 Implement `from_last_error(tool_name, fixtures)` wrapping `scratch::read_last_error`; typed error when no record exists.
-- [ ] 4.4 Test no-LLM/no-subprocess guarantee: conversion + replay run in-process.
-- [ ] 4.5 Wire a worked example into feedback docs (aix-gap bundle → regression scenario).
+- [x] 4.1 Implement `Scenario::from_feedback_context(bundle, fixtures)` bundle-only case (command + expected error envelope with footer hint); test replay against recorded steps.
+- [x] 4.2 Implement fixture path: caller-supplied (path, content) pairs become scenario fixtures; test converted scenario replays.
+- [x] 4.3 Implement `from_last_error(tool_name, fixtures)` wrapping `scratch::read_last_error`; typed error when no record exists.
+- [x] 4.4 Test no-LLM/no-subprocess guarantee: conversion + replay run in-process.
+- [x] 4.5 Wire a worked example into feedback docs (aix-gap bundle → regression scenario).
 
 ## 5. Tidy + validation
 

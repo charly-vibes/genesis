@@ -39,6 +39,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     gains a `distractors` field (only relevant if you construct it by hand —
     use `Scenario::run`); `ScenarioReport` serialization is new, and omits
     `model` when absent. No action required.
+- **Feedback → Scenario conversion** ([genesis-m3p]):
+  `Scenario::from_feedback_context(bundle, fixtures)` turns captured
+  feedback context into a replayable regression scenario embedding the
+  recorded failure signature (command, exit code, footer hint);
+  `feedback::from_last_error(tool_name, fixtures)` wraps the scratch record
+  with typed `ConversionError::NoScratchRecord` on absence. Callers supply
+  fixture files explicitly — genesis never re-snapshots the working tree.
+  Conversion + replay are pure in-process computation (no LLM, no
+  subprocess).
+  - **Compatibility note for downstream tools:** fully additive. No action
+    required.
 
 ### Changed
 
@@ -59,3 +70,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-f2o]: https://github.com/charly-vibes/genesis
 [genesis-35d]: https://github.com/charly-vibes/genesis
 [genesis-lzo]: https://github.com/charly-vibes/genesis
+[genesis-m3p]: https://github.com/charly-vibes/genesis
