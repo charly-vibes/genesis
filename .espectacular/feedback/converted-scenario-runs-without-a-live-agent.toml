@@ -1,0 +1,11 @@
+id = "converted-scenario-runs-without-a-live-agent"
+description = "conversion + replay run in-process"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "conversion_and_replay_run_in_process", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "estimate-is-labeled-not-mistaken-for-a-count"
+description = "token cost estimate carries the heuristic label"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "token_cost_is_labeled_not_mistaken_for_a_count", timeout_seconds = 60 },
+]

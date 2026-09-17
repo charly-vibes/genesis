@@ -1,0 +1,11 @@
+id = "adding-modules-increases-the-estimate"
+description = "adding a module strictly increases the estimate"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "adding_modules_increases_the_estimate", timeout_seconds = 60 },
+]

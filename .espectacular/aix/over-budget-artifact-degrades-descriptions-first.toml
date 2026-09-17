@@ -1,0 +1,11 @@
+id = "over-budget-artifact-degrades-descriptions-first"
+description = "over-budget artifact degrades descriptions first"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "over_budget_llms_txt_truncates_descriptions_first", timeout_seconds = 60 },
+]

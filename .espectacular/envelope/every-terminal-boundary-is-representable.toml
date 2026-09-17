@@ -1,0 +1,11 @@
+id = "every-terminal-boundary-is-representable"
+description = "every terminal boundary maps to one variant"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_terminal_outcome_variants_serialize_snake_case", timeout_seconds = 60 },
+]

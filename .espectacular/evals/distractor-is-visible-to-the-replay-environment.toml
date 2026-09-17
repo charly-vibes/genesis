@@ -1,0 +1,11 @@
+id = "distractor-is-visible-to-the-replay-environment"
+description = "distractor materializes in the replay fixture env"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "distractor_lands_in_replay_fixture_env", timeout_seconds = 60 },
+]

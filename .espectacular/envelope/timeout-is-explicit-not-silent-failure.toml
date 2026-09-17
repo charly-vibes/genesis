@@ -1,0 +1,11 @@
+id = "timeout-is-explicit-not-silent-failure"
+description = "timeout is explicit across the field space"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_receipt_round_trip_preserves_all_fields", timeout_seconds = 60 },
+]

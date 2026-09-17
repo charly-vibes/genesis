@@ -1,0 +1,11 @@
+id = "a-tool-needs-the-json-envelope"
+description = "a tool needs the json envelope"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_envelope_serializes_to_json", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "agent-follows-stale-docs-over-the-envelope"
+description = "doc-following steps fail as agent fault"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "doc_drift_blindness_fails_doc_following_steps", timeout_seconds = 60 },
+]

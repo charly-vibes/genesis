@@ -1,0 +1,11 @@
+id = "existing-generator-signatures-are-unchanged"
+description = "existing generator signatures and output unchanged"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "existing_llms_txt_output_byte_identical_to_golden", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "agent-trusts-envelope-over-stale-docs"
+description = "doc-drift check passes on envelope-trusting steps"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "doc_drift_blindness_passes_on_envelope_trusting_steps", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "last-error-path-converts-from-scratch"
+description = "last-error scratch record converts to scenario"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "from_last_error_converts_scratch_record", timeout_seconds = 60 },
+]

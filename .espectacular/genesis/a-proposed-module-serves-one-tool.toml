@@ -1,0 +1,11 @@
+id = "a-proposed-module-serves-one-tool"
+description = "a proposed module serves one tool"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "forbidden_api_patterns", timeout_seconds = 60 },
+]

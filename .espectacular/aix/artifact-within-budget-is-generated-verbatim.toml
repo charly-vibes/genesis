@@ -1,0 +1,11 @@
+id = "artifact-within-budget-is-generated-verbatim"
+description = "under-budget artifact generated verbatim"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "bounded_llms_txt_under_budget_is_verbatim", timeout_seconds = 60 },
+]

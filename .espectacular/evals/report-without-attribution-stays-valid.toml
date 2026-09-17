@@ -1,0 +1,11 @@
+id = "report-without-attribution-stays-valid"
+description = "report omits model when absent"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "report_without_attribution_stays_valid", timeout_seconds = 60 },
+]

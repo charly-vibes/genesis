@@ -1,0 +1,11 @@
+id = "envelope-without-receipt-serializes-unchanged"
+description = "envelope without receipt serializes byte-identically"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "envelope_without_receipt_serializes_byte_identically", timeout_seconds = 60 },
+]

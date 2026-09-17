@@ -1,0 +1,11 @@
+id = "degradation-drops-optional-sections-before-tables"
+description = "degradation drops raw sections before tables"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "degradation_drops_raw_sections_before_tables", timeout_seconds = 60 },
+]

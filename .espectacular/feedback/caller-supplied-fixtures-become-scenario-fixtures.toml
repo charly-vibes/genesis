@@ -1,0 +1,11 @@
+id = "caller-supplied-fixtures-become-scenario-fixtures"
+description = "caller fixtures become scenario fixtures"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "caller_supplied_fixtures_become_scenario_fixtures", timeout_seconds = 60 },
+]
