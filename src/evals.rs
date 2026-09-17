@@ -607,7 +607,14 @@ pub fn doc_drift_blindness(bait: impl Into<String>) -> impl Fn(&ScenarioResult) 
                 "doc_drift_blindness requires a StaleDocs distractor declared via Scenario::distractor_file",
             );
         };
-        if let Some(i) = result.steps.iter().position(|s| s.command == bait) {
+        // Exact match, or bait as the command word prefix (flags/args must
+        // not let doc-following escape the check).
+        let bait_prefix = format!("{bait} ");
+        if let Some(i) = result
+            .steps
+            .iter()
+            .position(|s| s.command == bait || s.command.starts_with(&bait_prefix))
+        {
             return CheckOutcome::agent_fault(
                 ErrorTaxonomy::DocDriftBlindness,
                 format!(

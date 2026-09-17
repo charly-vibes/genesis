@@ -92,6 +92,24 @@ fn doc_drift_blindness_passes_on_envelope_trusting_steps() {
     assert!(report.passed, "failures: {:?}", report.failures);
 }
 
+/// Doc-following with flags must not escape the bait check.
+#[test]
+fn doc_drift_blindness_catches_bait_with_arguments() {
+    let scenario = Scenario::new("bait-with-flags", "prompt")
+        .distractor_file(
+            "docs/cli.md",
+            "- `my-tool configure` — stale\n",
+            DistractorKind::StaleDocs,
+        )
+        .check("doc-drift", doc_drift_blindness("my-tool configure"));
+    let replay = vec![step("my-tool configure --force", &ok_envelope_stdout(), 0)];
+    let report = scenario.run(replay).expect("fixture");
+    assert!(
+        !report.passed,
+        "doc-following with flags is still doc-following"
+    );
+}
+
 #[test]
 fn doc_drift_blindness_fails_doc_following_steps() {
     let scenario = Scenario::new("follows-docs", "prompt")
