@@ -179,14 +179,56 @@ assert_eq!(final_env.exit_code, 0);
 assert!(final_env.envelope.ok);
 ```
 
+## Step 7: Plant distractors and test doc-drift blindness
+
+A frontier model that *recalls* your public docs will trust them over your tool's
+live output — the most expensive failure mode in agentic use. genesis ships the
+mechanism for testing exactly this (add-aix-eval-loop §3):
+
+```rust
+use genesis::evals::{doc_drift_blindness, AgentStep, DistractorKind, Scenario};
+
+let scenario = Scenario::new("doc-drift", "Initialize my-tool")
+    // Bait: materialized in the sandbox, registered as stale docs.
+    .distractor_file(
+        "AGENTS.md",
+        "<!-- my-tool:START -->\nRun `my-tool configure` to initialize.\n<!-- my-tool:END -->\n",
+        DistractorKind::StaleDocs,
+    )
+    .check("doc-drift", doc_drift_blindness("my-tool configure"));
+
+// Agent read --help and followed the envelope → pass.
+// Agent ran the stale `configure` instead → agent fault
+// ERR_DOC_DRIFT_BLINDNESS with the distractor path in the reason.
+```
+
+Distractors never fault a run by themselves — presence is not fault, the check
+decides. Compose `doc_drift_blindness` with `ok_envelope` / `agent_followed_hint`
+for action-level assertions, and attribute replays to models via
+`ScenarioReport::with_model` for matrix comparison.
+
 ## What genesis provides today (and what it doesn't)
 
 **Available now:** `Fixture` for sandboxing, `envelope` for structured output your
 assertions parse, `suggestions` for `DidYouMean` / `Fix` payloads, `managed_block`
-markers for boundary audits, `doctor` with auto-fix as a recovery target.
+markers for boundary audits, `doctor` with auto-fix as a recovery target, and the
+`evals` module for deterministic scenario replay: `Scenario::run` over recorded
+`AgentStep` transcripts, envelope-assertion helpers (`parse_envelope`,
+`ok_envelope`, `error_envelope_with_hint`, `agent_followed_hint`,
+`agent_executed_all`), the `ErrorTaxonomy` classification, distractor fixtures
+with the `doc_drift_blindness` check, and feedback→Scenario conversion so
+user-reported failures become regression scenarios
+(see [reference/modules.md](../reference/modules.md)).
 
-**Gaps worth tracking:** no `evals` module yet — scenario specs, transcript-capture
-and envelope-assertion helpers, managed-block audit utilities, the error taxonomy
-enum, and AIX-ablation provisioning are all hand-rolled today ([genesis-zxv](https://github.com/charly-vibes/genesis)).
-The exit-code contract does not yet distinguish user errors from internal panics,
-which limits exit-code-based assertions ([genesis-u40](https://github.com/charly-vibes/genesis)).
+**Gaps worth tracking:** live-agent harness capture (running a real model and
+recording its steps) stays outside the crate — `Scenario::run` replays recorded
+transcripts deterministically; orchestrate live runs and per-model matrices in
+your harness. AIX-ablation provisioning helpers remain a follow-up slice
+([genesis-zxv](https://github.com/charly-vibes/genesis)).
+
+## Related
+
+- **Token budgets for LLM consumption:** `estimate_token_cost` and the bounded
+  generators (`generate_llms_txt_bounded` / `generate_llm_txt_bounded`) degrade
+  artifacts deterministically instead of overflowing a declared budget —
+  useful when provisioning context for tier-limited models.

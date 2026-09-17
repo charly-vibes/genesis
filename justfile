@@ -74,6 +74,41 @@ validate:
 publish:
     cargo publish
 
+# Announce a release to downstream tools: opens an issue per repo via gh.
+# Usage: just notify-downstream 0.7.0  (after tagging + crates.io publish)
+notify-downstream version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repos=(wai dont espectacular testaruda vampiro dulce-de-leche pretender)
+    mm="{{version}}"; mm="${mm%.*}"
+    for repo in "${repos[@]}"; do
+        if gh issue create -R "charly-vibes/$repo" \
+            --title "genesis-vibes {{version}} released" \
+            --body "genesis-vibes {{version}} is on crates.io. Changelog: https://github.com/charly-vibes/genesis/blob/main/CHANGELOG.md — note the manifest pin must be bumped (\"0.6\" → \"$mm\") since caret semantics exclude the new minor. Enable Dependabot (see .github/dependabot.yml in genesis) or bump manually." \
+            >/dev/null 2>&1; then
+            echo "✓ $repo notified"
+        else
+            echo "⚠ $repo skipped (gh failed — check auth/repo)"
+        fi
+    done
+
+# Seed .github/dependabot.yml into downstream repos so Dependabot opens
+# version-bump PRs when genesis-vibes publishes (run once, then commit+push
+# in each repo). Idempotent: existing configs are left untouched.
+seed-dependabot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repos=(wai dont espectacular testaruda vampiro dulce-de-leche pretender)
+    root="$(git rev-parse --show-toplevel)"
+    for repo in "${repos[@]}"; do
+        d="$root/../$repo"
+        cfg="$d/.github/dependabot.yml"
+        if [[ -f "$cfg" ]]; then echo "= $repo (already configured)"; continue; fi
+        mkdir -p "$d/.github"
+        printf 'version: 2\nupdates:\n  - package-ecosystem: cargo\n    directory: /\n    schedule:\n      interval: weekly\n  - package-ecosystem: github-actions\n    directory: /\n    schedule:\n      interval: weekly\n' > "$cfg"
+        echo "✓ $repo seeded → commit & push in $d"
+    done
+
 # Regenerate llms.txt and llm.txt from aix module metadata
 aix-gen:
     cargo run --example gen-aix

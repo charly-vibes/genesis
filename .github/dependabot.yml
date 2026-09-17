@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep GitHub Actions versions current in our own workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # Keep cargo dependencies current (Cargo.lock).
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
