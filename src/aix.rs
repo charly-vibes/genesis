@@ -338,6 +338,10 @@ fn first_sentence(s: &str) -> &str {
 ///
 /// Stage 3 is the floor: the minimal artifact is returned even if it still
 /// exceeds the budget (a verbose artifact beats a missing one).
+///
+/// Sentence truncation uses the plain `". "` delimiter — abbreviations like
+/// `"e.g."` may end a "sentence" early, acceptable for a heuristic
+/// (deterministic by construction).
 pub fn generate_llms_txt_bounded(
     meta: &ProjectMeta,
     modules: &[ModuleEntry],
@@ -375,6 +379,10 @@ pub fn generate_llms_txt_bounded(
 ///    degradation levels
 ///
 /// Stage 4 is the floor: returned even if still over budget.
+///
+/// Sentence truncation uses the plain `". "` delimiter — abbreviations like
+/// `"e.g."` may end a "sentence" early, acceptable for a heuristic
+/// (deterministic by construction).
 pub fn generate_llm_txt_bounded(
     title: &str,
     description: &str,
