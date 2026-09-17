@@ -49,6 +49,9 @@ pub enum ErrorTaxonomy {
     /// the environment provides (e.g. full test suite instead of test
     /// selection).
     ToolDiscoveryFailure,
+    /// Agent acted on stale documentation instead of the tool's structured
+    /// output contradicting it (add-aix-eval-loop §3, corpus B171/B128).
+    DocDriftBlindness,
 }
 
 impl ErrorTaxonomy {
@@ -61,6 +64,7 @@ impl ErrorTaxonomy {
             Self::ToolExecutionHallucination => "ERR_TOOL_EXECUTION_HALLUCINATION",
             Self::ContextRecoveryFailure => "ERR_CONTEXT_RECOVERY_FAILURE",
             Self::ToolDiscoveryFailure => "ERR_TOOL_DISCOVERY_FAILURE",
+            Self::DocDriftBlindness => "ERR_DOC_DRIFT_BLINDNESS",
         }
     }
 
@@ -73,6 +77,7 @@ impl ErrorTaxonomy {
             "ERR_TOOL_EXECUTION_HALLUCINATION" => Self::ToolExecutionHallucination,
             "ERR_CONTEXT_RECOVERY_FAILURE" => Self::ContextRecoveryFailure,
             "ERR_TOOL_DISCOVERY_FAILURE" => Self::ToolDiscoveryFailure,
+            "ERR_DOC_DRIFT_BLINDNESS" => Self::DocDriftBlindness,
             _ => return None,
         })
     }
@@ -95,6 +100,9 @@ impl ErrorTaxonomy {
             }
             Self::ToolDiscoveryFailure => {
                 "the agent ignored the specialized tool and used a blunt strategy"
+            }
+            Self::DocDriftBlindness => {
+                "the agent trusted stale documentation over the tool's structured output"
             }
         }
     }
@@ -203,6 +211,32 @@ pub struct ScenarioResult {
     pub steps: Vec<AgentStep>,
     /// Root of the materialized fixture directory (temporary).
     pub fixture_root: PathBuf,
+    /// The distractor registry declared on the scenario, populated by
+    /// [`Scenario::run`] — checks read it from here, not from the scenario.
+    pub distractors: Vec<Distractor>,
+}
+
+/// What kind of misleading content a distractor carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DistractorKind {
+    /// Documentation that contradicts the tool's current behavior (stale
+    /// managed block, outdated README section).
+    StaleDocs,
+    /// A hint pointing away from the envelope's suggested fix.
+    ContradictingHint,
+}
+
+/// A distractor file: present in the replay environment but not part of
+/// the task's happy path. Whether consulting it is a fault is decided by
+/// checks (e.g. [`doc_drift_blindness`]), not by its presence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Distractor {
+    /// Path relative to the fixture root.
+    pub path: String,
+    /// File content materialized into the replay environment.
+    pub content: String,
+    /// What kind of misleading content this is.
+    pub kind: DistractorKind,
 }
 
 /// Outcome of a single deterministic check.
@@ -260,6 +294,10 @@ pub struct Scenario {
     pub prompt: String,
     /// Files written into the fixture temp dir before replay.
     pub fixture_files: Vec<(String, String)>,
+    /// Distractor files: materialized into the replay environment like
+    /// fixtures, but registered separately so checks can tell bait from
+    /// task material.
+    pub distractors: Vec<Distractor>,
     /// Deterministic checks applied to the replay result.
     pub checks: Vec<ScenarioCheck>,
 }
@@ -273,11 +311,65 @@ pub struct ScenarioReport {
     pub passed: bool,
     /// One entry per failed check: (check name, outcome).
     pub failures: Vec<(String, CheckOutcome)>,
+    /// The model that replayed the scenario, when attributed — supports
+    /// per-model matrix runs without changing `run()`'s signature
+    /// (design D3). Omitted from serialized output when absent.
+    pub model: Option<String>,
     /// Root of the materialized fixture directory. Owned here so the temp
     /// dir survives until the report is dropped.
     pub fixture_root: PathBuf,
     /// Holds the fixture alive (temp dir removed on drop).
     _fixture: crate::fixture::Fixture,
+}
+
+impl ScenarioReport {
+    /// Attribute this replay to a model name (builder style). Matrix runs
+    /// call this per model after `run()` — `run()`'s signature is unchanged.
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+}
+
+/// Serialize the report for matrix comparison: name, passed, failures
+/// (with machine-readable taxonomy codes), and `model` only when set.
+impl serde::Serialize for ScenarioReport {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let field_count = 3 + usize::from(self.model.is_some());
+        let mut s = serializer.serialize_struct("ScenarioReport", field_count)?;
+        s.serialize_field("name", &self.name)?;
+        s.serialize_field("passed", &self.passed)?;
+        let failures: Vec<SerializedFailure<'_>> = self
+            .failures
+            .iter()
+            .map(|(check, outcome)| SerializedFailure {
+                check,
+                taxonomy_code: match outcome {
+                    CheckOutcome::Fail { taxonomy, .. } => {
+                        taxonomy.as_ref().map(ErrorTaxonomy::code)
+                    }
+                    CheckOutcome::Pass => None,
+                },
+                reason: match outcome {
+                    CheckOutcome::Fail { reason, .. } => reason,
+                    CheckOutcome::Pass => "",
+                },
+            })
+            .collect();
+        s.serialize_field("failures", &failures)?;
+        if let Some(model) = &self.model {
+            s.serialize_field("model", model)?;
+        }
+        s.end()
+    }
+}
+
+#[derive(serde::Serialize)]
+struct SerializedFailure<'a> {
+    check: &'a str,
+    taxonomy_code: Option<&'static str>,
+    reason: &'a str,
 }
 
 impl Scenario {
@@ -287,6 +379,7 @@ impl Scenario {
             name: name.into(),
             prompt: prompt.into(),
             fixture_files: Vec::new(),
+            distractors: Vec::new(),
             checks: Vec::new(),
         }
     }
@@ -294,6 +387,25 @@ impl Scenario {
     /// Add a file to the fixture (path relative to the fixture root).
     pub fn fixture_file(mut self, path: impl Into<String>, content: impl Into<String>) -> Self {
         self.fixture_files.push((path.into(), content.into()));
+        self
+    }
+
+    /// Declare a distractor file (path relative to the fixture root).
+    ///
+    /// Like a fixture file, the distractor is materialized into the replay
+    /// environment — but it is also registered as bait, so checks such as
+    /// [`doc_drift_blindness`] can decide whether consulting it is a fault.
+    pub fn distractor_file(
+        mut self,
+        path: impl Into<String>,
+        content: impl Into<String>,
+        kind: DistractorKind,
+    ) -> Self {
+        self.distractors.push(Distractor {
+            path: path.into(),
+            content: content.into(),
+            kind,
+        });
         self
     }
 
@@ -337,10 +449,15 @@ impl Scenario {
         for (path, content) in &self.fixture_files {
             builder = builder.with_file(path, content);
         }
+        // Distractors share the replay environment with real fixtures.
+        for d in &self.distractors {
+            builder = builder.with_file(&d.path, &d.content);
+        }
         let fixture = builder.build().map_err(EvalsError::Fixture)?;
         let result = ScenarioResult {
             steps: replay,
             fixture_root: fixture.root().to_path_buf(),
+            distractors: self.distractors.clone(),
         };
         let failures: Vec<(String, CheckOutcome)> = self
             .checks
@@ -354,6 +471,9 @@ impl Scenario {
             name: self.name.clone(),
             passed: failures.is_empty(),
             failures,
+            // Attribution happens post-hoc via `with_model` — matrix
+            // orchestration stays outside the crate (design D3).
+            model: None,
             fixture_root: result.fixture_root,
             _fixture: fixture,
         })
@@ -462,6 +582,53 @@ pub fn agent_executed_all() -> impl Fn(&ScenarioResult) -> CheckOutcome {
     }
 }
 
+/// Assert the agent trusted the tool's structured output over stale
+/// documentation contradicting it (add-aix-eval-loop §3).
+///
+/// Requires a `StaleDocs` distractor declared via
+/// [`Scenario::distractor_file`] — otherwise a tool fault (the check is
+/// misconfigured, not the agent).
+///
+/// Passes when the replay shows the agent receiving a parseable envelope
+/// from an executed step *and* never issuing the bait command (the action
+/// that would only be correct per the stale docs). Action-level correctness
+/// composes with [`ok_envelope`] / [`agent_followed_hint`]; this check owns
+/// the drift signal alone. Failing steps classify as agent fault
+/// (`ERR_DOC_DRIFT_BLINDNESS`) with the distractor path in the reason.
+pub fn doc_drift_blindness(bait: impl Into<String>) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let bait = bait.into();
+    move |result| {
+        let Some(distractor) = result
+            .distractors
+            .iter()
+            .find(|d| d.kind == DistractorKind::StaleDocs)
+        else {
+            return CheckOutcome::tool_fault(
+                "doc_drift_blindness requires a StaleDocs distractor declared via Scenario::distractor_file",
+            );
+        };
+        if let Some(i) = result.steps.iter().position(|s| s.command == bait) {
+            return CheckOutcome::agent_fault(
+                ErrorTaxonomy::DocDriftBlindness,
+                format!(
+                    "step {i} ran `{bait}`, consistent with the stale docs at `{}` instead of the tool's envelope",
+                    distractor.path
+                ),
+            );
+        }
+        match result
+            .steps
+            .iter()
+            .position(|s| s.executed && parse_envelope(&s.stdout).is_ok())
+        {
+            Some(_) => CheckOutcome::pass(),
+            None => CheckOutcome::tool_fault(
+                "no executed step received a parseable envelope; nothing to evaluate",
+            ),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,6 +644,7 @@ mod tests {
             ErrorTaxonomy::ToolExecutionHallucination,
             ErrorTaxonomy::ContextRecoveryFailure,
             ErrorTaxonomy::ToolDiscoveryFailure,
+            ErrorTaxonomy::DocDriftBlindness,
         ];
         for t in all {
             assert_eq!(ErrorTaxonomy::from_code(t.code()), Some(t));

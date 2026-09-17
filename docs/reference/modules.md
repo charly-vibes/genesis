@@ -281,6 +281,67 @@ signatures are untouched (golden-file pinned in `tests/aix_bounded.rs`).
 
 ---
 
+## evals
+
+**Signature:** `genesis::evals`
+
+Deterministic evaluation harness: scenarios replayed against fake-agent
+transcripts, with envelope-assertion helpers, reusable checks, distractor
+fixtures, and the doc-drift blindness check (add-aix-eval-loop §3). No live
+LLM, no subprocess runner.
+
+### Key Types
+
+| Type | Description |
+| :--- | :--- |
+| `AgentStep` | One replayed agent turn: command + captured output |
+| `Scenario` | Fixture setup + prompt + deterministic checks (builder) |
+| `ScenarioResult` | Replayed trajectory + fixture root + distractor registry |
+| `ScenarioReport` | Replay outcome; serializable; optional `model` attribution |
+| `CheckOutcome` | `Pass` or `Fail { taxonomy, reason }` |
+| `ErrorTaxonomy` | Closed `ERR_*` failure classification |
+| `DistractorKind` | `StaleDocs` or `ContradictingHint` |
+| `Distractor` | Bait file materialized in the replay environment |
+| `EnvelopeOutcome` | Lenient parse of captured stdout (`Ok` / `Error`) |
+
+### Functions
+
+| Function | Description |
+| :--- | :--- |
+| `Scenario::new(name, prompt)` | Start building a scenario |
+| `Scenario::fixture_file(path, content)` | Add a task fixture file |
+| `Scenario::distractor_file(path, content, kind)` | Add a distractor (bait) file |
+| `Scenario::check(name, check)` | Add a deterministic check |
+| `Scenario::run(replay)` | Materialize fixture, replay steps, apply checks |
+| `ScenarioReport::with_model(model)` | Attribute the replay to a model (matrix runs) |
+| `parse_envelope(stdout)` | Lenient envelope parse (only `ok` required) |
+| `error_envelope_with_hint(step, cmd)` | Check: failing step carries the hint |
+| `ok_envelope(step)` | Check: step recovered with `ok: true` |
+| `agent_followed_hint(index, cmd)` | Check: agent ran the suggested fix |
+| `agent_executed_all()` | Check: no hallucinated steps |
+| `doc_drift_blindness(bait)` | Check: envelope trusted over stale docs |
+
+### Distractors and doc-drift blindness
+
+Distractor files share the replay environment with real fixtures but are
+registered separately, so checks can tell bait from task material. Presence
+of a distractor never faults a run by itself — the check decides:
+
+- `doc_drift_blindness(bait_cmd)` passes when the agent received a parseable
+  envelope from an executed step and never issued `bait_cmd` (the action only
+  correct per the stale docs). Action-level correctness composes with
+  `ok_envelope` / `agent_followed_hint`.
+- Doc-following steps fail as agent fault `ERR_DOC_DRIFT_BLINDNESS` with the
+  distractor path in the reason.
+- A scenario without a `StaleDocs` distractor makes the check a **tool fault**
+  (misconfiguration), not an agent fault.
+
+`ScenarioReport` serializes to JSON (name, passed, failures with taxonomy
+codes, `model` when attributed) for per-model matrix comparison; `run()`'s
+signature is unchanged — attribution happens post-hoc via `with_model`.
+
+---
+
 ## feedback
 
 **Signature:** `genesis::feedback`

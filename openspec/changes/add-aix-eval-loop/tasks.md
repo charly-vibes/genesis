@@ -22,12 +22,12 @@ scenario first, then implement, then tidy in a separate commit.
 
 ## 3. Evals distractors + doc-drift check (design D3)
 
-- [ ] 3.1 Define `DistractorKind` (StaleDocs, ContradictingHint); `Scenario::distractor_file()`; test distractor lands in replay fixture env.
-- [ ] 3.2 Test distractor-ignoring run passes (no false fault).
-- [ ] 3.3 Implement `doc_drift_blindness()` check: pass on envelope-trusting steps; test the pass path.
-- [ ] 3.4 Test the fail path: doc-following steps → `agent_fault` with distractor path in reason.
-- [ ] 3.5 Add `model: Option<String>` to `ScenarioReport` + builder; test serialized presence/absence.
-- [ ] 3.6 End-to-end scenario: stale managed block vs live `--help` envelope — agent must follow the envelope (this is the research's doc-drift scenario, corpus B171/B128).
+- [x] 3.1 Define `DistractorKind` (StaleDocs, ContradictingHint); `Scenario::distractor_file()`; test distractor lands in replay fixture env.
+- [x] 3.2 Test distractor-ignoring run passes (no false fault).
+- [x] 3.3 Implement `doc_drift_blindness()` check: pass on envelope-trusting steps; test the pass path.
+- [x] 3.4 Test the fail path: doc-following steps → `agent_fault` with distractor path in reason.
+- [x] 3.5 Add `model: Option<String>` to `ScenarioReport` + builder; test serialized presence/absence.
+- [x] 3.6 End-to-end scenario: stale managed block vs live `--help` envelope — agent must follow the envelope (this is the research's doc-drift scenario, corpus B171/B128).
 
 ## 4. Feedback → Scenario conversion (design D4)
 

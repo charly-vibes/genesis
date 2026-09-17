@@ -27,6 +27,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **Compatibility note for downstream tools:** fully additive. Existing
     `generate_llms_txt` / `generate_llm_txt` signatures and output are
     unchanged (golden-file pinned). No action required.
+- **Evals distractors + doc-drift blindness check** ([genesis-lzo]):
+  `Scenario::distractor_file(path, content, kind)` declares bait files
+  (`DistractorKind::StaleDocs` / `ContradictingHint`) that materialize in the
+  replay environment without faulting a run by themselves;
+  `doc_drift_blindness(bait)` asserts the agent trusted the tool's envelope
+  over stale docs (new taxonomy `ERR_DOC_DRIFT_BLINDNESS`);
+  `ScenarioReport` gains optional `model` attribution + JSON serialization
+  for per-model matrix runs.
+  - **Compatibility note for downstream tools:** additive. `ScenarioResult`
+    gains a `distractors` field (only relevant if you construct it by hand —
+    use `Scenario::run`); `ScenarioReport` serialization is new, and omits
+    `model` when absent. No action required.
 
 ### Changed
 
@@ -46,3 +58,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-u40]: https://github.com/charly-vibes/genesis
 [genesis-f2o]: https://github.com/charly-vibes/genesis
 [genesis-35d]: https://github.com/charly-vibes/genesis
+[genesis-lzo]: https://github.com/charly-vibes/genesis
