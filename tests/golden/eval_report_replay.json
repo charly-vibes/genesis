@@ -1,0 +1,14 @@
+{
+  "report_version": 1,
+  "name": "envelope-hint-followed",
+  "tool": "my-tool",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "envelope_hint_followed",
+      "status": "passed",
+      "reason": "the suggested fix was executed and the envelope cleared"
+    }
+  ],
+  "bounds": {}
+}

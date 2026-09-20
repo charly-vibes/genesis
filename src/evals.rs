@@ -52,6 +52,12 @@ pub enum ErrorTaxonomy {
     /// Agent acted on stale documentation instead of the tool's structured
     /// output contradicting it (add-aix-eval-loop §3, corpus B171/B128).
     DocDriftBlindness,
+    /// Live-tier agent failed to produce a parseable structured action
+    /// (`command` + `done`) after one re-ask — the re-ask consumes a turn
+    /// (add-evals-guidelines, live action protocol). Distinct from
+    /// `ToolExecutionHallucination`, which stays a replay-tier code for
+    /// claims of runs that never happened.
+    ActionFormatViolation,
 }
 
 impl ErrorTaxonomy {
@@ -65,6 +71,7 @@ impl ErrorTaxonomy {
             Self::ContextRecoveryFailure => "ERR_CONTEXT_RECOVERY_FAILURE",
             Self::ToolDiscoveryFailure => "ERR_TOOL_DISCOVERY_FAILURE",
             Self::DocDriftBlindness => "ERR_DOC_DRIFT_BLINDNESS",
+            Self::ActionFormatViolation => "ERR_ACTION_FORMAT_VIOLATION",
         }
     }
 
@@ -78,6 +85,7 @@ impl ErrorTaxonomy {
             "ERR_CONTEXT_RECOVERY_FAILURE" => Self::ContextRecoveryFailure,
             "ERR_TOOL_DISCOVERY_FAILURE" => Self::ToolDiscoveryFailure,
             "ERR_DOC_DRIFT_BLINDNESS" => Self::DocDriftBlindness,
+            "ERR_ACTION_FORMAT_VIOLATION" => Self::ActionFormatViolation,
             _ => return None,
         })
     }
@@ -103,6 +111,9 @@ impl ErrorTaxonomy {
             }
             Self::DocDriftBlindness => {
                 "the agent trusted stale documentation over the tool's structured output"
+            }
+            Self::ActionFormatViolation => {
+                "the agent failed to produce a parseable structured action after one re-ask"
             }
         }
     }
@@ -325,6 +336,10 @@ pub struct ScenarioReport {
 impl ScenarioReport {
     /// Attribute this replay to a model name (builder style). Matrix runs
     /// call this per model after `run()` — `run()`'s signature is unchanged.
+    ///
+    /// Record the raw model id **verbatim** — including `:free` and any
+    /// deployment suffix — because matrix comparisons across time depend on
+    /// the unnormalized id (add-evals-guidelines, free-tier attribution).
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
@@ -658,10 +673,58 @@ mod tests {
             ErrorTaxonomy::ContextRecoveryFailure,
             ErrorTaxonomy::ToolDiscoveryFailure,
             ErrorTaxonomy::DocDriftBlindness,
+            ErrorTaxonomy::ActionFormatViolation,
         ];
         for t in all {
             assert_eq!(ErrorTaxonomy::from_code(t.code()), Some(t));
         }
+    }
+
+    #[test]
+    fn test_action_format_violation_code() {
+        // add-evals-guidelines: distinct from ToolExecutionHallucination
+        // (a replay-tier code for never-executed claims).
+        assert_eq!(
+            ErrorTaxonomy::from_code("ERR_ACTION_FORMAT_VIOLATION"),
+            Some(ErrorTaxonomy::ActionFormatViolation)
+        );
+        assert_eq!(
+            ErrorTaxonomy::ActionFormatViolation.code(),
+            "ERR_ACTION_FORMAT_VIOLATION"
+        );
+    }
+
+    #[test]
+    fn test_preexisting_codes_unchanged() {
+        // Guard: adding ActionFormatViolation must not move any existing code.
+        assert_eq!(
+            ErrorTaxonomy::EnvelopeHintBlindness.code(),
+            "ERR_ENVELOPE_HINT_BLINDNESS"
+        );
+        assert_eq!(
+            ErrorTaxonomy::StateMachineViolation.code(),
+            "ERR_STATE_MACHINE_VIOLATION"
+        );
+        assert_eq!(
+            ErrorTaxonomy::ManagedBlockCorruption.code(),
+            "ERR_MANAGED_BLOCK_CORRUPTION"
+        );
+        assert_eq!(
+            ErrorTaxonomy::ToolExecutionHallucination.code(),
+            "ERR_TOOL_EXECUTION_HALLUCINATION"
+        );
+        assert_eq!(
+            ErrorTaxonomy::ContextRecoveryFailure.code(),
+            "ERR_CONTEXT_RECOVERY_FAILURE"
+        );
+        assert_eq!(
+            ErrorTaxonomy::ToolDiscoveryFailure.code(),
+            "ERR_TOOL_DISCOVERY_FAILURE"
+        );
+        assert_eq!(
+            ErrorTaxonomy::DocDriftBlindness.code(),
+            "ERR_DOC_DRIFT_BLINDNESS"
+        );
     }
 
     #[test]
@@ -674,6 +737,120 @@ mod tests {
     fn test_taxonomy_display_contains_code() {
         let text = ErrorTaxonomy::ManagedBlockCorruption.to_string();
         assert!(text.starts_with("ERR_MANAGED_BLOCK_CORRUPTION"));
+    }
+
+    // -- Report contract (add-evals-guidelines) ------------------------------
+
+    /// The non-tier-2 normative fixture must round-trip through
+    /// `ScenarioReport`'s serde serialization: its shared fields (name,
+    /// passed↔status, failures↔checks with taxonomy codes) match what the
+    /// replay-tier struct emits. Live-only fields (report_version, tool,
+    /// bounds, repetition) are documented as a delta in
+    /// docs/reference/eval-report.md.
+    #[test]
+    fn test_report_replay_fixture_round_trips_through_scenario_report() {
+        let golden_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/golden/eval_report_replay.json");
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(&golden_path)
+                .unwrap_or_else(|e| panic!("cannot read {}: {e}", golden_path.display())),
+        )
+        .expect("non-tier-2 fixture is valid JSON");
+
+        assert_eq!(fixture["report_version"], 1);
+        assert_eq!(fixture["status"], "passed");
+        // Non-tier-2 rows omit tier-2 fields entirely (never null).
+        assert!(fixture.get("model").is_none());
+        assert!(fixture.get("repetition").is_none());
+
+        // Rebuild the replay-tier report the fixture describes and serialize it.
+        let scenario = Scenario::new(
+            fixture["name"].as_str().unwrap().to_owned(),
+            "fixture round-trip",
+        )
+        .check("envelope_hint_followed", |_| CheckOutcome::pass());
+        let report = scenario
+            .run(vec![AgentStep {
+                command: "my-tool status".into(),
+                stdout: r#"{"ok": true}"#.into(),
+                stderr: String::new(),
+                exit_code: 0,
+                executed: true,
+            }])
+            .expect("fixture materializes");
+        let serialized: serde_json::Value =
+            serde_json::to_value(&report).expect("ScenarioReport serializes");
+
+        // Shared fields agree across the two shapes.
+        assert_eq!(serialized["name"], fixture["name"]);
+        assert_eq!(
+            serialized["passed"].as_bool(),
+            Some(fixture["status"].as_str() == Some("passed"))
+        );
+        assert_eq!(serialized.get("model"), None);
+    }
+
+    /// No field in either normative report fixture may serialize as `null` —
+    /// optional fields are omitted, never null (evals-guidelines).
+    #[test]
+    fn test_report_fixtures_contain_no_nulls() {
+        for name in ["eval_report_tier2.json", "eval_report_replay.json"] {
+            let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/golden")
+                .join(name);
+            let fixture: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display())),
+            )
+            .unwrap_or_else(|e| panic!("{name} is not valid JSON: {e}"));
+            fn assert_no_nulls(v: &serde_json::Value, where_: &str) {
+                match v {
+                    serde_json::Value::Null => panic!("null at {where_}"),
+                    serde_json::Value::Array(items) => {
+                        for (i, item) in items.iter().enumerate() {
+                            assert_no_nulls(item, &format!("{where_}[{i}]"));
+                        }
+                    }
+                    serde_json::Value::Object(map) => {
+                        for (k, val) in map {
+                            assert_no_nulls(val, &format!("{where_}.{k}"));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            assert_no_nulls(&fixture, name);
+        }
+    }
+
+    /// The tier-2 fixture demonstrates the fault-vocabulary rules: an
+    /// agent fault carries a code, a passing check and a tool fault
+    /// never do, and tier-2 rows carry model + repetition.
+    #[test]
+    fn test_report_tier2_fixture_vocabulary() {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/golden/eval_report_tier2.json");
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display())),
+        )
+        .expect("tier-2 fixture is valid JSON");
+
+        assert_eq!(fixture["report_version"], 1);
+        assert_eq!(fixture["status"], "failed");
+        // Tier-2 rows carry the raw model id and a 0-based repetition.
+        assert_eq!(fixture["model"], "deepseek/deepseek-v4-flash:free");
+        assert_eq!(fixture["repetition"], 0);
+        // code present iff fault == agent.
+        for check in fixture["checks"].as_array().unwrap() {
+            let has_code = check.get("code").is_some();
+            let is_agent_fault = check["fault"].as_str() == Some("agent");
+            assert_eq!(has_code, is_agent_fault, "check {}", check["name"]);
+        }
+        // Bounds recorded with values.
+        assert!(fixture["bounds"]["max_turns"].is_u64());
+        assert!(fixture["bounds"]["timeout_secs"].is_u64());
+        assert!(fixture["bounds"]["token_budget"].is_u64());
     }
 
     // -- Envelope parsing ----------------------------------------------------

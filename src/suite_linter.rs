@@ -106,6 +106,90 @@ pub trait LintCheck: Send + Sync {
 
 // ── LinterRegistry ────────────────────────────────────────────────────
 
+/// Adoption probe for the suite-wide evals guidelines
+/// (`add-evals-guidelines`, task 5.3): verifies that a consumer repo's
+/// eval docs reference the genesis guideline pages (the report contract
+/// and the tier-ladder how-tos). Advisory — an adoption probe, not a gate.
+/// Register it in the consumer's linter registry at startup.
+pub struct EvalsGuidelinesAdoption;
+
+/// Marker strings that count as "references the guidelines" — any one hit
+/// per eval doc satisfies the probe.
+const EVALS_GUIDELINE_MARKERS: &[&str] = &[
+    "eval-report",
+    "evals-guidelines",
+    "evals-ci",
+    "why-weak-readers",
+];
+
+impl LintCheck for EvalsGuidelinesAdoption {
+    fn name(&self) -> &'static str {
+        "genesis.evals_guidelines"
+    }
+
+    fn description(&self) -> &'static str {
+        "eval docs reference the suite-wide evals-guidelines pages"
+    }
+
+    fn run(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let docs = repo_root.join("docs");
+        if !docs.is_dir() {
+            return Ok(vec![LintResult::new(
+                "no eval docs found — evals-guidelines not yet adopted \
+                 (battery not started)",
+                Severity::Advisory,
+            )]);
+        }
+
+        // Eval docs: any `evals*.md` under docs/, any depth.
+        let mut eval_docs: Vec<std::path::PathBuf> = Vec::new();
+        let mut stack = vec![docs.clone()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                    && name.starts_with("evals")
+                    && name.ends_with(".md")
+                {
+                    eval_docs.push(path);
+                }
+            }
+        }
+
+        if eval_docs.is_empty() {
+            return Ok(vec![LintResult::new(
+                "no eval docs found — evals-guidelines not yet adopted \
+                 (battery not started)",
+                Severity::Advisory,
+            )]);
+        }
+
+        let mut findings = Vec::new();
+        for doc in eval_docs {
+            let content = std::fs::read_to_string(&doc)
+                .map_err(|e| format!("cannot read {}: {e}", doc.display()))?;
+            let references = EVALS_GUIDELINE_MARKERS.iter().any(|m| content.contains(m));
+            if !references {
+                let rel = doc.strip_prefix(repo_root).unwrap_or(&doc).display();
+                findings.push(LintResult::with_fix(
+                    format!(
+                        "{rel} does not reference the suite-wide evals-guidelines pages \
+                         (report contract / tier ladder) — cross-tool results are not \
+                         comparable without the shared conventions"
+                    ),
+                    Severity::Advisory,
+                    "see genesis docs: how-to/evals.md, how-to/evals-ci.md, \
+                     reference/eval-report.md",
+                ));
+            }
+        }
+        Ok(findings)
+    }
+}
+
 /// A registry of lint checks that tools register at startup.
 ///
 /// Genesis provides the orchestration; tools provide the checks.
@@ -577,5 +661,60 @@ mod tests {
         let r = LintResult::new("all good", Severity::Advisory);
         let formatted = r.format("test.check");
         assert_eq!(formatted, "[advisory] [test.check] all good");
+    }
+
+    // ── EvalsGuidelinesAdoption (add-evals-guidelines) ────────────────
+
+    fn write_repo(files: &[(&str, &str)]) -> PathBuf {
+        let dir = tempfile::tempdir().expect("tempdir");
+        for (path, content) in files {
+            let full = dir.path().join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, content).unwrap();
+        }
+        // Leak the temp dir so it outlives the test body.
+        let path = dir.path().to_path_buf();
+        std::mem::forget(dir);
+        path
+    }
+
+    #[test]
+    fn test_evals_adoption_passes_when_docs_reference_guidelines() {
+        let root = write_repo(&[(
+            "docs/how-to/evals.md",
+            "# Evals\n\nSee the [report contract](../reference/eval-report.md).\n",
+        )]);
+        let results = EvalsGuidelinesAdoption.run(&root).unwrap();
+        assert!(results.is_empty(), "expected no findings, got {results:?}");
+    }
+
+    #[test]
+    fn test_evals_adoption_flags_docs_without_reference() {
+        let root = write_repo(&[(
+            "docs/how-to/evals.md",
+            "# Evals\n\nMy battery runs on pushes.\n",
+        )]);
+        let results = EvalsGuidelinesAdoption.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Advisory);
+        assert!(results[0].message.contains("docs/how-to/evals.md"));
+        assert!(results[0].fix.is_some());
+    }
+
+    #[test]
+    fn test_evals_adoption_advisory_when_no_eval_docs() {
+        let root = write_repo(&[("README.md", "# my-tool\n")]);
+        let results = EvalsGuidelinesAdoption.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Advisory);
+        assert!(results[0].message.contains("no eval docs"));
+    }
+
+    #[test]
+    fn test_evals_adoption_ignores_non_eval_docs() {
+        let root = write_repo(&[("docs/how-to/fixture.md", "# Fixture\n")]);
+        let results = EvalsGuidelinesAdoption.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].message.contains("no eval docs"));
     }
 }

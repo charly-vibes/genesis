@@ -47,6 +47,11 @@ Every eval scenario is four things:
 
 ## Step 1: Provision the sandbox
 
+*(Elaborates the **Fixture provisioning** and **Sandbox confinement** requirements
+of the `evals-guidelines` spec: the tool binary is provisioned before the agent's
+first turn; live runs use an isolated `HOME`, a scrubbed environment, network
+denied by default, and a per-command timeout.)*
+
 Use `Fixture` for the scratch environment. The tool binary must be pre-built and on
 `PATH` *before* the agent's turn — compiling from source inside a trial burns budget
 and measures build skills, not tool comprehension. (Installation is only in-scope if
@@ -79,6 +84,12 @@ If the scenario depends on AIX artifacts, provision them explicitly — and see
 
 ## Step 2: Inject contrived failures
 
+*(Elaborates the **Scenario provenance** requirement of the `evals-guidelines`
+spec: every scenario traces to an observed failure source — a corpus entry, an
+error-analysis note, or a ticket. Contrived-failure scenarios are declared as
+channel stress tests; their results bound detection claims, never prevalence
+claims.)*
+
 Your tool's self-healing output (hints, suggestions, `doctor --fix`) is a promise:
 *errors help the agent recover*. Evals are where you prove it. Deliberately trigger
 error paths and check whether the agent's next action consumes the payload:
@@ -96,6 +107,11 @@ proposition of the AIX investment.
 
 ## Step 3: Assert deterministically
 
+*(Elaborates the **Process-boundary scoring**, **One fault per check**, and
+**Empty-trajectory guard** requirements of the `evals-guidelines` spec: assert
+only on signals that crossed the process boundary; one fault classification per
+check; a passive model cannot pass by doing nothing.)*
+
 Prefer these checks, in order of reliability:
 
 | Check | How | Example |
@@ -108,7 +124,9 @@ Prefer these checks, in order of reliability:
 ## Step 4: Classify failures with a taxonomy
 
 When a trial fails, assign an error code from a fixed vocabulary so results
-aggregate into dashboards instead of pass/fail noise:
+aggregate into dashboards instead of pass/fail noise. The codes and the
+agent/tool fault vocabulary they ride on are exactly what the
+[report contract](../reference/eval-report.md) serializes:
 
 - `ERR_ENVELOPE_HINT_BLINDNESS` — the tool returned `ok: false` with hints; the
   agent's next command ignored the suggested fix
@@ -122,6 +140,11 @@ aggregate into dashboards instead of pass/fail noise:
   `doctor` for diagnostics)
 - `ERR_TOOL_DISCOVERY_FAILURE` — agent defaulted to a generic approach, never
   discovering the specialized tool
+- `ERR_ACTION_FORMAT_VIOLATION` — live-tier agent failed to produce a parseable
+  structured action after one re-ask (the re-ask consumes a turn). Distinct
+  from `ERR_TOOL_EXECUTION_HALLUCINATION`, which stays a replay-tier code for
+  claims of runs that never happened — in the live tier the harness executes
+  every action, so that failure mode is impossible there.
 
 ## Step 5: A/B your AIX artifacts
 
@@ -181,6 +204,11 @@ assert!(final_env.envelope.ok);
 
 ## Step 7: Plant distractors and test doc-drift blindness
 
+*(Elaborates the **Distractor registration** requirement of the
+`evals-guidelines` spec: distractors are materialized into the replay
+environment but are not task material — whether consulting them is a fault is
+the check's decision, never their presence.)*
+
 A frontier model that *recalls* your public docs will trust them over your tool's
 live output — the most expensive failure mode in agentic use. genesis ships the
 mechanism for testing exactly this (add-aix-eval-loop §3):
@@ -203,9 +231,92 @@ let scenario = Scenario::new("doc-drift", "Initialize my-tool")
 ```
 
 Distractors never fault a run by themselves — presence is not fault, the check
-decides. Compose `doc_drift_blindness` with `ok_envelope` / `agent_followed_hint`
-for action-level assertions, and attribute replays to models via
+returns the verdict. Compose `doc_drift_blindness` with `ok_envelope` /
+`agent_followed_hint` for action-level assertions, and attribute replays to models via
 `ScenarioReport::with_model` for matrix comparison.
+
+## Step 8: Run the tier ladder
+
+*(Elaborates the **Tier ladder** and **Battery maintenance** requirements of the
+`evals-guidelines` spec — `openspec/specs/evals-guidelines/spec.md`.)*
+
+Every consumer battery runs three tiers. Each tier states what it may claim —
+citing a tier for more than it measures is the failure the ladder exists to
+prevent:
+
+| Tier | What runs | Cadence | May claim |
+|---|---|---|---|
+| 0 — static | No model: schema checks, envelope shape, doc-sync guards | Every push | "the channels are well-formed" |
+| 1 — scripted replay | `Scenario::run` over recorded `AgentStep` transcripts | Nightly | "recorded failure modes are still detected" |
+| 2 — live model | Your harness runs a real model per the action protocol below | Scheduled, rotated across model ids | "agents currently behave this way" — directional only |
+
+Live trials never gate a push: they are directional evidence, not CI gates. A
+permanently green battery is **never** evidence of quality — see battery
+maintenance below.
+
+### The live action protocol
+
+Your tier-2 harness requires the agent to return **one structured action per
+turn** — the exact command line plus a done flag. Per turn the model receives
+only: the scenario prompt and the fixture root path inside the sandbox. Never
+the check logic, the expected outcomes, or the distractor registry.
+
+1. Malformed output → re-ask **once**, with the format error attached; the
+   re-ask consumes a turn of the cap.
+2. Malformed again → trial ends `invalid_output`, agent fault
+   `ERR_ACTION_FORMAT_VIOLATION`.
+3. Parseable action → execute the command **exactly once**, record the step
+   with `executed: true`.
+
+### Bounds
+
+Every live trial is bounded by a **turn cap**, a **wall-clock timeout**, and a
+**token-estimate budget** (the `aix` chars/4 heuristic over the trial's full
+prompt and completion traffic — labeled as heuristic). The applied values are
+recorded in the report. A trial stopped at a bound ends `failed` and names the
+reached bound; the stop itself is **not** attributed as an agent or tool fault.
+
+### Free-tier entry and attribution
+
+Use OpenRouter `:free` model ids as the entry tier — the weakest readers. If a
+weak model parses the envelope and honors the hint, the channel is robust
+([why](../explanation/why-weak-readers.md)). Record the raw id **verbatim**
+(`deepseek/deepseek-v4-flash:free`, suffix included) — matrix comparisons across
+time depend on the unnormalized id. Run n ≥ 3 repetitions per scenario × model;
+each repetition is a distinct report row. On HTTP 429: retry once after ≥ 2 s
+(record the delay used); a second 429 ends the trial `rate_limited` — never a
+tool fault, never a silent substitution of a different model.
+
+### Battery maintenance (staleness review)
+
+Checks that never fail are rotting, not succeeding. Review the battery on a
+cadence: any check that has not failed since its last review is either
+re-sharpened (harder distractor, tighter envelope assertion) or retired with a
+note. Declare contrived-failure scenarios as **channel stress tests** — their
+results bound detection claims, never prevalence claims ("we detect X when it
+happens", never "X happens at rate Y").
+
+## Fault routing
+
+*(Elaborates the **Fault routing** requirement of the `evals-guidelines` spec.)*
+
+A failure is a **tool fault** or an **agent fault**, never both:
+
+- **Tool faults** (the tool misbehaved — envelope missing, exit code wrong)
+  become tickets in your tool's repo. They are product bugs wearing eval
+  clothes.
+- **Agent faults** (taxonomy-classified, `ERR_*` code attached) are routed by
+  check code × output channel across ≥ 3 model ids (or all configured ids when
+  fewer). A pattern that reproduces across models points at **your output
+  channel** (AIX work in genesis), not at the model. Sub-threshold occurrences
+  are recorded without action.
+
+## Reporting and aggregation
+
+Every trial emits one report row in the interoperable JSON contract — see
+[the eval report contract](../reference/eval-report.md) and the normative
+fixtures in `tests/golden/eval_report_*.json`. Dashboards aggregate rows by
+`report_version` with no per-tool mapping.
 
 ## What genesis provides today (and what it doesn't)
 
