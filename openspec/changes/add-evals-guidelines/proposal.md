@@ -35,14 +35,20 @@ battery SHALL follow:
 
 1. **Tier ladder** — tier 0 static (no model, every push), tier 1 scripted
    replay (no model, nightly), tier 2 live model runs (scheduled, rotated).
-   Each tier states its cadence and what it may claim.
+   Each tier states its cadence and what it may claim, and the battery
+   stays alive: checks that never fail are reviewed for staleness and a
+   permanently green battery is never cited as evidence of quality.
 2. **Process-boundary scoring** — checks assert only on signals that
    crossed the process boundary (exit codes, envelopes, filesystem state);
    free-form agent text is never scored.
 3. **Scenario authoring standard** — fixture provisioning, contrived
-   failure injection, distractors, one fault attribution per check, and
+   failure injection, distractors, one fault attribution per check,
    an empty-trajectory guard per tier-2 scenario (a passive model cannot
-   pass by doing nothing).
+   pass by doing nothing), and scenario provenance: every scenario
+   traces to an observed failure source (corpus entry, error-analysis
+   note, or ticket), with contrived-failure scenarios declared as
+   channel stress tests. Contrived-failure results bound detection
+   claims, never prevalence claims.
 4. **Live action protocol** — structured per-turn action (`command` +
    `done`), standardized minimum model context (never check logic), one
    re-ask on malformed output (consuming a turn), then
@@ -97,4 +103,7 @@ battery SHALL follow:
   requirements unchanged.
 - Consumer adoption happens via per-repo tickets referencing this change;
   genesis validates the guidelines only by making the vocabulary and the
-  report contract concrete.
+  report contract concrete. The v1 report contract is normative at the
+  docs/fixture level (reference page + checked-in fixtures);
+  `ScenarioReport` evolves to it only when a consumer harness lands,
+  per the additive-evolution rule.

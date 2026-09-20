@@ -9,12 +9,12 @@
 - [ ] 2.3 `with_model` doc update: verbatim ids including `:free` suffix (ties to the MODIFIED evals requirement).
 
 ## 3. Report contract
-- [ ] 3.1 Define `report_version` 1 JSON shape (required/optional fields per the interoperable-report requirement).
-- [ ] 3.2 Publish two example report fixtures (JSON) checked into the repo for consumers to diff against: one tier-2 row (model id + repetition present), one non-tier-2 row (model id omitted).
-- [ ] 3.3 Validate the example round-trips through `ScenarioReport::serialize` (or document the delta if live-only fields apply).
+- [ ] 3.1 Define the `report_version` 1 JSON shape (required/optional fields per the interoperable-report requirement) as the Contract section of `docs/reference/eval-report.md` plus the fixtures in 3.2 — docs/fixture-normative; `ScenarioReport` keeps its replay-tier shape until the first consumer harness lands (additive evolution then).
+- [ ] 3.2 Publish two example report fixtures (JSON) checked into the repo for consumers to diff against: one tier-2 row (model id + repetition present), one non-tier-2 row (model id omitted); absent optional fields omitted, never `null`.
+- [ ] 3.3 Validate the non-tier-2 fixture round-trips through serde JSON serialization of `ScenarioReport`; document the delta for live-only fields (`report_version`, `status`, repetition index, bounds) against the current `ScenarioReport` shape.
 
 ## 4. mdBook — explanation and how-to
-- [ ] 4.1 Extend `docs/how-to/evals.md` with the live cadence: tier ladder table (claims per tier), action protocol, bounds.
+- [ ] 4.1 Extend `docs/how-to/evals.md` with the live cadence: tier ladder table (claims per tier), action protocol, bounds, and battery maintenance (staleness review).
 - [ ] 4.2 New how-to: `docs/how-to/evals-ci.md` — running the ladder in CI: static on push, nightly replay, rotated `:free` matrix; 429 semantics; budget.
 - [ ] 4.3 New reference: `docs/reference/eval-report.md` — the report JSON contract with the example.
 - [ ] 4.4 New explanation: `docs/explanation/why-weak-readers.md` — the `:free`-as-entry-tier rationale and variability-as-signal.
@@ -28,3 +28,4 @@
 ## 6. Adoption
 - [ ] 6.1 Draft per-repo adoption tickets (dont, wai, espectacular, pretender, testaruda): first tier-0 battery + one tier-1 scenario; tier 2 deferred until stable.
 - [ ] 6.2 Record the guideline decisions in `wai` (why per-consumer harness, why spec-as-source-of-truth).
+- [ ] 6.3 Record the D8 alignment decisions in `wai`: which AI Evals FAQ practices were adopted (provenance, prevalence bounding, staleness review) and which were deliberately out of scope (LLM-judge validation, production sampling).
