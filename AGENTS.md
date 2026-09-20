@@ -1,3 +1,18 @@
+<!-- TURU:START -->
+# Whisper knowledge workspace (managed by turu — regenerate with `turu sync`)
+
+- Workspace root: `/var/home/sasha/.whisper`
+- Repo key: `cv/charly-vibes/genesis` · Branch slug: `main` · Worktree slot: `.git`
+- Deterministic routing (resolve, never guess):
+- global → `/var/home/sasha/.whisper/rules.md`
+- repo → `/var/home/sasha/.whisper/repos/cv/charly-vibes/genesis/env.md`
+- branch → `/var/home/sasha/.whisper/repos/cv/charly-vibes/genesis/branches/main/notes.md`
+- worktree → `/var/home/sasha/.whisper/repos/cv/charly-vibes/genesis/worktrees/.git/env.md`
+- Commands: `turu resolve <scope>` · `turu append <scope> --text ... [--topic k] [--supersedes id]` · `turu recall <scope> [--topic k] [--budget bytes]` · `turu distill <scope> --begin|--commit` · `turu bundle pack|unpack` · `turu status` · `turu doctor` · `turu feedback <kind>`
+
+<!-- TURU:END -->
+
+
 <!-- WAI:START -->
 # Workflow Tools
 
