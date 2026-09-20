@@ -1,0 +1,12 @@
+id = "existing-codes-unchanged"
+description = "pre-existing ERR_* codes are unchanged by the new variant"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_preexisting_codes_unchanged", timeout_seconds = 60 },
+    { flags = "test_taxonomy_codes_round_trip", timeout_seconds = 60 },
+]

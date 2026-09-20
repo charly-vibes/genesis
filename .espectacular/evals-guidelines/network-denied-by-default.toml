@@ -1,0 +1,11 @@
+id = "network-denied-by-default"
+description = "network egress fails unless the scenario opts in"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "provisioning_and_sandbox_normative_content_is_published", timeout_seconds = 60 }
+]

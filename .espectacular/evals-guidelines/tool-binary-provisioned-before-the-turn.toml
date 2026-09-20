@@ -1,0 +1,11 @@
+id = "tool-binary-provisioned-before-the-turn"
+description = "tool binary is pre-built and on the sandbox PATH before the agent turn"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "provisioning_and_sandbox_normative_content_is_published", timeout_seconds = 60 }
+]

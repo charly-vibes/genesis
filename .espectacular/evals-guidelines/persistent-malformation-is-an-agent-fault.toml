@@ -1,0 +1,11 @@
+id = "persistent-malformation-is-an-agent-fault"
+description = "second malformed response ends the trial invalid_output with ERR_ACTION_FORMAT_VIOLATION"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "live_action_protocol_normative_content_is_published", timeout_seconds = 60 }
+]

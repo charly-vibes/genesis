@@ -1,0 +1,11 @@
+id = "never-failing-checks-are-reviewed"
+description = "never-failing checks are reviewed before the next tier-2 rotation cycle; decision recorded"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "battery_maintenance_normative_content_is_published", timeout_seconds = 60 }
+]

@@ -1,0 +1,12 @@
+id = "round-trip-through-the-code"
+description = "ERR_ACTION_FORMAT_VIOLATION round-trips through the taxonomy"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_action_format_violation_code", timeout_seconds = 60 },
+    { flags = "test_taxonomy_codes_round_trip", timeout_seconds = 60 },
+]

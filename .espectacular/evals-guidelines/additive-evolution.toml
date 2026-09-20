@@ -1,0 +1,11 @@
+id = "additive-evolution"
+description = "new optional fields keep report_version; older consumers ignore unknown fields"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "report_contract_normative_content_is_published", timeout_seconds = 60 }
+]

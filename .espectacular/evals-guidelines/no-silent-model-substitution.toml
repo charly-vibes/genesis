@@ -1,0 +1,11 @@
+id = "no-silent-model-substitution"
+description = "fallback is recorded; each row names the model that ran"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "free_tier_attribution_normative_content_is_published", timeout_seconds = 60 }
+]

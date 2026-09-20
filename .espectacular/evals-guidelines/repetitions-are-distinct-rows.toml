@@ -1,0 +1,11 @@
+id = "repetitions-are-distinct-rows"
+description = "each repetition is a separate report row, 0-based per cell"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "free_tier_attribution_normative_content_is_published", timeout_seconds = 60 }
+]

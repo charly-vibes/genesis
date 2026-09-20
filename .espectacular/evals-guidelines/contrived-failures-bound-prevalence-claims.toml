@@ -1,0 +1,11 @@
+id = "contrived-failures-bound-prevalence-claims"
+description = "contrived-failure results are detection-capability evidence, not prevalence estimates"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "tier_ladder_normative_content_is_published", timeout_seconds = 60 }
+]

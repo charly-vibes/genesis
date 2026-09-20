@@ -1,0 +1,11 @@
+id = "isolated-execution"
+description = "live actions run with isolated HOME and scrubbed environment"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "provisioning_and_sandbox_normative_content_is_published", timeout_seconds = 60 }
+]

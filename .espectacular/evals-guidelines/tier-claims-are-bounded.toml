@@ -1,0 +1,11 @@
+id = "tier-claims-are-bounded"
+description = "a tier's results are not cited beyond what that tier measures"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "tier_ladder_normative_content_is_published", timeout_seconds = 60 },
+]

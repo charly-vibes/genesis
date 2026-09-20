@@ -1,0 +1,11 @@
+id = "one-fault-per-check"
+description = "each check carries a single fault attribution"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "check_discipline_normative_content_is_published", timeout_seconds = 60 }
+]

@@ -1,0 +1,11 @@
+id = "bounds-stop-runaway-trials"
+description = "turn cap, wall-clock timeout, and token budget stop runaway trials with the bound named and no fault"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "live_action_protocol_normative_content_is_published", timeout_seconds = 60 }
+]

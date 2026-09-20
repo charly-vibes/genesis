@@ -1,0 +1,11 @@
+id = "hallucination-remains-detectable"
+description = "claimed-but-unexecuted steps stay detectable via the executed field"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "process_boundary_scoring_normative_content_is_published", timeout_seconds = 60 }
+]

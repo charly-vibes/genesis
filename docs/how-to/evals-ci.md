@@ -96,7 +96,8 @@ Cap tier-2 spend before the first run:
 | 2 | Current agent behavior, directional | regression gating, prevalence rates |
 
 A permanently green battery — any tier — is reviewed for staleness, not
-celebrated: checks that never fail are re-sharpened or retired.
+celebrated: checks that never fail are reviewed for continued relevance
+(kept, sharpened, or retired) before the next tier-2 rotation cycle.
 
 ## Related
 

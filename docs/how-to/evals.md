@@ -290,9 +290,10 @@ tool fault, never a silent substitution of a different model.
 ### Battery maintenance (staleness review)
 
 Checks that never fail are rotting, not succeeding. Review the battery on a
-cadence: any check that has not failed since its last review is either
-re-sharpened (harder distractor, tighter envelope assertion) or retired with a
-note. Declare contrived-failure scenarios as **channel stress tests** — their
+cadence: any check that has not failed since its scenario was created is
+reviewed for continued relevance (kept, sharpened, or retired) before the next
+tier-2 rotation cycle, and the decision is recorded in the scenario's source.
+Declare contrived-failure scenarios as **channel stress tests** — their
 results bound detection claims, never prevalence claims ("we detect X when it
 happens", never "X happens at rate Y").
 

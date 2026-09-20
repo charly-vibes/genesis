@@ -1,0 +1,11 @@
+id = "check-logic-is-never-exposed"
+description = "model context carries only the scenario prompt and fixture root"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "live_action_protocol_normative_content_is_published", timeout_seconds = 60 }
+]

@@ -1,0 +1,12 @@
+id = "tool-faults-carry-no-code"
+description = "tool-fault check outcomes carry a reason but no ERR_* code"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "report_contract_normative_content_is_published", timeout_seconds = 60 },
+    { flags = "report_fixtures_are_loadable_and_versioned", timeout_seconds = 60 }
+]

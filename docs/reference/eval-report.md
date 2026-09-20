@@ -21,7 +21,7 @@ two checked-in fixtures are the source of truth for v1.
 | `report_version` | integer | Contract version; `1` for this shape. |
 | `name` | string | Scenario name. |
 | `tool` | string | The tool repo that produced the row. |
-| `status` | string | Trial outcome: `passed`, `failed`, `rate_limited`, or `invalid_output`. |
+| `status` | string | Trial outcome: `passed \| failed \| rate_limited \| invalid_output`. |
 | `checks` | array | One entry per **declared** check — passing and failing (never only the failures). |
 | `bounds` | object | The bounds applied with their values. Empty object for tiers that apply no bounds — present, never `null`. |
 

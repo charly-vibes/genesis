@@ -1,0 +1,11 @@
+id = "cross-model-agent-fault-points-at-the-channel"
+description = "same agent-fault code across the routing threshold of model ids routes to AIX-channel work"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "fault_routing_normative_content_is_published", timeout_seconds = 60 }
+]

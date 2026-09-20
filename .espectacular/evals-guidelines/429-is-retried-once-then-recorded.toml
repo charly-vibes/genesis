@@ -1,0 +1,11 @@
+id = "429-is-retried-once-then-recorded"
+description = "second 429 ends the trial rate_limited with no fault attribution"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "free_tier_attribution_normative_content_is_published", timeout_seconds = 60 }
+]
