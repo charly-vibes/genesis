@@ -1,11 +1,11 @@
 # Tasks: add-git-hooks
 
 ## 1. Foundation — repo root & hooks dir resolution
-- [ ] 1.1 Write failing tests: `repo_root()` finds root from nested dir; errors outside a repo (use `genesis::fixture` with `with_git_init()`).
-- [ ] 1.2 Implement `repo_root()` (port from pretender `main.rs`).
-- [ ] 1.3 Write failing tests: `resolve_hooks_dir()` returns `.git/hooks` by default; honors local `core.hooksPath` when set.
-- [ ] 1.4 Implement `resolve_hooks_dir()` (port `git_core_hooks_path` from wai `way/hooks.rs`).
-- [ ] 1.5 Refactor pass: shared error type consistent with `envelope`/`suggestions` conventions.
+- [x] 1.1 Write failing tests: `repo_root()` finds root from nested dir; errors outside a repo (use `genesis::fixture` with `with_git_init()`).
+- [x] 1.2 Implement `repo_root()` (port from pretender `main.rs`).
+- [x] 1.3 Write failing tests: `resolve_hooks_dir()` returns `.git/hooks` by default; honors local `core.hooksPath` when set.
+- [x] 1.4 Implement `resolve_hooks_dir()` (port `git_core_hooks_path` from wai `way/hooks.rs`).
+- [x] 1.5 Refactor pass: shared error type consistent with `envelope`/`suggestions` conventions.
 
 ## 2. Install / uninstall with ownership marker
 - [ ] 2.1 Write failing tests: install writes hook with marker, 0755 perms; creates hooks dir on demand; refuses foreign hook unmodified; idempotent overwrite of own hook.
