@@ -20,11 +20,11 @@
 - [x] 3.4 Implement `framework()`.
 
 ## 4. Lefthook wiring (managed-block based)
-- [ ] 4.1 Write failing test: `ensure_wired()` inserts managed block directly after `pre-commit:`; rest of file unchanged.
-- [ ] 4.2 Write failing tests: creates missing stage section; idempotent when content present; errors when no lefthook config exists (never creates one); malformed config errors instead of mangling.
-- [ ] 4.3 Implement `ensure_wired(root, Stage, block)` on top of `managed_block` (design D4).
-- [ ] 4.4 Write failing tests: `is_wired()` true for command in target stage; false when absent / stage missing / no config; false when command is in the other stage only.
-- [ ] 4.5 Implement `is_wired()` (stage-scoped scan, design D5).
+- [x] 4.1 Write failing test: `ensure_wired()` inserts managed block directly after `pre-commit:`; rest of file unchanged.
+- [x] 4.2 Write failing tests: creates missing stage section; idempotent when content present; errors when no lefthook config exists (never creates one); malformed config errors instead of mangling.
+- [x] 4.3 Implement `ensure_wired(root, Stage, block)` on top of `managed_block` (design D4).
+- [x] 4.4 Write failing tests: `is_wired()` true for command in target stage; false when absent / stage missing / no config; false when command is in the other stage only.
+- [x] 4.5 Implement `is_wired()` (stage-scoped scan, design D5).
 
 ## 5. Integration & hygiene
 - [ ] 5.1 Module registered in `src/lib.rs` with doc comment (donor attribution, boundary note: no tool gate strings).

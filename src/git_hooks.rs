@@ -46,6 +46,29 @@ pub enum GitHooksError {
         #[source]
         source: std::io::Error,
     },
+    /// No `lefthook.yml` or `lefthook.yaml` exists — wiring refuses to create
+    /// a config from scratch (design D4 non-goal).
+    #[error(
+        "no supported hook framework config found in {root}: expected lefthook.yml or lefthook.yaml"
+    )]
+    MissingLefthookConfig {
+        /// Repository root that was searched.
+        root: PathBuf,
+    },
+    /// The lefthook config cannot be anchored (e.g. the stage key is quoted
+    /// or the structure is unrecognized) — the file is left unmodified.
+    #[error(
+        "cannot anchor stage '{stage}' in {}: {message} — file left unmodified",
+        path.display()
+    )]
+    UnanchorableLefthookConfig {
+        /// The config file that was not modified.
+        path: PathBuf,
+        /// Stage key that could not be anchored.
+        stage: String,
+        /// What went wrong while looking for the anchor.
+        message: String,
+    },
 }
 
 /// Locate the enclosing git repository by walking parent directories
@@ -230,6 +253,204 @@ pub fn framework(root: &Path) -> Framework {
         }
     }
     Framework::None
+}
+
+/// Lefthook config wiring on top of [`crate::managed_block`] (design D4:
+/// marker-tagged, idempotent blocks; no YAML parser, no bespoke string
+/// surgery). Donor: espectacular `init.rs` (rebuilt), wai doctor (wiring
+/// check semantics).
+pub mod lefthook {
+    use super::GitHooksError;
+    use crate::managed_block::BlockDef;
+    use std::path::{Path, PathBuf};
+
+    /// A lefthook config stage (design D5b: config vocabulary, not hook
+    /// file names — kept separate from [`HookName`]).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Stage {
+        /// `pre-commit`
+        PreCommit,
+        /// `pre-push`
+        PrePush,
+    }
+
+    impl Stage {
+        /// The stage key as it appears at column 0 of a lefthook config.
+        pub fn key(&self) -> &'static str {
+            match self {
+                Stage::PreCommit => "pre-commit",
+                Stage::PrePush => "pre-push",
+            }
+        }
+    }
+
+    /// Outcome of [`ensure_wired`].
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum WiredOutcome {
+        /// The managed block was injected into the stage section.
+        Injected,
+        /// The stage section already contained the block — file unchanged.
+        AlreadyWired,
+    }
+
+    /// Resolve the lefthook config path: `lefthook.yml` wins over
+    /// `lefthook.yaml` (design D6); `None` when neither exists.
+    fn config_path(root: &Path) -> Option<PathBuf> {
+        for name in ["lefthook.yml", "lefthook.yaml"] {
+            let path = root.join(name);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    /// True when the line is a column-0 YAML key (starts with a
+    /// non-whitespace character other than `#`) — a section boundary.
+    fn is_column_zero_key(line: &str) -> bool {
+        let first = line.chars().next();
+        matches!(first, Some(c) if c != ' ' && c != '\t' && c != '#' && c != '\n')
+    }
+
+    /// Find the column-0 stage-key anchor and return its byte offset.
+    /// Returns `Err(())` when the stage key appears only in a
+    /// non-anchorable form (quoted, indented) — design D6.
+    fn find_anchor(content: &str, stage: Stage) -> Result<Option<usize>, ()> {
+        let anchor = format!("{}:", stage.key());
+        for (offset, line) in content.split_inclusive('\n').scan(0usize, |acc, line| {
+            let start = *acc;
+            *acc += line.len();
+            Some((start, line))
+        }) {
+            if line.trim_end() == anchor && is_column_zero_key(line) {
+                return Ok(Some(offset));
+            }
+            if line.contains(stage.key()) {
+                // Present but not as a column-0 `key:` anchor (quoted,
+                // indented, or embedded): unrecognized structure, refuse to
+                // guess (design D6).
+                return Err(());
+            }
+        }
+        Ok(None)
+    }
+
+    /// Extract the stage's section: from the anchor line to the next
+    /// column-0 key or EOF (design D5 section semantics).
+    fn section(content: &str, anchor_offset: usize) -> &str {
+        let rest = &content[anchor_offset..];
+        let mut end = rest.len();
+        for (offset, line) in rest
+            .split_inclusive('\n')
+            .scan(0usize, |acc, line| {
+                let start = *acc;
+                *acc += line.len();
+                Some((start, line))
+            })
+            .skip(1)
+        {
+            if is_column_zero_key(line) {
+                end = offset;
+                break;
+            }
+        }
+        &rest[..end]
+    }
+
+    /// Inject a managed block into a stage section of the lefthook config,
+    /// idempotently.
+    ///
+    /// The block is inserted directly after the stage key (`pre-commit:` /
+    /// `pre-push:` at column 0); a missing stage section is appended.
+    /// Errors without modifying the file when no config exists (never
+    /// creates one) or when the stage key cannot be anchored (design D6).
+    /// Donor: espectacular `init.rs::install_lefthook`, rebuilt on
+    /// [`BlockDef`] markers per design D4.
+    pub fn ensure_wired(
+        root: &Path,
+        stage: Stage,
+        block: &BlockDef,
+        content: &str,
+    ) -> Result<WiredOutcome, GitHooksError> {
+        let path = config_path(root).ok_or_else(|| GitHooksError::MissingLefthookConfig {
+            root: root.to_path_buf(),
+        })?;
+        let existing = std::fs::read_to_string(&path).map_err(|source| GitHooksError::Io {
+            path: path.clone(),
+            message: "failed to read lefthook config".to_string(),
+            source,
+        })?;
+        let block_text = format!("{}{}{}", block.start_marker, content, block.end_marker);
+
+        match find_anchor(&existing, stage) {
+            Err(()) => Err(GitHooksError::UnanchorableLefthookConfig {
+                path,
+                stage: stage.key().to_string(),
+                message: "stage key is quoted or otherwise not anchorable at column 0".to_string(),
+            }),
+            Ok(Some(offset)) => {
+                // Idempotence is file-level (spec: "the config already
+                // contains the block's content"): block markers at column 0
+                // are not column-0 keys, so the stage-section scan cannot be
+                // relied on to span an injected block.
+                if existing.contains(&block_text) || section(&existing, offset).contains(content) {
+                    return Ok(WiredOutcome::AlreadyWired);
+                }
+                // Insert directly after the anchor line (spec: "directly
+                // after `pre-commit:`").
+                let line_end = existing[offset..]
+                    .find('\n')
+                    .map_or(existing.len(), |nl| offset + nl + 1);
+                let mut updated = String::with_capacity(existing.len() + block_text.len() + 1);
+                updated.push_str(&existing[..line_end]);
+                if line_end == existing.len() {
+                    updated.push('\n'); // anchor was the last line without a newline
+                }
+                updated.push_str(&block_text);
+                updated.push_str(&existing[line_end..]);
+                std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
+                    path: path.clone(),
+                    message: "failed to write lefthook config".to_string(),
+                    source,
+                })?;
+                Ok(WiredOutcome::Injected)
+            }
+            Ok(None) => {
+                let mut updated = existing.clone();
+                if !updated.ends_with('\n') {
+                    updated.push('\n');
+                }
+                updated.push_str(stage.key());
+                updated.push_str(":\n");
+                updated.push_str(&block_text);
+                updated.push('\n');
+                std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
+                    path: path.clone(),
+                    message: "failed to write lefthook config".to_string(),
+                    source,
+                })?;
+                Ok(WiredOutcome::Injected)
+            }
+        }
+    }
+
+    /// Report whether `command` appears in a stage's section of the
+    /// lefthook config, for doctor-style wiring checks (design D5:
+    /// stage-scoped scan — a pre-push command must not satisfy a
+    /// pre-commit check). Returns `false` when the command is absent, the
+    /// stage section is missing, or no config exists.
+    pub fn is_wired(root: &Path, stage: Stage, command: &str) -> bool {
+        let Some(path) = config_path(root) else {
+            return false;
+        };
+        let Ok(existing) = std::fs::read_to_string(&path) else {
+            return false;
+        };
+        match find_anchor(&existing, stage) {
+            Ok(Some(offset)) => section(&existing, offset).contains(command),
+            _ => false,
+        }
+    }
 }
 
 /// Ownership state of a hook file on disk.
@@ -755,5 +976,241 @@ mod tests {
         std::fs::write(fixture.root().join("prek.toml"), "").unwrap();
         write_hook(&fixture, HookName::PreCommit, "# husky\n");
         assert_eq!(framework(fixture.root()), Framework::Prek);
+    }
+
+    // -- Lefthook wiring (tasks 4.1-4.5) ----------------------------------
+
+    mod wiring_tests {
+        use super::*;
+        use crate::managed_block::BlockDef;
+
+        fn ah_block() -> BlockDef {
+            BlockDef::new("AH")
+        }
+
+        fn ah_content() -> &'static str {
+            "  commands:\n    ah:\n      run: ah check\n"
+        }
+
+        fn basic_config() -> &'static str {
+            "pre-commit:\n  commands:\n    lint:\n      run: lint\npre-push:\n  commands:\n    test:\n      run: test\n"
+        }
+
+        fn config_fixture(contents: &str) -> Fixture {
+            let fixture = match Fixture::new().build() {
+                Ok(f) => f,
+                Err(e) => panic!("fixture build failed: {e}"),
+            };
+            std::fs::write(fixture.root().join("lefthook.yml"), contents).unwrap();
+            fixture
+        }
+
+        #[test]
+        fn ensure_wired_inserts_block_directly_after_stage_key() {
+            let fixture = config_fixture(basic_config());
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let block_text = format!(
+                "{}{}{}",
+                ah_block().start_marker,
+                ah_content(),
+                ah_block().end_marker
+            );
+            let expected = format!(
+                "pre-commit:\n{block_text}{}",
+                &basic_config()["pre-commit:\n".len()..]
+            );
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_wired_creates_missing_stage_section() {
+            // Config has only a pre-commit section; wiring pre-push must
+            // append the missing stage section containing the block.
+            let config = "pre-commit:\n  commands:\n    lint:\n      run: lint\n";
+            let fixture = match Fixture::new().build() {
+                Ok(f) => f,
+                Err(e) => panic!("fixture build failed: {e}"),
+            };
+            std::fs::write(fixture.root().join("lefthook.yml"), config).unwrap();
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PrePush,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let block_text = format!(
+                "{}{}{}",
+                ah_block().start_marker,
+                ah_content(),
+                ah_block().end_marker
+            );
+            assert!(after.starts_with(config));
+            assert!(after.contains(&format!("\npre-push:\n{block_text}\n")));
+        }
+
+        #[test]
+        fn ensure_wired_is_idempotent_when_content_present() {
+            let fixture = config_fixture(basic_config());
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let once = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let twice = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert_eq!(once, twice);
+            assert_eq!(twice.matches("AH:START").count(), 1);
+        }
+
+        #[test]
+        fn ensure_wired_errors_on_missing_config_and_never_creates_one() {
+            let fixture = match Fixture::new().build() {
+                Ok(f) => f,
+                Err(e) => panic!("fixture build failed: {e}"),
+            };
+            let err = lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains("no supported hook framework config"),
+                "error should explain: {msg}"
+            );
+            assert!(!fixture.root().join("lefthook.yml").exists());
+            assert!(!fixture.root().join("lefthook.yaml").exists());
+        }
+
+        #[test]
+        fn ensure_wired_prefers_yml_when_both_exist() {
+            let fixture = match Fixture::new().build() {
+                Ok(f) => f,
+                Err(e) => panic!("fixture build failed: {e}"),
+            };
+            std::fs::write(fixture.root().join("lefthook.yml"), basic_config()).unwrap();
+            std::fs::write(fixture.root().join("lefthook.yaml"), "other: file\n").unwrap();
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let yml = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let yaml = std::fs::read_to_string(fixture.root().join("lefthook.yaml")).unwrap();
+            assert!(yml.contains("AH:START"), ".yml should be modified");
+            assert_eq!(yaml, "other: file\n", ".yaml must be ignored (D6)");
+        }
+
+        #[test]
+        fn ensure_wired_errors_unmodified_on_quoted_stage_key() {
+            let quoted = "\"pre-push\":\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(quoted);
+            let err = lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PrePush,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, GitHooksError::UnanchorableLefthookConfig { .. }),
+                "got: {err}"
+            );
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert_eq!(after, quoted, "config must not be modified");
+        }
+
+        #[test]
+        fn injected_block_is_recognized_by_managed_block_reader() {
+            let fixture = config_fixture(basic_config());
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let mut reg = crate::managed_block::BlockRegistry::new();
+            reg.register(ah_block());
+            let injector = crate::managed_block::BlockInjector::new(reg);
+            let path = fixture.root().join("lefthook.yml");
+            assert!(injector.has_block(&path, "AH"));
+            let read = injector.read_block(&path, "AH").unwrap();
+            assert!(read.contains(ah_block().start_marker.as_str()));
+            assert!(read.contains("run: ah check"));
+        }
+
+        #[test]
+        fn is_wired_true_when_command_in_target_stage() {
+            let fixture = config_fixture(
+                "pre-commit:\n  commands:\n    ah:\n      run: ah check\npre-push:\n  commands:\n    test:\n      run: test\n",
+            );
+            assert!(lefthook::is_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                "ah check"
+            ));
+            assert!(!lefthook::is_wired(
+                fixture.root(),
+                lefthook::Stage::PrePush,
+                "ah check"
+            ));
+        }
+
+        #[test]
+        fn is_wired_false_when_stage_missing_or_no_config() {
+            let fixture = config_fixture(basic_config());
+            assert!(!lefthook::is_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                "ah check"
+            ));
+            let empty = match Fixture::new().build() {
+                Ok(f) => f,
+                Err(e) => panic!("fixture build failed: {e}"),
+            };
+            assert!(!lefthook::is_wired(
+                empty.root(),
+                lefthook::Stage::PreCommit,
+                "ah check"
+            ));
+        }
+
+        #[test]
+        fn is_wired_command_in_wrong_stage_is_not_wired() {
+            let fixture = config_fixture("pre-push:\n  commands:\n    ah:\n      run: ah check\n");
+            assert!(lefthook::is_wired(
+                fixture.root(),
+                lefthook::Stage::PrePush,
+                "ah check"
+            ));
+            assert!(!lefthook::is_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                "ah check"
+            ));
+        }
     }
 }
