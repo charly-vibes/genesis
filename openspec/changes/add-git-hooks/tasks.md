@@ -8,10 +8,10 @@
 - [x] 1.5 Refactor pass: shared error type consistent with `envelope`/`suggestions` conventions.
 
 ## 2. Install / uninstall with ownership marker
-- [ ] 2.1 Write failing tests: install writes hook with marker, 0755 perms; creates hooks dir on demand; refuses foreign hook unmodified; idempotent overwrite of own hook.
-- [ ] 2.2 Write failing tests: uninstall removes owned hook; no-op when missing; refuses foreign hook unmodified.
-- [ ] 2.3 Implement `install()` / `uninstall()` (port from pretender, parameterized marker per design D1).
-- [ ] 2.4 Refactor pass: extract shared read-hook-with-marker helper.
+- [x] 2.1 Write failing tests: install writes hook with marker, 0755 perms; creates hooks dir on demand; refuses foreign hook unmodified; idempotent overwrite of own hook.
+- [x] 2.2 Write failing tests: uninstall removes owned hook; no-op when missing; refuses foreign hook unmodified.
+- [x] 2.3 Implement `install()` / `uninstall()` (port from pretender, parameterized marker per design D1).
+- [x] 2.4 Refactor pass: extract shared read-hook-with-marker helper.
 
 ## 3. Detection — owner & framework
 - [ ] 3.1 Write failing tests: `owner()` returns `Owner::Lefthook`/`Husky`/`Bd`/`PreCommit`/`Prek` per sigil table; most-specific sigil wins (bd-shim-chaining-prek case from wai tests); `None` for missing/unknown.
