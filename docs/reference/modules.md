@@ -20,6 +20,7 @@
 | `status` | new | `StatusContributor` trait, `StatusBuilder`, `StatusLevel`, `StatusSection` | `StatusBuilder::new()` |
 | `scaffold` | new | `Scaffold`, `ScaffoldResult` | `Scaffold::new()` |
 | `discovery` | new | `scan()`, `register()`, `unregister()`, `Manifest`, `DetectedTool` | `scan()`, `register()` |
+| `git_hooks` | new | `HookName`, `Owner`, `Framework`, `GitHooksError`, `lefthook::Stage`, `lefthook::WireOutcome` | `install()`, `uninstall()`, `owner()`, `framework()`, `resolve_hooks_dir()` |
 
 ---
 
@@ -542,4 +543,40 @@ Tool discovery via `.genesis/tools.toml` manifest.
 | `register(project, name, desc, type, path)` | Register a tool |
 | `unregister(project, name)` | Remove a tool registration |
 | `list_tools(project)` | List all registered tools |
+
+---
+
+## git_hooks
+
+**Signature:** `genesis::git_hooks`
+
+Shared git-hook primitives consolidating overlapping mechanics from three
+donors (pretender, wai, espectacular). Contains only git-hook mechanics —
+consuming tools pass their own gate commands, markers, and block contents
+as parameters (guard-tested boundary).
+
+### Key Types
+
+| Type | Description |
+| :--- | :--- |
+| `HookName` | Known hook file names (`PreCommit`, `PrePush`, `Custom(&'static str)`) |
+| `Owner` | Known hook owners (sigil table: `Lefthook`, `Husky`, `Bd`, `PreCommit`, `Prek`) |
+| `Framework` | Hook framework detection (`Lefthook`, `Prek`, `Husky`, `None`) |
+| `GitHooksError` | `NotInRepo`, `ForeignHook`, `Io`, `MissingLefthookConfig`, `UnanchorableLefthookConfig` |
+| `lefthook::Stage` | Lefthook config stages (`PreCommit`, `PrePush`) |
+| `lefthook::WiredOutcome` | `ensure_wired` result (`Injected`, `AlreadyWired`) |
+
+### Functions
+
+| Function | Description |
+| :--- | :--- |
+| `repo_root()` | Walk up from cwd to the first `.git` entry |
+| `repo_root_from(start)` | Same walk from an explicit start directory |
+| `resolve_hooks_dir(root)` | Resolve the hooks dir, honoring `core.hooksPath` |
+| `install(root, hook_name, marker, script)` | Install a hook file with an ownership marker; refuses foreign hooks |
+| `uninstall(root, hook_name, marker)` | Remove a marker-owned hook file; refuses foreign hooks |
+| `owner(root, hook_name)` | Detect which known tool owns a hook (ordered sigil table) |
+| `framework(root)` | Detect the active hook framework (`Lefthook` > `Prek` > `Husky`) |
+| `lefthook::ensure_wired(root, stage, block, content)` | Idempotently wire a gate into a lefthook stage section |
+| `lefthook::is_wired(root, stage, command)` | Report whether a gate command is wired in a stage |
 | `has_manifest(project)` | Check if manifest exists |

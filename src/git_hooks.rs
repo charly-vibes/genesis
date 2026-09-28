@@ -9,8 +9,10 @@
 //! - espectacular (`src/init.rs`): lefthook framework detection and
 //!   managed-block injection (rebuilt on [`crate::managed_block`]).
 //!
-//! Boundary note: this module contains no consuming-tool gate commands
-//! (e.g. `ah check`, `pretender check`) — those stay in the tools.
+//! Boundary note: this module contains only git-hook mechanics — no
+//! consuming-tool gate commands. Callers pass their own markers, gate
+//! commands, and block contents as parameters; a guard test enforces
+//! this boundary.
 
 use std::path::{Path, PathBuf};
 
@@ -1211,6 +1213,30 @@ mod tests {
                 lefthook::Stage::PreCommit,
                 "ah check"
             ));
+        }
+
+        /// Guard (spec: "Tool-specific gates stay in tools"): the
+        /// non-test portion of this module must not hardcode consuming-tool
+        /// gate commands. Test fixtures may use arbitrary gate strings, so
+        /// only the source up to this test module is scanned.
+        #[test]
+        fn module_source_has_no_tool_gate_strings() {
+            const SOURCE: &str = include_str!("git_hooks.rs");
+            let production = SOURCE
+                .split_once("#[cfg(test)]")
+                .expect("test module marker must exist")
+                .0;
+            for gate in [
+                "ah check",
+                "pretender check",
+                "testaruda select",
+                "just check-claims",
+            ] {
+                assert!(
+                    !production.contains(gate),
+                    "git_hooks module must not hardcode the consuming-tool gate {gate:?}"
+                );
+            }
         }
     }
 }

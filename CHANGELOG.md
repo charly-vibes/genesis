@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`git_hooks` module** ([genesis-7l8], [genesis-pzz], [genesis-3a8],
+  [genesis-16c], [genesis-qjg]): shared git-hook primitives consolidating
+  overlapping mechanics from three donors (pretender install/uninstall with
+  ownership markers, wai `core.hooksPath` + owner/framework detection,
+  espectacular lefthook injection rebuilt on `managed_block`).
+  - **Compatibility note for downstream tools:** fully additive — a new
+    public module, no changes to existing APIs. The module contains only
+    git-hook mechanics (guard-tested): consuming tools pass their own
+    gate commands, markers, and block contents as parameters.
+
 ## [0.7.0] — 2026-09-17
 
 ### Added
@@ -73,3 +85,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-35d]: https://github.com/charly-vibes/genesis
 [genesis-lzo]: https://github.com/charly-vibes/genesis
 [genesis-m3p]: https://github.com/charly-vibes/genesis
+[genesis-7l8]: https://github.com/charly-vibes/genesis
+[genesis-pzz]: https://github.com/charly-vibes/genesis
+[genesis-3a8]: https://github.com/charly-vibes/genesis
+[genesis-16c]: https://github.com/charly-vibes/genesis
+[genesis-qjg]: https://github.com/charly-vibes/genesis

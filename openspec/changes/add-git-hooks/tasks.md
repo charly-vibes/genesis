@@ -27,10 +27,10 @@
 - [x] 4.5 Implement `is_wired()` (stage-scoped scan, design D5).
 
 ## 5. Integration & hygiene
-- [ ] 5.1 Module registered in `src/lib.rs` with doc comment (donor attribution, boundary note: no tool gate strings).
-- [ ] 5.2 Guard test: `rg`-style assertion that module source contains no consuming-tool gate commands (`ah check`, `pretender check`, `testaruda select`, `just check-claims`).
-- [ ] 5.3 `cargo fmt --check`, `cargo clippy -D warnings`, full `cargo test` green.
-- [ ] 5.4 `ah check` passes (spec/test correspondence).
+- [x] 5.1 Module registered in `src/lib.rs` with doc comment (donor attribution, boundary note: no tool gate strings).
+- [x] 5.2 Guard test: `rg`-style assertion that module source contains no consuming-tool gate commands (`ah check`, `pretender check`, `testaruda select`, `just check-claims`).
+- [x] 5.3 `cargo fmt --check`, `cargo clippy -D warnings`, full `cargo test` green.
+- [x] 5.4 `ah check` passes (spec/test correspondence).
 
 ## 6. Follow-up (separate issues, NOT this change)
 - [ ] 6.1 pretender: `hooks install|uninstall` onto `genesis::git_hooks`; add pre-push support.
