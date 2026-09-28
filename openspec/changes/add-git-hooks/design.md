@@ -119,8 +119,23 @@ Not in this change. Follow-up issues per consumer
 `way/hooks.rs`) switch onto the module and delete their private copies.
 Each is independent; genesis ships first.
 
+### D7: `framework()` reports the single detected framework, including husky (decided)
+
+`framework()` reports the repository's one hook-management framework
+generically: `Framework::{Lefthook, Prek, Husky, None}`. The repository
+is assumed to use at most one framework (espectacular's assumption,
+confirmed as the suite convention). Husky has no root config; it is
+detected via the hook-file sigil (reusing `owner()`'s table) when no
+lefthook/prek config exists. If signals coexist — rare, defensive only —
+report deterministically by precedence: Lefthook, then Prek, then Husky.
+
+Rationale for including `Husky` (user decision, resolves the former open
+question): `Framework::None` on a husky repo is informationally lossy —
+espectacular's doctor would claim "no supported framework detected" on a
+repo that clearly has hook management. `Husky` gives consumers a
+distinguishable "detected but not wirable" state; `ensure_wired()`
+remains lefthook-only.
+
 ## Open Questions
 
-- Should `framework()` distinguish `Husky` (wai detects the sigil in
-  `owner()` but espectacular's framework enum has no husky variant)?
-  Proposal: yes — `Framework::Husky` for detection parity with `Owner`.
+None — the husky question is resolved by D7.

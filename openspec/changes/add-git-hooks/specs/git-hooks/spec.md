@@ -127,7 +127,10 @@ hook file, using the same sigil conventions wai's `way/hooks.rs` uses.
 
 genesis SHALL provide `framework()` that detects which hook-management
 framework a repository uses, superseding espectacular's
-`detect_hook_framework()` with wai's delegation handling.
+`detect_hook_framework()` with wai's delegation handling. A repository is
+assumed to use at most one framework; `framework()` SHALL report that one
+framework generically (including husky, which has no root config and is
+detected via hook-file sigil).
 
 #### Scenario: lefthook config present
 
@@ -139,6 +142,20 @@ framework a repository uses, superseding espectacular's
 
 - **WHEN** no lefthook config exists and the root contains `prek.toml`
 - **THEN** `framework()` SHALL return `Framework::Prek`
+
+#### Scenario: husky-owned hook without root config
+
+- **WHEN** no lefthook or prek config exists in the repository root
+- **AND** the hook file contains the husky sigil
+- **THEN** `framework()` SHALL return `Framework::Husky`
+
+#### Scenario: framework signals coexist
+
+- **WHEN** more than one framework signal exists (a root config and/or
+  hook-file sigils) — expected to be rare since a repository is assumed
+  to use one framework
+- **THEN** `framework()` SHALL report deterministically by precedence:
+  `Lefthook`, then `Prek`, then `Husky`
 
 #### Scenario: no known framework
 
