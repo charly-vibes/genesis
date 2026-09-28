@@ -11,6 +11,7 @@
 //!
 //! let args = FeedbackArgs {
 //!     kind: "bug".to_string(),
+//!     title: None,
 //!     dry_run: true,
 //!     from_last_error: true,
 //! };
@@ -40,6 +41,9 @@ use std::path::Path;
 pub struct FeedbackArgs {
     /// Kind of feedback: "bug", "feature", "question", or "chore".
     pub kind: String,
+    /// User-supplied issue title. When set, overrides the derived title
+    /// ("feedback report" / "auto-reported error: …" / first stdin line).
+    pub title: Option<String>,
     /// If true, print the issue body and gh command without submitting.
     pub dry_run: bool,
     /// If true, read the last error from scratch to auto-populate the body.
@@ -51,14 +55,59 @@ impl FeedbackArgs {
     pub fn new(kind: impl Into<String>, dry_run: bool, from_last_error: bool) -> Self {
         Self {
             kind: kind.into(),
+            title: None,
             dry_run,
             from_last_error,
         }
+    }
+
+    /// Set a user-supplied issue title (overrides the derived title).
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
     }
 }
 
 /// Valid issue kinds.
 const VALID_KINDS: &[&str] = &["bug", "feature", "question", "chore"];
+
+/// Partition piped stdin into an issue title and a Description body.
+///
+/// - Single-line input (including a trailing newline, e.g. from `echo`)
+///   keeps the generic `[{kind}] feedback report` title and lands verbatim
+///   in the Description — backward compatible with single-line pipelines.
+/// - Multi-line input promotes the first line to the title and uses the
+///   remainder as the Description. The full input is read, so multi-
+///   paragraph reports are never truncated.
+fn stdin_title_and_body(kind: &str, input: &str) -> (String, String) {
+    let trimmed = input.trim();
+    if let Some((first, rest)) = trimmed.split_once('\n') {
+        let first = first.trim();
+        let rest = rest.trim();
+        if !first.is_empty() {
+            let title = format!("[{kind}] {first}");
+            let body = if rest.is_empty() {
+                String::new()
+            } else {
+                format!("## Description\n\n{rest}\n\n")
+            };
+            return (title, body);
+        }
+    }
+    (
+        format!("[{kind}] feedback report"),
+        format!("## Description\n\n{trimmed}\n\n"),
+    )
+}
+
+/// Apply a user-supplied title override, keeping the `[{kind}] ` prefix.
+/// `None` keeps the derived title unchanged.
+fn apply_title_override(kind: &str, derived: &str, title: Option<&str>) -> String {
+    match title {
+        Some(t) => format!("[{kind}] {t}"),
+        None => derived.to_string(),
+    }
+}
 
 /// Handle a feedback request — validate kind, build body, redact, and file.
 ///
@@ -126,19 +175,20 @@ pub fn handle_feedback(
         }
     } else {
         // Try reading from stdin (piped input, e.g., `echo "bug report" | tool feedback bug`)
-        use std::io::IsTerminal;
+        use std::io::{IsTerminal, Read};
         if !std::io::stdin().is_terminal() {
             let mut input = String::new();
-            std::io::stdin().read_line(&mut input).ok();
-            let input = input.trim().to_string();
-            if !input.is_empty() {
-                title.push_str("feedback report");
-                body_parts.push(format!("## Description\n\n{}\n\n", input));
-            } else {
+            std::io::stdin().read_to_string(&mut input).ok();
+            if input.trim().is_empty() {
                 return Err(
                     "No issue content specified. Use --from-last-error or pipe content into stdin."
                         .to_string(),
                 );
+            }
+            let (derived_title, description) = stdin_title_and_body(&args.kind, &input);
+            title = derived_title;
+            if !description.is_empty() {
+                body_parts.push(description);
             }
         } else {
             return Err(
@@ -147,6 +197,9 @@ pub fn handle_feedback(
             );
         }
     }
+
+    // User-supplied title wins over every derived title.
+    title = apply_title_override(&args.kind, &title, args.title.as_deref());
 
     // ── Append context bundle ──────────────────────────────────────
     let bundle = context::gather_context(tool_name, tool_version, None, None, None, project_root);
@@ -319,6 +372,87 @@ mod tests {
             Ok(other) => panic!("expected FallbackUrl, got {:?}", other),
             Err(e) => panic!("should not error: {}", e),
         }
+    }
+
+    // --- stdin title/body partitioning (genesis-gle, genesis-og6) ---
+
+    #[test]
+    fn stdin_single_line_keeps_generic_title() {
+        let (title, body) = stdin_title_and_body("bug", "summary line");
+        assert_eq!(title, "[bug] feedback report");
+        assert!(body.contains("summary line"), "body must carry the input");
+    }
+
+    #[test]
+    fn stdin_trailing_newline_is_still_single_line() {
+        // `echo "x" | tool feedback bug` produces "x\n" — must keep the
+        // generic title, not treat the trailing newline as a second line.
+        let (title, body) = stdin_title_and_body("bug", "summary line\n");
+        assert_eq!(title, "[bug] feedback report");
+        assert!(body.contains("summary line"));
+    }
+
+    #[test]
+    fn stdin_multiline_promotes_first_line_to_title() {
+        let input = "Bare row-id references fail when intent id has a dot\n\nThe resolution algorithm is undocumented. Details follow.\n";
+        let (title, body) = stdin_title_and_body("bug", input);
+        assert_eq!(
+            title,
+            "[bug] Bare row-id references fail when intent id has a dot"
+        );
+        assert!(body.contains("The resolution algorithm is undocumented."));
+        assert!(
+            !body.contains("Bare row-id references"),
+            "first line must not be duplicated into the body"
+        );
+        assert!(body.starts_with("## Description"));
+    }
+
+    #[test]
+    fn stdin_multiline_blank_lines_around_single_line_is_still_single() {
+        // A title line followed by blank lines trims to one line — the
+        // echo-compat rule wins over title promotion.
+        let (title, body) = stdin_title_and_body("feature", "add a flag\n\n");
+        assert_eq!(title, "[feature] feedback report");
+        assert!(body.contains("add a flag"));
+    }
+
+    #[test]
+    fn stdin_multiline_title_plus_body_omits_first_line_from_body() {
+        let (title, body) = stdin_title_and_body("feature", "add a flag\n\nbody text\n");
+        assert_eq!(title, "[feature] add a flag");
+        assert!(body.contains("body text"));
+        assert!(!body.contains("add a flag"));
+    }
+
+    #[test]
+    fn title_override_wins_over_derived_and_first_line() {
+        assert_eq!(
+            apply_title_override("bug", "[bug] feedback report", Some("My title")),
+            "[bug] My title"
+        );
+        assert_eq!(
+            apply_title_override(
+                "bug",
+                "[bug] auto-reported error: ah check",
+                Some("My title")
+            ),
+            "[bug] My title"
+        );
+        assert_eq!(
+            apply_title_override("bug", "[bug] feedback report", None),
+            "[bug] feedback report",
+            "no override keeps the derived title"
+        );
+    }
+
+    #[test]
+    fn with_title_builder_sets_override() {
+        let args = FeedbackArgs::new("bug", true, false).with_title("My title");
+        assert_eq!(args.title.as_deref(), Some("My title"));
+        // ::new keeps the 3-arg signature — no override by default.
+        let plain = FeedbackArgs::new("bug", true, false);
+        assert_eq!(plain.title, None);
     }
 }
 

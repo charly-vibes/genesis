@@ -354,13 +354,32 @@ redactor (privacy), and gh (GitHub issue creation) into a single command.
 
 | Type | Description |
 | :--- | :--- |
-| `FeedbackArgs` | `kind`, `dry_run`, `from_last_error` |
+| `FeedbackArgs` | `kind`, `title`, `dry_run`, `from_last_error` |
 
 ### Functions
 
 | Function | Description |
 | :--- | :--- |
 | `handle_feedback(args)` | Run the feedback workflow: collect context, redact, create issue |
+
+### Issue title derivation
+
+The title always starts with `[{kind}] `. What follows is resolved by
+precedence:
+
+1. `FeedbackArgs::with_title()` / the downstream tool's `--title` flag —
+   wins over everything.
+2. First stdin line, when the piped input is multi-line (the remainder
+   becomes the `## Description` body).
+3. `auto-reported error: {command}` on the `--from-last-error` path.
+4. Generic `feedback report` for single-line stdin.
+
+### Stdin contract
+
+`handle_feedback` reads **all** of piped stdin (`read_to_string`, not a
+single line) — multi-paragraph reports are never truncated. A single-line
+input (including a trailing newline from `echo`) keeps the generic title
+and lands verbatim in the Description. Empty input is an error.
 
 ### Sub-modules
 

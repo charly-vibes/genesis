@@ -3,6 +3,28 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **feedback: full stdin read + smarter title derivation** ([genesis-gle],
+  [genesis-og6]): the stdin path now reads all of piped input
+  (`read_to_string`) instead of a single line, so multi-paragraph reports
+  are no longer silently truncated. Multi-line input promotes its first
+  line to the issue title (remainder becomes the `## Description` body);
+  single-line input is unchanged (generic `[{kind}] feedback report` title,
+  input verbatim in the Description).
+- **feedback: user-supplied title** ([genesis-gle]): `FeedbackArgs` gains
+  `title: Option<String>` with a `with_title()` builder; downstream tools
+  can expose a `--title` flag. The override wins over every derived title
+  (first stdin line, `auto-reported error: …`, generic fallback).
+  - **Compatibility note for downstream tools:** `FeedbackArgs::new()`
+    keeps its 3-argument signature and single-line stdin behavior is
+    byte-identical, so existing callers are unaffected. Constructing
+    `FeedbackArgs` via struct literal requires adding the new
+    `title: None` field. Downstream tools exposing `feedback` should add
+    a `--title` flag and wire it through.
+
 ## [0.8.0] — 2026-09-28
 
 ### Added
@@ -112,3 +134,5 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-16c]: https://github.com/charly-vibes/genesis
 [genesis-qjg]: https://github.com/charly-vibes/genesis
 [genesis-qlj]: https://github.com/charly-vibes/genesis
+[genesis-gle]: https://github.com/charly-vibes/genesis
+[genesis-og6]: https://github.com/charly-vibes/genesis
