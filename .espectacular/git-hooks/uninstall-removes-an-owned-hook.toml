@@ -1,0 +1,11 @@
+id = "uninstall-removes-an-owned-hook"
+description = "uninstall removes a marker-owned hook file"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "uninstall_removes_owned_hook", timeout_seconds = 60 },
+]

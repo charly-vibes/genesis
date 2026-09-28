@@ -1,0 +1,11 @@
+id = "husky-owned-hook-without-root-config"
+description = "husky sigil on hook files is detected without a root config"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "framework_husky_via_hook_sigil_without_root_config", timeout_seconds = 60 },
+]

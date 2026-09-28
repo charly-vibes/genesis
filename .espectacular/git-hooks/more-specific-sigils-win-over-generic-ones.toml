@@ -1,0 +1,11 @@
+id = "more-specific-sigils-win-over-generic-ones"
+description = "ordered sigil table reports the most specific owner"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "owner_most_specific_sigil_wins_bd_shim_chaining_prek", timeout_seconds = 60 },
+]

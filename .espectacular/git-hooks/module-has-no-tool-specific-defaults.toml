@@ -1,0 +1,11 @@
+id = "module-has-no-tool-specific-defaults"
+description = "module source hardcodes no consuming-tool gate commands"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "module_source_has_no_tool_gate_strings", timeout_seconds = 60 },
+]

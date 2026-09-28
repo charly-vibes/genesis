@@ -1,0 +1,11 @@
+id = "lefthook-owned-hook-is-detected"
+description = "lefthook sigil in a hook reports Owner::Lefthook"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "owner_detects_each_sigil_in_table_order", timeout_seconds = 60 },
+]

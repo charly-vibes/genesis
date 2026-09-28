@@ -1,0 +1,11 @@
+id = "install-is-idempotent-for-own-hooks"
+description = "re-installing an owned hook is a no-op update"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "install_is_idempotent_for_own_hooks", timeout_seconds = 60 },
+]

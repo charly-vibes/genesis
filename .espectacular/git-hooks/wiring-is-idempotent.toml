@@ -1,0 +1,11 @@
+id = "wiring-is-idempotent"
+description = "re-wiring existing content leaves the config unchanged"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "ensure_wired_is_idempotent_when_content_present", timeout_seconds = 60 },
+]

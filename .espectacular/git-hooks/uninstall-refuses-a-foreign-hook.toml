@@ -1,0 +1,11 @@
+id = "uninstall-refuses-a-foreign-hook"
+description = "uninstall refuses a hook without our marker"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "uninstall_refuses_foreign_hook", timeout_seconds = 60 },
+]

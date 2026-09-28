@@ -6,8 +6,8 @@ TBD - created by archiving change add-genesis-foundation. Update Purpose after a
 ### Requirement: Shared crate for cross-cutting CLI infrastructure
 
 The suite SHALL provide a single shared crate, `genesis`, that owns
-cross-cutting CLI, AIX, and self-healing infrastructure used by two or more
-charly-vibes tools.
+cross-cutting CLI, AIX, and self-healing infrastructure used by two or
+more charly-vibes tools.
 
 #### Scenario: a tool needs the JSON envelope
 
@@ -23,6 +23,14 @@ charly-vibes tools.
 - **THEN** it SHALL use `genesis::suggestions::Suggestion` to emit a
   "→ Run: …" footer
 - **AND** SHALL NOT emit a bare error without a fix or context hint.
+
+#### Scenario: tools need git hook primitives
+
+- **WHEN** a tool needs to install, detect, or wire a git hook
+  (ownership-marked install/uninstall, hook owner or framework
+  detection, lefthook managed-block wiring)
+- **THEN** it SHALL use `genesis::git_hooks`
+- **AND** SHALL NOT maintain a private copy of these primitives
 
 ### Requirement: Boundary rule
 

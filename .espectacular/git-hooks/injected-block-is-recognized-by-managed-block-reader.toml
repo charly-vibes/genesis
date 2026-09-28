@@ -1,0 +1,11 @@
+id = "injected-block-is-recognized-by-managed-block-reader"
+description = "injected block is found by the managed_block reader with tool tag intact"
+archetype = "BP"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "injected_block_is_recognized_by_managed_block_reader", timeout_seconds = 60 },
+]

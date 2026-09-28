@@ -1,0 +1,11 @@
+id = "gate-command-absent-from-stage"
+description = "absent command, missing stage, or missing config reports not wired"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "is_wired_false_when_stage_missing_or_no_config", timeout_seconds = 60 },
+]

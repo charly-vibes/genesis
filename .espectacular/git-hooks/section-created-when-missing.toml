@@ -1,0 +1,11 @@
+id = "section-created-when-missing"
+description = "ensure_wired creates a missing stage section"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "ensure_wired_creates_missing_stage_section", timeout_seconds = 60 },
+]

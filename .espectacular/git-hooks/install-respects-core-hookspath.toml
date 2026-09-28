@@ -1,0 +1,11 @@
+id = "install-respects-core-hookspath"
+description = "install resolves the target via core.hooksPath"
+archetype = "BP"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "install_respects_core_hooks_path", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "command-in-the-wrong-stage-is-not-wired"
+description = "a gate command in another stage does not mark the target stage wired"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "is_wired_command_in_wrong_stage_is_not_wired", timeout_seconds = 60 },
+]

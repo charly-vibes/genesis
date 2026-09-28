@@ -1,0 +1,11 @@
+id = "framework-signals-coexist"
+description = "coexisting signals resolve by precedence Lefthook > Prek > Husky"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "framework_precedence_lefthook_then_prek_then_husky", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "unanchorable-config-errors-without-modification"
+description = "quoted stage keys error out and the config stays unmodified"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "ensure_wired_errors_unmodified_on_quoted_stage_key", timeout_seconds = 60 },
+]

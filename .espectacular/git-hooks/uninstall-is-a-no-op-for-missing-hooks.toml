@@ -1,0 +1,11 @@
+id = "uninstall-is-a-no-op-for-missing-hooks"
+description = "uninstall of a missing hook file is a no-op"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "uninstall_is_noop_for_missing_hook", timeout_seconds = 60 },
+]

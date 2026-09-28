@@ -1,0 +1,11 @@
+id = "prek-config-present"
+description = "prek.toml reports Framework::Prek"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "framework_prek_config_present", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "tools-need-git-hook-primitives"
+description = "downstream tools adopt genesis::git_hooks instead of private copies"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "git_hooks", timeout_seconds = 60 },
+]

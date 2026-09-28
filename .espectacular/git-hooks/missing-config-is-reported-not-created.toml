@@ -1,0 +1,11 @@
+id = "missing-config-is-reported-not-created"
+description = "missing lefthook config errors and is never auto-created"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "ensure_wired_errors_on_missing_config_and_never_creates_one", timeout_seconds = 60 },
+]

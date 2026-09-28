@@ -1,0 +1,11 @@
+id = "install-writes-an-executable-hook"
+description = "install writes an executable hook with marker and script"
+archetype = "BP"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "install_writes_executable_hook_with_marker_and_script", timeout_seconds = 60 },
+]
