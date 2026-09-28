@@ -143,6 +143,95 @@ fn hook_path(root: &Path, hook_name: &HookName) -> Result<PathBuf, GitHooksError
     Ok(resolve_hooks_dir(root)?.join(hook_name.file_name()))
 }
 
+/// Identifies which known tool owns a hook file (design D3: ordered sigil
+/// table, ported from wai's `hook_owner`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Owner {
+    /// Lefthook-managed hook (sigil: `lefthook`).
+    Lefthook,
+    /// Husky-managed hook (sigil: `husky`).
+    Husky,
+    /// bd-managed hook, including bd shims that chain other tools (sigil:
+    /// `bd`).
+    Bd,
+    /// pre-commit framework hook (sigil: `pre-commit`).
+    PreCommit,
+    /// prek-managed hook (sigil: `prek`).
+    Prek,
+}
+
+/// The sigil table: more-specific sigils first (design D3). Order matters —
+/// a bd hook that chains prek must report [`Owner::Bd`], not
+/// [`Owner::Prek`], and a pure prek hook (which always mentions
+/// `pre-commit` in its `exec prek run …` line) must report
+/// [`Owner::Prek`], not [`Owner::PreCommit`]. Extend by appending entries.
+const OWNER_SIGILS: &[(&str, Owner)] = &[
+    ("lefthook", Owner::Lefthook),
+    ("husky", Owner::Husky),
+    ("bd", Owner::Bd),
+    ("prek", Owner::Prek),
+    ("pre-commit", Owner::PreCommit),
+];
+
+fn read_hook_content(root: &Path, hook_name: &HookName) -> Option<String> {
+    let path = hook_path(root, hook_name).ok()?;
+    if !path.is_file() {
+        return None;
+    }
+    std::fs::read_to_string(path).ok()
+}
+
+/// Identify which known tool owns a hook file, or `None` when the hook is
+/// missing or carries no known sigil.
+///
+/// Scans the hook's contents for the ordered sigil table (design D3), so
+/// more-specific sigils win over generic ones. Donor: wai
+/// `way/hooks.rs::hook_owner`.
+pub fn owner(root: &Path, hook_name: &HookName) -> Option<Owner> {
+    let content = read_hook_content(root, hook_name)?;
+    OWNER_SIGILS
+        .iter()
+        .find(|(sigil, _)| content.contains(sigil))
+        .map(|(_, owner)| *owner)
+}
+
+/// Identifies the hook-management framework a repository uses (design D7:
+/// the repo is assumed to use at most one framework; reported generically,
+/// including husky which has no root config).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Framework {
+    /// A `lefthook.yml` or `lefthook.yaml` config exists.
+    Lefthook,
+    /// A `prek.toml` config exists.
+    Prek,
+    /// No root config, but hook files carry the husky sigil — detected but
+    /// not wirable (wiring is lefthook-only).
+    Husky,
+    /// No known framework signals.
+    None,
+}
+
+/// Detect the repository's hook-management framework.
+///
+/// Precedence on coexisting signals (rare, defensive): Lefthook, then Prek,
+/// then Husky (via the [`owner`] sigil table on `pre-commit` / `pre-push`).
+/// Donor: espectacular `init.rs::detect_hook_framework`, extended with wai's
+/// delegation-aware hook reading.
+pub fn framework(root: &Path) -> Framework {
+    if root.join("lefthook.yml").exists() || root.join("lefthook.yaml").exists() {
+        return Framework::Lefthook;
+    }
+    if root.join("prek.toml").exists() {
+        return Framework::Prek;
+    }
+    for hook in [HookName::PreCommit, HookName::PrePush] {
+        if let Some(Owner::Husky) = owner(root, &hook) {
+            return Framework::Husky;
+        }
+    }
+    Framework::None
+}
+
 /// Ownership state of a hook file on disk.
 enum HookOwnership {
     /// No file at the hook path.
@@ -538,5 +627,133 @@ mod tests {
             "got: {err}"
         );
         assert!(hook_path.exists());
+    }
+
+    // -- Owner detection --------------------------------------------------
+
+    fn write_hook(fixture: &Fixture, hook: HookName, content: &str) {
+        let path = fixture.root().join(".git/hooks").join(hook.file_name());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, content).unwrap();
+    }
+
+    #[test]
+    fn owner_detects_each_sigil_in_table_order() {
+        let cases: &[(&str, Owner)] = &[
+            ("#!/bin/sh\n# managed by lefthook\n", Owner::Lefthook),
+            (
+                "#!/bin/sh\n. \"$(dirname -- \"$0\")\"/_/husky.sh\n",
+                Owner::Husky,
+            ),
+            (
+                "#!/bin/sh\nexec bd hooks run pre-commit \"$@\"\n",
+                Owner::Bd,
+            ),
+            (
+                "#!/bin/sh\n# installed by pre-commit framework\n", // generic
+                Owner::PreCommit,
+            ),
+            (
+                "#!/bin/sh\n# managed by prek\nexec prek run pre-commit\n",
+                Owner::Prek,
+            ),
+        ];
+        for (content, expected) in cases {
+            let fixture = install_fixture();
+            write_hook(&fixture, HookName::PreCommit, content);
+            let got = owner(fixture.root(), &HookName::PreCommit)
+                .unwrap_or_else(|| panic!("expected {expected:?} for {content:?}"));
+            assert_eq!(got, *expected, "content: {content:?}");
+        }
+    }
+
+    #[test]
+    fn owner_most_specific_sigil_wins_bd_shim_chaining_prek() {
+        // wai test: a bd hook that chains prek must report bd, not prek.
+        let fixture = install_fixture();
+        write_hook(
+            &fixture,
+            HookName::PreCommit,
+            "#!/usr/bin/env sh\n# bd-shim v2\n# chains prek\nexec prek run pre-commit\n",
+        );
+        assert_eq!(owner(fixture.root(), &HookName::PreCommit), Some(Owner::Bd));
+    }
+
+    #[test]
+    fn owner_none_for_missing_or_unknown_hook() {
+        let fixture = install_fixture();
+        assert_eq!(owner(fixture.root(), &HookName::PreCommit), None);
+        write_hook(&fixture, HookName::PreCommit, "#!/bin/sh\necho custom\n");
+        assert_eq!(owner(fixture.root(), &HookName::PreCommit), None);
+    }
+
+    #[test]
+    fn owner_resolves_hooks_dir() {
+        // Detection must honor core.hooksPath like the rest of the module.
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        fixture
+            .run(&["git", "config", "--local", "core.hooksPath", ".githooks"])
+            .unwrap();
+        let delegated = fixture.root().join(".githooks");
+        std::fs::create_dir_all(&delegated).unwrap();
+        std::fs::write(delegated.join("pre-commit"), "# managed by lefthook\n").unwrap();
+        assert_eq!(
+            owner(fixture.root(), &HookName::PreCommit),
+            Some(Owner::Lefthook)
+        );
+    }
+
+    // -- Framework detection ----------------------------------------------
+
+    #[test]
+    fn framework_lefthook_config_present() {
+        for name in ["lefthook.yml", "lefthook.yaml"] {
+            let fixture = install_fixture();
+            std::fs::write(fixture.root().join(name), "pre-commit:\n  commands:\n").unwrap();
+            assert_eq!(framework(fixture.root()), Framework::Lefthook, "{name}");
+        }
+    }
+
+    #[test]
+    fn framework_prek_config_present() {
+        let fixture = install_fixture();
+        std::fs::write(fixture.root().join("prek.toml"), "").unwrap();
+        assert_eq!(framework(fixture.root()), Framework::Prek);
+    }
+
+    #[test]
+    fn framework_husky_via_hook_sigil_without_root_config() {
+        let fixture = install_fixture();
+        write_hook(
+            &fixture,
+            HookName::PreCommit,
+            "#!/bin/sh\n. \"$(dirname -- \"$0\")\"/_/husky.sh\n",
+        );
+        assert_eq!(framework(fixture.root()), Framework::Husky);
+    }
+
+    #[test]
+    fn framework_none_without_signals() {
+        let fixture = install_fixture();
+        assert_eq!(framework(fixture.root()), Framework::None);
+    }
+
+    #[test]
+    fn framework_precedence_lefthook_then_prek_then_husky() {
+        // Lefthook beats everything.
+        let fixture = install_fixture();
+        std::fs::write(fixture.root().join("lefthook.yml"), "").unwrap();
+        std::fs::write(fixture.root().join("prek.toml"), "").unwrap();
+        write_hook(&fixture, HookName::PreCommit, "# husky\n");
+        assert_eq!(framework(fixture.root()), Framework::Lefthook);
+
+        // Prek beats husky sigils.
+        let fixture = install_fixture();
+        std::fs::write(fixture.root().join("prek.toml"), "").unwrap();
+        write_hook(&fixture, HookName::PreCommit, "# husky\n");
+        assert_eq!(framework(fixture.root()), Framework::Prek);
     }
 }

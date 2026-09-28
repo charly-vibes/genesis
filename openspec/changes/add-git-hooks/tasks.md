@@ -14,10 +14,10 @@
 - [x] 2.4 Refactor pass: extract shared read-hook-with-marker helper.
 
 ## 3. Detection — owner & framework
-- [ ] 3.1 Write failing tests: `owner()` returns `Owner::Lefthook`/`Husky`/`Bd`/`PreCommit`/`Prek` per sigil table; most-specific sigil wins (bd-shim-chaining-prek case from wai tests); `None` for missing/unknown.
-- [ ] 3.2 Implement `owner()` with ordered sigil table (port from wai `hook_owner`, design D3).
-- [ ] 3.3 Write failing tests: `framework()` → `Lefthook` for lefthook.yml/yaml, `Prek` for prek.toml, `Husky` via sigil, `None` otherwise (port espectacular `detect_hook_framework` + wai delegation tests).
-- [ ] 3.4 Implement `framework()`.
+- [x] 3.1 Write failing tests: `owner()` returns `Owner::Lefthook`/`Husky`/`Bd`/`PreCommit`/`Prek` per sigil table; most-specific sigil wins (bd-shim-chaining-prek case from wai tests); `None` for missing/unknown.
+- [x] 3.2 Implement `owner()` with ordered sigil table (port from wai `hook_owner`, design D3).
+- [x] 3.3 Write failing tests: `framework()` → `Lefthook` for lefthook.yml/yaml, `Prek` for prek.toml, `Husky` via sigil, `None` otherwise (port espectacular `detect_hook_framework` + wai delegation tests).
+- [x] 3.4 Implement `framework()`.
 
 ## 4. Lefthook wiring (managed-block based)
 - [ ] 4.1 Write failing test: `ensure_wired()` inserts managed block directly after `pre-commit:`; rest of file unchanged.
