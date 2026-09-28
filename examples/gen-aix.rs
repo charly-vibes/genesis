@@ -44,6 +44,14 @@ fn main() {
             "discovery",
             "tool discovery via .genesis/tools.toml manifest",
         ),
+        ModuleEntry::new(
+            "evals",
+            "agent evals: ErrorTaxonomy, deterministic Scenario replay, eval report contract",
+        ),
+        ModuleEntry::new(
+            "git_hooks",
+            "shared git hook primitives: install/uninstall with ownership markers, owner/framework detection, lefthook wiring",
+        ),
     ];
 
     // Key types for adoption section — derived from same module data
@@ -68,6 +76,14 @@ fn main() {
         ),
         ("scaffold", "Scaffold builder"),
         ("discovery", "scan(), register(), unregister(), Manifest"),
+        (
+            "evals",
+            "ErrorTaxonomy, parse_envelope(), Scenario, ScenarioReport — deterministic in-process eval replay",
+        ),
+        (
+            "git_hooks",
+            "install(), uninstall(), owner(), framework(), resolve_hooks_dir(), lefthook::ensure_wired(), lefthook::is_wired()",
+        ),
     ];
 
     // Generate llms.txt

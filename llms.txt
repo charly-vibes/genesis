@@ -24,4 +24,6 @@
 - `status` — cross-tool status dashboard
 - `scaffold` — init scaffolding
 - `discovery` — tool discovery via .genesis/tools.toml manifest
+- `evals` — agent evals: ErrorTaxonomy, deterministic Scenario replay, eval report contract
+- `git_hooks` — shared git hook primitives: install/uninstall with ownership markers, owner/framework detection, lefthook wiring
 

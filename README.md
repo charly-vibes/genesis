@@ -38,14 +38,14 @@ Domain logic (metrics, stores, engines, analysis) stays in each tool.
 
 ```toml
 [dependencies]
-genesis-vibes = "0.7"
+genesis-vibes = "0.8"
 ```
 
 Or use a git dependency for bleeding-edge changes:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.7.0" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.8.0" }
 ```
 
 ## Modules
@@ -66,6 +66,8 @@ genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.7.0" }
 | `status` | new | Cross-tool status/prime dashboard: StatusContributor trait, StatusBuilder |
 | `scaffold` | new | Init scaffolding: Scaffold builder for dirs, configs, gitignore, managed blocks |
 | `discovery` | new | Tool discovery via .genesis/tools.toml manifest: scan, register, unregister |
+| `evals` | new | Agent evals: ErrorTaxonomy, deterministic Scenario replay, eval report contract v1 |
+| `git_hooks` | new | Shared git hook primitives: ownership-marked install/uninstall, owner/framework detection, lefthook wiring |
 
 ## Module details
 

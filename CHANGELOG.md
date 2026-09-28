@@ -3,10 +3,28 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.8.0] — 2026-09-28
 
 ### Added
 
+- **Evals guidelines** (`add-evals-guidelines` change, archived): suite-wide
+  agent-evals conventions deployed as `openspec/specs/evals-guidelines/spec.md`
+  (13 requirements, 32 scenarios).
+  - `ErrorTaxonomy::ActionFormatViolation` (`ERR_ACTION_FORMAT_VIOLATION`):
+    new taxonomy code for agent action/argument-format faults, with
+    round-trip via `from_code`.
+  - **Eval report contract v1**: normative report schema
+    (`docs/reference/eval-report.md`) with byte-exact golden fixtures
+    (`tests/golden/eval_report_{tier2,replay}.json`) and round-trip /
+    no-nulls / vocabulary tests.
+  - `EvalsGuidelinesAdoption` advisory linter check.
+  - mdBook pages: "Running the Eval Tier Ladder in CI"
+    (`how-to/evals-ci.md`), "Why weak readers"
+    (`explanation/why-weak-readers.md`), and live-cadence guidance in
+    `how-to/evals.md`.
+  - **Compatibility note for downstream tools:** fully additive — a new
+    taxonomy variant (match arms on `ErrorTaxonomy` need the new code),
+    otherwise no existing API changed.
 - **`git_hooks` module** ([genesis-7l8], [genesis-pzz], [genesis-3a8],
   [genesis-16c], [genesis-qjg]): shared git-hook primitives consolidating
   overlapping mechanics from three donors (pretender install/uninstall with
@@ -16,6 +34,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     public module, no changes to existing APIs. The module contains only
     git-hook mechanics (guard-tested): consuming tools pass their own
     gate commands, markers, and block contents as parameters.
+- **AIX module registry complete** ([genesis-qlj]): `evals` and
+  `git_hooks` now registered in `examples/gen-aix.rs`, so the packaged
+  `llms.txt` / `llm.txt` advertise all 16 modules.
 
 ## [0.7.0] — 2026-09-17
 
@@ -90,3 +111,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-3a8]: https://github.com/charly-vibes/genesis
 [genesis-16c]: https://github.com/charly-vibes/genesis
 [genesis-qjg]: https://github.com/charly-vibes/genesis
+[genesis-qlj]: https://github.com/charly-vibes/genesis
