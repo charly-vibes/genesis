@@ -260,9 +260,18 @@ mod tests {
         tempfile::tempdir().expect("tempdir")
     }
 
-    /// Unique tool name per test to avoid races with parallel tests.
+    /// Unique tool name per call: label + pid + a per-process counter.
+    /// The scratch store is keyed by tool name (genesis-kpv: two calls
+    /// sharing a label raced on the same scratch dir when tests ran in
+    /// parallel), so uniqueness must be per call, not per label.
     fn test_tool(label: &str) -> String {
-        format!("test-{}-{}", label, std::process::id())
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        format!(
+            "test-{label}-{}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        )
     }
 
     fn write_scratch(tool: &str, exit_code: i32) {

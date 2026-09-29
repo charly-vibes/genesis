@@ -3,7 +3,7 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.8.2] — 2026-09-29
 
 ### Fixed
 
@@ -17,12 +17,32 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Suggestion::fix` strips a leading `run: `/`Run: ` from the authored
   hint — the footer already renders `→ Run: {cmd}`, so the prefix used
   to appear twice on stderr and inside the JSON hint.
+- **suggestions: trailing-command hints split at the last ` run: `
+  ** ([genesis-9us]): hints authored `every reference resolves — run:
+  specodelic lint` now yield a runnable `command` (`specodelic lint`)
+  and guidance as the `description` (`every reference resolves`); the
+  whole sentence no longer ships as the command. Leading-prefix hints
+  win over the trailing split.
 - **envelope hints: `command` is now the bare runnable command**
   ([genesis-r13]): `Output::to_envelope` used `Suggestion::footer()` for
   `HintEntry.command`, leaking the human `→ Run: ` prefix into JSON.
   New accessors `Suggestion::command()` (bare command) and
   `Suggestion::guidance()` (description without the footer line) back
   the JSON hint; human stderr rendering is unchanged.
+- **feedback tests: scratch store isolation** ([genesis-kpv]):
+  `test_tool` now appends a per-process counter — the scratch store is
+  keyed by tool name, so two calls sharing a label raced on the same
+  scratch dir under parallel test execution (one observed flake).
+
+### Downstream compatibility notes
+
+- `HintEntry.command` values change for every tool that passes hints
+  through `Output::with_next_step` — consumers parsing the JSON hint's
+  command get a runnable command now (previously the human footer line).
+- `Suggestion::Fix` command/description contents change per the two
+  split rules above; machine consumers of `suggestion` fields in
+  serialized envelopes (serde `Suggestion`) see the same shapes with
+  cleaner payloads.
 
 ## [0.8.1] — 2026-09-28
 
@@ -157,3 +177,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-qlj]: https://github.com/charly-vibes/genesis
 [genesis-gle]: https://github.com/charly-vibes/genesis
 [genesis-og6]: https://github.com/charly-vibes/genesis
+[genesis-r13]: https://github.com/charly-vibes/genesis
+[genesis-9us]: https://github.com/charly-vibes/genesis
+[genesis-kpv]: https://github.com/charly-vibes/genesis

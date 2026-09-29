@@ -45,7 +45,7 @@ Or use a git dependency for bleeding-edge changes:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.8.1" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.8.2" }
 ```
 
 ## Modules

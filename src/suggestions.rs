@@ -131,14 +131,35 @@ impl Suggestion {
         // the footer already renders '→ Run: {cmd}' — keeping the prefix
         // doubles it ('→ Run: run: …'). Strip a leading 'run: '/'Run: ' at
         // construction so the stored command is runnable bare.
-        let stripped = s
-            .strip_prefix("run: ")
-            .or_else(|| s.strip_prefix("Run: "))
-            .map(str::to_string)
-            .unwrap_or_else(|| s.clone());
+        if let Some(stripped) = s.strip_prefix("run: ").or_else(|| s.strip_prefix("Run: ")) {
+            let stripped = stripped.to_string();
+            return Suggestion::Fix {
+                command: Some(stripped.clone()),
+                description: if stripped == s { stripped } else { s },
+            };
+        }
+        // genesis-9us: trailing-command hints (specodelic's convention:
+        // 'every reference resolves — run: specodelic lint') — the tail
+        // after the LAST ' run: ' is the runnable command, the prefix is
+        // the guidance. Commands are single lines; a multi-line tail is
+        // prose, not a command.
+        if let Some(pos) = s.rfind(" run: ") {
+            let cmd = &s[pos + " run: ".len()..];
+            // Commands are single lines; a multi-line or empty tail is
+            // prose, not a command.
+            if !cmd.contains('\n') && !cmd.is_empty() {
+                let description = s[..pos]
+                    .trim_end_matches([' ', ',', ';', '—', '-'])
+                    .to_string();
+                return Suggestion::Fix {
+                    command: Some(cmd.to_string()),
+                    description,
+                };
+            }
+        }
         Suggestion::Fix {
-            command: Some(stripped.clone()),
-            description: if stripped == s { stripped } else { s },
+            command: Some(s.clone()),
+            description: s,
         }
     }
 
@@ -326,6 +347,58 @@ mod tests {
             } => {
                 assert_eq!(command.as_deref(), Some("fix the reported invariants"));
                 assert_eq!(description, "fix the reported invariants");
+            }
+            other => panic!("expected Fix, got {other:?}"),
+        }
+    }
+
+    // genesis-9us: trailing-command hints (specodelic's authoring
+    // convention) — the sentence's tail after the LAST ' run: ' is the
+    // runnable command; the prefix is the guidance.
+    #[test]
+    fn test_fix_splits_trailing_run_command() {
+        let s = Suggestion::fix("every reference resolves — run: specodelic lint");
+        match &s {
+            Suggestion::Fix {
+                command,
+                description,
+            } => {
+                assert_eq!(command.as_deref(), Some("specodelic lint"));
+                assert_eq!(description, "every reference resolves");
+            }
+            other => panic!("expected Fix, got {other:?}"),
+        }
+        assert_eq!(s.footer().as_deref(), Some("→ Run: specodelic lint"));
+        assert!(!s.message().contains("run: run:"), "{}", s.message());
+    }
+
+    #[test]
+    fn test_fix_splits_trailing_run_command_with_args() {
+        let s =
+            Suggestion::fix("fill in the four layers, then run: specodelic lint order-cancel.md");
+        match &s {
+            Suggestion::Fix {
+                command,
+                description,
+            } => {
+                assert_eq!(command.as_deref(), Some("specodelic lint order-cancel.md"));
+                assert_eq!(description, "fill in the four layers, then");
+            }
+            other => panic!("expected Fix, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_fix_prefers_leading_prefix_over_trailing_split() {
+        // A leading 'run: ' hint whose command contains 'run: ' later —
+        // the leading prefix wins (whole remainder is the command).
+        let s = Suggestion::fix("run: specodelic lint --json && echo run: done");
+        match &s {
+            Suggestion::Fix { command, .. } => {
+                assert_eq!(
+                    command.as_deref(),
+                    Some("specodelic lint --json && echo run: done")
+                );
             }
             other => panic!("expected Fix, got {other:?}"),
         }
