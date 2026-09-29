@@ -1,0 +1,11 @@
+id = "empty-string-config-is-surfaced-as-disabled"
+description = "empty-string core.hooksPath surfaces as Disabled"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "effective_hooks_dir_surfaces_disabled_for_empty_string", timeout_seconds = 60 },
+]

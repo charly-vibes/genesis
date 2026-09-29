@@ -1,0 +1,11 @@
+id = "unset-config-falls-back-to-the-default"
+description = "unset core.hooksPath resolves to default .git/hooks"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "effective_hooks_dir_reports_default_scope_when_unset", timeout_seconds = 60 },
+]

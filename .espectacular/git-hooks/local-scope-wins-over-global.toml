@@ -1,0 +1,11 @@
+id = "local-scope-wins-over-global"
+description = "local core.hooksPath overrides the global value"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "local_overrides_global_core_hooks_path", timeout_seconds = 60 },
+]

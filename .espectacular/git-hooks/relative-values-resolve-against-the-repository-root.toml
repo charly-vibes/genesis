@@ -1,0 +1,11 @@
+id = "relative-values-resolve-against-the-repository-root"
+description = "relative core.hooksPath resolves against the repo root"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "resolve_hooks_dir_honors_local_core_hooks_path", timeout_seconds = 60 },
+]

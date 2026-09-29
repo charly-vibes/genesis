@@ -60,9 +60,10 @@ the repository's hook directory, identified by an ownership marker comment.
 - **WHEN** `install()` is called and `<hooks>/` does not exist
 - **THEN** the directory SHALL be created before the hook is written
 
-#### Scenario: install respects core.hooksPath
+#### Scenario: install respects core.hooksPath at any scope
 
-- **WHEN** the repository has a local `core.hooksPath` config set
+- **WHEN** the repository has a `core.hooksPath` config set at the local,
+  global, or system scope
 - **AND** `install()` is called
 - **THEN** the hook SHALL be written into the resolved hooks directory
   instead of `.git/hooks/`
@@ -227,4 +228,57 @@ by doctor checks (wai's lefthook-wiring check, espectacular's doctor).
 - **WHEN** the command appears only under `pre-push:`
 - **AND** `is_wired(root, Stage::PreCommit, command)` is called
 - **THEN** it SHALL return `false`
+
+### Requirement: Effective hooks directory resolution
+
+genesis SHALL provide `effective_hooks_dir()` that resolves
+`core.hooksPath` across all config scopes (local → global → system),
+matching git's own precedence, and reports which scope the value came
+from so consumers can detect scope mismatches (e.g. a hook installed
+locally while git invokes hooks from a global path).
+
+#### Scenario: global scope is honored
+
+- **WHEN** no local `core.hooksPath` is set
+- **AND** the user's global git config sets `core.hooksPath`
+- **THEN** `effective_hooks_dir(root)` SHALL resolve to the global value
+- **AND** `resolve_hooks_dir(root)` SHALL return the same path
+
+#### Scenario: local scope wins over global
+
+- **WHEN** both local and global `core.hooksPath` are set
+- **THEN** the resolved directory SHALL be the local value
+
+#### Scenario: system scope is honored when higher scopes are unset
+
+- **WHEN** neither local nor global `core.hooksPath` is set
+- **AND** the system git config sets `core.hooksPath`
+- **THEN** the resolved directory SHALL be the system value
+
+#### Scenario: scope is reported to consumers
+
+- **WHEN** `effective_hooks_dir(root)` is called
+- **THEN** the result SHALL report the scope the value was found in:
+  `Local`, `Global`, `System`, `Default` (unset anywhere), or `Disabled`
+  (empty-string value)
+
+#### Scenario: empty-string config is surfaced as disabled
+
+- **WHEN** `core.hooksPath` is set to the empty string at the effective
+  scope
+- **THEN** `effective_hooks_dir(root)` SHALL report `HooksDirScope::Disabled`
+- **AND** `resolve_hooks_dir(root)` SHALL keep its documented fallback
+  (the default `.git/hooks`) so existing callers are unaffected
+
+#### Scenario: unset config falls back to the default
+
+- **WHEN** no scope sets `core.hooksPath`
+- **THEN** `effective_hooks_dir(root)` SHALL report `HooksDirScope::Default`
+  with the path `.git/hooks` under the repository root
+
+#### Scenario: relative values resolve against the repository root
+
+- **WHEN** the effective `core.hooksPath` value is a relative path
+- **THEN** the resolved directory SHALL be the value joined onto the
+  repository root
 

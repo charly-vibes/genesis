@@ -1,0 +1,11 @@
+id = "scope-is-reported-to-consumers"
+description = "effective_hooks_dir reports the scope the value came from"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "effective_hooks_dir_reports_local_scope", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "system-scope-is-honored-when-higher-scopes-are-unset"
+description = "system core.hooksPath honored when local and global are unset"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "resolve_hooks_dir_honors_system_core_hooks_path", timeout_seconds = 60 },
+]
