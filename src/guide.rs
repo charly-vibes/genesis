@@ -494,10 +494,13 @@ impl<T: Debug> Output<T> {
         };
 
         let hints = self.next_step.as_ref().and_then(|s| {
-            s.footer().map(|footer| {
+            // genesis-r13: the hint command must be the bare runnable
+            // command — footer() embeds the human '→ Run: ' prefix, which
+            // made JSON consumers receive '→ Run: run: specodelic graph'.
+            s.command().map(|cmd| {
                 vec![crate::envelope::HintEntry {
-                    command: footer,
-                    description: s.message(),
+                    command: cmd.to_string(),
+                    description: s.guidance(),
                 }]
             })
         });
@@ -1006,6 +1009,7 @@ impl ErrorSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::envelope::EnvelopeKind;
 
     // -- Verbosity ---------------------------------------------------------
 
@@ -1086,6 +1090,29 @@ mod tests {
         let suggestion = output.next_step.as_ref().unwrap();
         let footer = suggestion.footer().unwrap();
         assert!(footer.contains("run doctor"));
+    }
+
+    // genesis-r13: to_envelope must route failures to an envelope whose
+    // ok field agrees with the error kind.
+    #[test]
+    fn test_to_envelope_error_output_carries_ok_false() {
+        let out: Output<&str> = Output::failure("bad path");
+        let env = out.to_envelope("t/1.0");
+        assert_eq!(env.envelope_kind, EnvelopeKind::Error);
+        assert!(!env.ok, "failed Output must serialize ok:false");
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(json.contains("\"ok\":false"), "got: {json}");
+    }
+
+    // genesis-r13: the JSON hint command must be runnable — footer()
+    // embeds the human '→ Run: ' prefix; to_envelope must emit the bare
+    // command instead.
+    #[test]
+    fn test_to_envelope_hint_command_is_runnable() {
+        let out: Output<&str> = Output::success("ok").with_next_step("run: specodelic graph");
+        let env = out.to_envelope("t/1.0");
+        let hints = env.hints.expect("hints present");
+        assert_eq!(hints[0].command, "specodelic graph");
     }
 
     #[test]

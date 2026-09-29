@@ -3,6 +3,27 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **envelope: `ok` now agrees with `envelope_kind`** ([genesis-r13]):
+  `Output::to_envelope` routes failed outputs through `Envelope::success`
+  with `kind = Error`; the envelope's `ok` field was hardcoded `true`, so
+  error JSON read `{"ok":true,"envelope_kind":"error"}`. `ok` is now
+  derived from the kind (`false` iff `Error`). Envelopes built with
+  `Ok`/`Version`/other kinds are byte-identical.
+- **suggestions: no more `→ Run: run: …` doubling** ([genesis-r13]):
+  `Suggestion::fix` strips a leading `run: `/`Run: ` from the authored
+  hint — the footer already renders `→ Run: {cmd}`, so the prefix used
+  to appear twice on stderr and inside the JSON hint.
+- **envelope hints: `command` is now the bare runnable command**
+  ([genesis-r13]): `Output::to_envelope` used `Suggestion::footer()` for
+  `HintEntry.command`, leaking the human `→ Run: ` prefix into JSON.
+  New accessors `Suggestion::command()` (bare command) and
+  `Suggestion::guidance()` (description without the footer line) back
+  the JSON hint; human stderr rendering is unchanged.
+
 ## [0.8.1] — 2026-09-28
 
 ### Changed

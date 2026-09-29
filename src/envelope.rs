@@ -245,7 +245,10 @@ impl<T: Serialize> Envelope<T> {
         hints: Vec<HintEntry>,
     ) -> Self {
         Self {
-            ok: true,
+            // genesis-r13: ok must agree with the envelope kind —
+            // Output::to_envelope routes failed outputs through here with
+            // kind=Error; claiming ok:true would lie to machine consumers.
+            ok: !matches!(kind, EnvelopeKind::Error),
             envelope_version: ENVELOPE_VERSION.to_string(),
             cli_version: cli_version.to_string(),
             envelope_kind: kind,
@@ -372,6 +375,21 @@ mod tests {
         assert_eq!(env.data.message, "something went wrong");
         assert_eq!(env.cli_version, "my-tool/1.0.0");
         assert!(env.hints.is_none());
+    }
+
+    // genesis-r13: `Output::to_envelope` routes failed outputs through
+    // `Envelope::success` with kind=Error — the ok field must agree with
+    // the kind. An error-kind envelope claiming ok:true is a lie to
+    // machine consumers.
+    #[test]
+    fn test_error_kind_carries_ok_false() {
+        let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Error, "oops", vec![], vec![]);
+        assert!(!env.ok, "envelope with kind=Error must have ok=false");
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"ok\":false"),
+            "serialized error-kind envelope must carry ok:false — got: {json}"
+        );
     }
 
     #[test]

@@ -127,15 +127,68 @@ impl Suggestion {
     /// The hint is used as both the description and the command suggestion.
     pub fn fix(hint: impl Into<String>) -> Self {
         let s: String = hint.into();
+        // genesis-r13: hints are conventionally authored 'run: <cmd>' but
+        // the footer already renders '→ Run: {cmd}' — keeping the prefix
+        // doubles it ('→ Run: run: …'). Strip a leading 'run: '/'Run: ' at
+        // construction so the stored command is runnable bare.
+        let stripped = s
+            .strip_prefix("run: ")
+            .or_else(|| s.strip_prefix("Run: "))
+            .map(str::to_string)
+            .unwrap_or_else(|| s.clone());
         Suggestion::Fix {
-            command: Some(s.clone()),
-            description: s,
+            command: Some(stripped.clone()),
+            description: if stripped == s { stripped } else { s },
         }
     }
 
     /// Format the suggestion as a \"→ Run: …\" footer string."}]
     ///
     /// Returns `None` if the suggestion doesn't have a runnable command.
+    /// The bare runnable command this suggestion points at, without the
+    /// human `→ Run: ` prefix (genesis-r13: JSON `HintEntry.command` must
+    /// be executable, not display-formatted).
+    pub fn command(&self) -> Option<&str> {
+        match self {
+            Suggestion::DidYouMean { suggestion, .. } => Some(suggestion),
+            Suggestion::WrongOrder { correct, .. } => Some(correct),
+            Suggestion::Fix { command, .. } => command.as_deref(),
+            Suggestion::ContextHint { .. } => None,
+        }
+    }
+
+    /// The human guidance text for this suggestion, without the
+    /// `→ Run: {command}` footer line (genesis-r13: the JSON hint's
+    /// `description` pairs with the bare `command`; the footer is the
+    /// human rendering and must not leak into either field).
+    pub fn guidance(&self) -> String {
+        match self {
+            Suggestion::DidYouMean {
+                original,
+                suggestion,
+            } => {
+                format!(
+                    "Unknown command '{}'. Did you mean '{}'?",
+                    original, suggestion
+                )
+            }
+            Suggestion::WrongOrder { original, correct } => {
+                format!(
+                    "Invalid command '{}'. Did you mean '{}'?",
+                    original, correct
+                )
+            }
+            Suggestion::ContextHint { message, path } => {
+                if let Some(p) = path {
+                    format!("{}: {}", message, p)
+                } else {
+                    message.clone()
+                }
+            }
+            Suggestion::Fix { description, .. } => description.clone(),
+        }
+    }
+
     pub fn footer(&self) -> Option<String> {
         match self {
             Suggestion::DidYouMean { suggestion, .. } => Some(format!("→ Run: {}", suggestion)),
@@ -230,7 +283,55 @@ impl SuggestionEngine {
 mod tests {
     use super::*;
 
-    // ── CommandRegistry ───────────────────────────────────────────────
+    // ── Suggestion::fix authoring convention (genesis-r13) ─────────
+
+    #[test]
+    fn test_fix_strips_leading_run_prefix() {
+        // Hints are authored 'run: <cmd>'; the footer already renders
+        // '→ Run: {cmd}' — keeping the prefix would double it
+        // ('→ Run: run: specodelic graph').
+        let s = Suggestion::fix("run: specodelic graph");
+        match &s {
+            Suggestion::Fix { command, .. } => {
+                assert_eq!(command.as_deref(), Some("specodelic graph"));
+            }
+            other => panic!("expected Fix, got {other:?}"),
+        }
+        assert_eq!(s.footer().as_deref(), Some("→ Run: specodelic graph"));
+        assert!(
+            !s.message().contains("run: run:"),
+            "no doubled prefix: {}",
+            s.message()
+        );
+    }
+
+    #[test]
+    fn test_fix_strips_capitalized_run_prefix() {
+        let s = Suggestion::fix("Run: doctor");
+        match &s {
+            Suggestion::Fix { command, .. } => {
+                assert_eq!(command.as_deref(), Some("doctor"));
+            }
+            other => panic!("expected Fix, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_fix_without_run_prefix_keeps_full_hint() {
+        let s = Suggestion::fix("fix the reported invariants");
+        match &s {
+            Suggestion::Fix {
+                command,
+                description,
+            } => {
+                assert_eq!(command.as_deref(), Some("fix the reported invariants"));
+                assert_eq!(description, "fix the reported invariants");
+            }
+            other => panic!("expected Fix, got {other:?}"),
+        }
+    }
+
+    // ── CommandRegistry ──────────────────────────────────────────
 
     #[test]
     fn test_registry_empty_by_default() {
