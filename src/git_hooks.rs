@@ -104,37 +104,131 @@ pub fn repo_root_from(start: &Path) -> Result<PathBuf, GitHooksError> {
 
 /// Resolve the repository's hook directory.
 ///
-/// Returns the local `core.hooksPath` when set (relative paths are
-/// resolved against `root`, matching git's semantics), else the default
-/// `.git/hooks`. Donor: wai `git_core_hooks_path()`.
+/// Resolves `core.hooksPath` across all config scopes (local → global →
+/// system), matching git's own precedence (genesis-c64); relative values
+/// resolve against `root`. When no scope sets `core.hooksPath`, returns
+/// the default `.git/hooks`. When `core.hooksPath` is set to the empty
+/// string (git disables hooks), falls back to the default — consumers
+/// that need to detect the disabled case should use
+/// [`effective_hooks_dir`].
+///
+/// Donor: wai `git_core_hooks_path()`.
 pub fn resolve_hooks_dir(root: &Path) -> Result<PathBuf, GitHooksError> {
-    let output = std::process::Command::new("git")
-        .args([
-            "-C",
-            &root.to_string_lossy(),
-            "config",
-            "--local",
-            "core.hooksPath",
-        ])
-        .output()
-        .map_err(|source| GitHooksError::Io {
-            path: root.to_path_buf(),
-            message: "failed to run `git config --local core.hooksPath`".to_string(),
-            source,
-        })?;
-    // Non-zero exit means the config is unset — fall back to the default.
-    let hooks_path = if output.status.success() {
-        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if val.is_empty() { None } else { Some(val) }
+    resolve_hooks_dir_with_env(root, &[])
+}
+
+/// Like [`resolve_hooks_dir`], but passes extra environment variables to
+/// the spawned `git config` process. Test seam (see [`effective_hooks_dir_with_env`]).
+fn resolve_hooks_dir_with_env(
+    root: &Path,
+    envs: &[(String, String)],
+) -> Result<PathBuf, GitHooksError> {
+    let effective = effective_hooks_dir_with_env(root, envs)?;
+    if effective.scope == HooksDirScope::Disabled {
+        return Ok(root.join(".git/hooks"));
+    }
+    Ok(effective.path)
+}
+
+/// Which config scope an effective `core.hooksPath` value was found in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HooksDirScope {
+    /// Set in the repository's local config (`.git/config`).
+    Local,
+    /// Set in the user's global config (XDG or `$HOME/.gitconfig`).
+    Global,
+    /// Set in the system config.
+    System,
+    /// Unset everywhere — git's default `.git/hooks`.
+    Default,
+    /// `core.hooksPath` is set to the empty string — git disables hooks
+    /// entirely. [`EffectiveHooksDir::path`] is empty in this case.
+    Disabled,
+}
+
+/// The hooks directory git will actually use, plus the scope the setting
+/// came from. Consumers (doctor-style checks) use [`HooksDirScope`] to
+/// warn when a hook was installed at a different scope than the one git
+/// will invoke hooks from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectiveHooksDir {
+    /// Resolved hooks directory. Empty when the scope is [`HooksDirScope::Disabled`].
+    pub path: PathBuf,
+    /// Where the effective value was found.
+    pub scope: HooksDirScope,
+}
+
+/// Resolve `core.hooksPath` across all config scopes (local → global →
+/// system) and report which scope the effective value came from.
+///
+/// Relative values resolve against `root` for any scope (git runs hooks
+/// with the repository root as the working directory in the common
+/// case). An empty-string value is reported as
+/// [`HooksDirScope::Disabled`] rather than falling back to the default.
+pub fn effective_hooks_dir(root: &Path) -> Result<EffectiveHooksDir, GitHooksError> {
+    effective_hooks_dir_with_env(root, &[])
+}
+
+/// Like [`effective_hooks_dir`], but passes extra environment variables
+/// to each spawned `git config` process. Test seam: lets tests redirect
+/// git's global/system scopes via `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`
+/// without mutating process env (racy across parallel tests).
+fn effective_hooks_dir_with_env(
+    root: &Path,
+    envs: &[(String, String)],
+) -> Result<EffectiveHooksDir, GitHooksError> {
+    let scopes = [
+        (&["--local"][..], HooksDirScope::Local),
+        (&["--global"][..], HooksDirScope::Global),
+        (&["--system"][..], HooksDirScope::System),
+    ];
+    for (scope_args, scope) in scopes {
+        if let Some(value) = query_hooks_path(root, scope_args, envs)? {
+            if value.is_empty() {
+                return Ok(EffectiveHooksDir {
+                    path: PathBuf::new(),
+                    scope: HooksDirScope::Disabled,
+                });
+            }
+            let path = if Path::new(&value).is_relative() {
+                root.join(value)
+            } else {
+                PathBuf::from(value)
+            };
+            return Ok(EffectiveHooksDir { path, scope });
+        }
+    }
+    Ok(EffectiveHooksDir {
+        path: root.join(".git/hooks"),
+        scope: HooksDirScope::Default,
+    })
+}
+
+/// Query `core.hooksPath` at one config scope; `Ok(None)` when unset.
+fn query_hooks_path(
+    root: &Path,
+    scope_args: &[&str],
+    envs: &[(String, String)],
+) -> Result<Option<String>, GitHooksError> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["-C", &root.to_string_lossy(), "config"])
+        .args(scope_args)
+        .arg("core.hooksPath");
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    let output = cmd.output().map_err(|source| GitHooksError::Io {
+        path: root.to_path_buf(),
+        message: "failed to run `git config core.hooksPath`".to_string(),
+        source,
+    })?;
+    // Non-zero exit means the config is unset at this scope.
+    if output.status.success() {
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ))
     } else {
-        None
-    };
-    match hooks_path {
-        // Relative paths resolve against the repo root (git's own
-        // semantics for core.hooksPath).
-        Some(p) if Path::new(&p).is_relative() => Ok(root.join(p)),
-        Some(p) => Ok(PathBuf::from(p)),
-        None => Ok(root.join(".git/hooks")),
+        Ok(None)
     }
 }
 
@@ -164,8 +258,12 @@ impl HookName {
 
 /// Path of a hook file, resolved through [`resolve_hooks_dir`] (design D2:
 /// `core.hooksPath` is honored everywhere).
-fn hook_path(root: &Path, hook_name: &HookName) -> Result<PathBuf, GitHooksError> {
-    Ok(resolve_hooks_dir(root)?.join(hook_name.file_name()))
+fn hook_path_with_env(
+    root: &Path,
+    hook_name: &HookName,
+    envs: &[(String, String)],
+) -> Result<PathBuf, GitHooksError> {
+    Ok(resolve_hooks_dir_with_env(root, envs)?.join(hook_name.file_name()))
 }
 
 /// Identifies which known tool owns a hook file (design D3: ordered sigil
@@ -198,8 +296,12 @@ const OWNER_SIGILS: &[(&str, Owner)] = &[
     ("pre-commit", Owner::PreCommit),
 ];
 
-fn read_hook_content(root: &Path, hook_name: &HookName) -> Option<String> {
-    let path = hook_path(root, hook_name).ok()?;
+fn read_hook_content(
+    root: &Path,
+    hook_name: &HookName,
+    envs: &[(String, String)],
+) -> Option<String> {
+    let path = hook_path_with_env(root, hook_name, envs).ok()?;
     if !path.is_file() {
         return None;
     }
@@ -213,7 +315,13 @@ fn read_hook_content(root: &Path, hook_name: &HookName) -> Option<String> {
 /// more-specific sigils win over generic ones. Donor: wai
 /// `way/hooks.rs::hook_owner`.
 pub fn owner(root: &Path, hook_name: &HookName) -> Option<Owner> {
-    let content = read_hook_content(root, hook_name)?;
+    owner_with_env(root, hook_name, &[])
+}
+
+/// Like [`owner`], but passes extra environment variables to any spawned
+/// `git config` process (test seam — see [`effective_hooks_dir_with_env`]).
+fn owner_with_env(root: &Path, hook_name: &HookName, envs: &[(String, String)]) -> Option<Owner> {
+    let content = read_hook_content(root, hook_name, envs)?;
     OWNER_SIGILS
         .iter()
         .find(|(sigil, _)| content.contains(sigil))
@@ -243,6 +351,12 @@ pub enum Framework {
 /// Donor: espectacular `init.rs::detect_hook_framework`, extended with wai's
 /// delegation-aware hook reading.
 pub fn framework(root: &Path) -> Framework {
+    framework_with_env(root, &[])
+}
+
+/// Like [`framework`], but passes extra environment variables to any
+/// spawned `git config` process (test seam — see [`effective_hooks_dir_with_env`]).
+fn framework_with_env(root: &Path, envs: &[(String, String)]) -> Framework {
     if root.join("lefthook.yml").exists() || root.join("lefthook.yaml").exists() {
         return Framework::Lefthook;
     }
@@ -250,7 +364,7 @@ pub fn framework(root: &Path) -> Framework {
         return Framework::Prek;
     }
     for hook in [HookName::PreCommit, HookName::PrePush] {
-        if let Some(Owner::Husky) = owner(root, &hook) {
+        if let Some(Owner::Husky) = owner_with_env(root, &hook, envs) {
             return Framework::Husky;
         }
     }
@@ -541,7 +655,19 @@ pub fn install(
     marker: &str,
     script: &str,
 ) -> Result<PathBuf, GitHooksError> {
-    let path = hook_path(root, &hook_name)?;
+    install_with_env(root, hook_name, marker, script, &[])
+}
+
+/// Like [`install`], but passes extra environment variables to any spawned
+/// `git config` process (test seam — see [`effective_hooks_dir_with_env`]).
+fn install_with_env(
+    root: &Path,
+    hook_name: HookName,
+    marker: &str,
+    script: &str,
+    envs: &[(String, String)],
+) -> Result<PathBuf, GitHooksError> {
+    let path = hook_path_with_env(root, &hook_name, envs)?;
     match read_hook_ownership(&path, marker)? {
         HookOwnership::Foreign => {
             return Err(GitHooksError::ForeignHook {
@@ -571,7 +697,18 @@ pub fn install(
 /// No-op when the hook file does not exist; refuses to remove a foreign
 /// hook.
 pub fn uninstall(root: &Path, hook_name: HookName, marker: &str) -> Result<PathBuf, GitHooksError> {
-    let path = hook_path(root, &hook_name)?;
+    uninstall_with_env(root, hook_name, marker, &[])
+}
+
+/// Like [`uninstall`], but passes extra environment variables to any
+/// spawned `git config` process (test seam — see [`effective_hooks_dir_with_env`]).
+fn uninstall_with_env(
+    root: &Path,
+    hook_name: HookName,
+    marker: &str,
+    envs: &[(String, String)],
+) -> Result<PathBuf, GitHooksError> {
+    let path = hook_path_with_env(root, &hook_name, envs)?;
     match read_hook_ownership(&path, marker)? {
         HookOwnership::Missing => Ok(path),
         HookOwnership::Foreign => Err(GitHooksError::ForeignHook {
@@ -590,6 +727,56 @@ pub fn uninstall(root: &Path, hook_name: HookName, marker: &str) -> Result<PathB
 mod tests {
     use super::*;
     use crate::fixture::Fixture;
+
+    // -- Scope isolation --------------------------------------------------
+
+    /// Env pairs that point git's global/system config scopes at absent
+    /// fixture-local paths. Without this, tests inherit the machine's real
+    /// global `core.hooksPath` (the exact scenario genesis-c64 fixes) and
+    /// the default-path expectations break. Rust runs tests in parallel
+    /// threads, so mutating process env is not an option.
+    fn isolated_env(root: &Path) -> Vec<(String, String)> {
+        let global = root.join(".git/genesis-test-absent-global-gitconfig");
+        let system = root.join(".git/genesis-test-absent-system-gitconfig");
+        vec![
+            (
+                "GIT_CONFIG_GLOBAL".to_string(),
+                global.to_string_lossy().into_owned(),
+            ),
+            (
+                "GIT_CONFIG_SYSTEM".to_string(),
+                system.to_string_lossy().into_owned(),
+            ),
+        ]
+    }
+
+    // Local wrappers: same names as the public API, but with git's
+    // global/system scopes isolated per fixture (glob imports from
+    // `super::*` are shadowed by these definitions).
+    fn resolve_hooks_dir(root: &Path) -> Result<PathBuf, GitHooksError> {
+        resolve_hooks_dir_with_env(root, &isolated_env(root))
+    }
+
+    fn install(
+        root: &Path,
+        hook_name: HookName,
+        marker: &str,
+        script: &str,
+    ) -> Result<PathBuf, GitHooksError> {
+        install_with_env(root, hook_name, marker, script, &isolated_env(root))
+    }
+
+    fn uninstall(root: &Path, hook_name: HookName, marker: &str) -> Result<PathBuf, GitHooksError> {
+        uninstall_with_env(root, hook_name, marker, &isolated_env(root))
+    }
+
+    fn owner(root: &Path, hook_name: &HookName) -> Option<Owner> {
+        owner_with_env(root, hook_name, &isolated_env(root))
+    }
+
+    fn framework(root: &Path) -> Framework {
+        framework_with_env(root, &isolated_env(root))
+    }
 
     // -- Repository root discovery ---------------------------------------
 
@@ -654,6 +841,152 @@ mod tests {
         assert!(out.success(), "git config failed: {}", out.stderr);
         let resolved = resolve_hooks_dir(fixture.root()).unwrap();
         assert_eq!(resolved, fixture.root().join(".githooks"));
+    }
+
+    // -- Multi-scope resolution (genesis-c64) ----------------------------
+
+    /// Writes a global git config setting `core.hooksPath` and returns the
+    /// env pairs that point git's global/system scopes at fixture-local
+    /// files (avoids touching process env, which is racy across tests).
+    fn global_scope_env(fixture: &Fixture, hooks_path: &str) -> Vec<(String, String)> {
+        let global_cfg = fixture.path("global-gitconfig");
+        std::fs::write(&global_cfg, format!("[core]\n\thooksPath = {hooks_path}\n")).unwrap();
+        let system_cfg = fixture.path("system-gitconfig");
+        std::fs::write(&system_cfg, "").unwrap();
+        vec![
+            (
+                "GIT_CONFIG_GLOBAL".to_string(),
+                global_cfg.to_string_lossy().into_owned(),
+            ),
+            (
+                "GIT_CONFIG_SYSTEM".to_string(),
+                system_cfg.to_string_lossy().into_owned(),
+            ),
+        ]
+    }
+
+    fn effective_with_env(
+        root: &Path,
+        envs: &[(String, String)],
+    ) -> Result<EffectiveHooksDir, GitHooksError> {
+        effective_hooks_dir_with_env(root, envs)
+    }
+
+    #[test]
+    fn resolve_hooks_dir_honors_global_core_hooks_path() {
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        let envs = global_scope_env(&fixture, ".global-hooks");
+        let resolved = effective_with_env(fixture.root(), &envs).unwrap();
+        assert_eq!(resolved.path, fixture.root().join(".global-hooks"));
+        assert_eq!(resolved.scope, HooksDirScope::Global);
+        // resolve_hooks_dir agrees when it sees the same env.
+        assert_eq!(
+            resolve_hooks_dir_with_env(fixture.root(), &envs).unwrap(),
+            fixture.root().join(".global-hooks"),
+            "multi-scope resolution must not drop the global value"
+        );
+    }
+
+    #[test]
+    fn local_overrides_global_core_hooks_path() {
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        let envs = global_scope_env(&fixture, ".global-hooks");
+        let out = fixture
+            .run(&["git", "config", "--local", "core.hooksPath", ".githooks"])
+            .unwrap();
+        assert!(out.success(), "git config failed: {}", out.stderr);
+        let resolved = effective_with_env(fixture.root(), &envs).unwrap();
+        assert_eq!(resolved.path, fixture.root().join(".githooks"));
+        assert_eq!(resolved.scope, HooksDirScope::Local);
+    }
+
+    #[test]
+    fn resolve_hooks_dir_honors_system_core_hooks_path() {
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        // Empty GIT_CONFIG_GLOBAL + populated GIT_CONFIG_SYSTEM isolates the
+        // system scope.
+        let system_cfg = fixture.path("system-gitconfig");
+        std::fs::write(&system_cfg, "[core]\n\thooksPath = .system-hooks\n").unwrap();
+        let envs = vec![
+            (
+                "GIT_CONFIG_GLOBAL".to_string(),
+                fixture
+                    .path("absent-gitconfig")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            (
+                "GIT_CONFIG_SYSTEM".to_string(),
+                system_cfg.to_string_lossy().into_owned(),
+            ),
+        ];
+        let resolved = effective_with_env(fixture.root(), &envs).unwrap();
+        assert_eq!(resolved.path, fixture.root().join(".system-hooks"));
+        assert_eq!(resolved.scope, HooksDirScope::System);
+    }
+
+    #[test]
+    fn effective_hooks_dir_reports_default_scope_when_unset() {
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        let envs = vec![
+            (
+                "GIT_CONFIG_GLOBAL".to_string(),
+                fixture.path("absent-global").to_string_lossy().into_owned(),
+            ),
+            (
+                "GIT_CONFIG_SYSTEM".to_string(),
+                fixture.path("absent-system").to_string_lossy().into_owned(),
+            ),
+        ];
+        let resolved = effective_with_env(fixture.root(), &envs).unwrap();
+        assert_eq!(resolved.scope, HooksDirScope::Default);
+        assert_eq!(resolved.path, fixture.root().join(".git/hooks"));
+    }
+
+    #[test]
+    fn effective_hooks_dir_reports_local_scope() {
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        let out = fixture
+            .run(&["git", "config", "--local", "core.hooksPath", ".githooks"])
+            .unwrap();
+        assert!(out.success(), "git config failed: {}", out.stderr);
+        let resolved = effective_with_env(fixture.root(), &[]).unwrap();
+        assert_eq!(resolved.scope, HooksDirScope::Local);
+        assert_eq!(resolved.path, fixture.root().join(".githooks"));
+    }
+
+    #[test]
+    fn effective_hooks_dir_surfaces_disabled_for_empty_string() {
+        let fixture = match Fixture::new().with_git_init().build() {
+            Ok(f) => f,
+            Err(e) => panic!("fixture build failed: {e}"),
+        };
+        let out = fixture
+            .run(&["git", "config", "--local", "core.hooksPath", ""])
+            .unwrap();
+        assert!(out.success(), "git config failed: {}", out.stderr);
+        let resolved = effective_with_env(fixture.root(), &[]).unwrap();
+        assert_eq!(resolved.scope, HooksDirScope::Disabled);
+        // resolve_hooks_dir keeps its documented fallback for callers.
+        assert_eq!(
+            resolve_hooks_dir(fixture.root()).unwrap(),
+            fixture.root().join(".git/hooks")
+        );
     }
 
     // -- Hook file names -------------------------------------------------

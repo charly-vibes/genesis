@@ -3,6 +3,28 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **git_hooks: `resolve_hooks_dir()` now resolves `core.hooksPath` across
+  all config scopes** ([genesis-c64]): local → global → system, matching
+  git's own precedence. Previously only the repo-local value was honored,
+  so with a global `core.hooksPath` (e.g. a lefthook shim) hooks installed
+  by downstream tools were silently never invoked by git.
+
+### Added
+
+- **git_hooks: `effective_hooks_dir()` + `HooksDirScope`/`EffectiveHooksDir`**
+  ([genesis-c64]): resolves across all scopes and reports which scope the
+  effective value came from, so doctor-style checks can warn when a hook
+  was installed at a different scope than the one git will use.
+  Empty-string `core.hooksPath` (git disables hooks) is surfaced as
+  `HooksDirScope::Disabled`; `resolve_hooks_dir()` keeps its old fallback
+  (default `.git/hooks`) for that case, so existing callers are unaffected.
+
+[genesis-c64]: https://github.com/charly-vibes/genesis/issues/12
+
 ## [0.8.2] — 2026-09-29
 
 ### Fixed

@@ -582,6 +582,8 @@ as parameters (guard-tested boundary).
 | `Owner` | Known hook owners (sigil table: `Lefthook`, `Husky`, `Bd`, `PreCommit`, `Prek`) |
 | `Framework` | Hook framework detection (`Lefthook`, `Prek`, `Husky`, `None`) |
 | `GitHooksError` | `NotInRepo`, `ForeignHook`, `Io`, `MissingLefthookConfig`, `UnanchorableLefthookConfig` |
+| `HooksDirScope` | Where an effective `core.hooksPath` was found (`Local`, `Global`, `System`, `Default`, `Disabled`) |
+| `EffectiveHooksDir` | Resolved hooks dir + the scope it came from (`path`, `scope`) |
 | `lefthook::Stage` | Lefthook config stages (`PreCommit`, `PrePush`) |
 | `lefthook::WiredOutcome` | `ensure_wired` result (`Injected`, `AlreadyWired`) |
 
@@ -591,7 +593,8 @@ as parameters (guard-tested boundary).
 | :--- | :--- |
 | `repo_root()` | Walk up from cwd to the first `.git` entry |
 | `repo_root_from(start)` | Same walk from an explicit start directory |
-| `resolve_hooks_dir(root)` | Resolve the hooks dir, honoring `core.hooksPath` |
+| `resolve_hooks_dir(root)` | Resolve the hooks dir honoring `core.hooksPath` across all scopes (local → global → system) |
+| `effective_hooks_dir(root)` | Resolve across all scopes **and** report the scope; empty-string config is `Disabled` |
 | `install(root, hook_name, marker, script)` | Install a hook file with an ownership marker; refuses foreign hooks |
 | `uninstall(root, hook_name, marker)` | Remove a marker-owned hook file; refuses foreign hooks |
 | `owner(root, hook_name)` | Detect which known tool owns a hook (ordered sigil table) |
