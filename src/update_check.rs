@@ -9,7 +9,9 @@
 //!   results are cached at `<cache>/genesis/update-check/<crate>.json`.
 //! - **Fail-silent.** Any error — network, timeout, corrupt cache, unwritable
 //!   cache dir — degrades to `None`. This function must never panic, never
-//!   block meaningfully (2s timeout), and never produce user-facing errors.
+//!   block meaningfully (2s connect / 5s total), and never produce
+//!   user-facing errors. Set `GENESIS_UPDATE_CHECK_DEBUG=1` to get one
+//!   stderr line per skip/fail reason while wiring a dependent.
 //! - **CI-aware.** `CI=true` or `GENESIS_NO_UPDATE_CHECK=<non-empty>` skips
 //!   the check entirely, before any IO.
 //! - **Rate-limit polite.** crates.io 403/429 responses double the cache TTL
@@ -32,8 +34,11 @@ const ERROR_BACKOFF_SECS: u64 = 24 * 60 * 60;
 pub const CRATES_IO_API: &str = "https://crates.io/api/v1/crates";
 
 const USER_AGENT: &str = concat!("genesis-vibes/", env!("CARGO_PKG_VERSION"));
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-const TOTAL_TIMEOUT: Duration = Duration::from_secs(2);
+/// Connect timeout for crates.io requests.
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+/// Total request budget: connect + send + receive. Generous enough for slow
+/// links (a 3s response must fit) while still bounded (genesis-4mq EDGE-003).
+pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// An available update for a crate, as surfaced by [`check`] / [`check_with`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +68,9 @@ pub fn notice(info: &UpdateInfo) -> String {
 /// `<cache>` honors `XDG_CACHE_HOME`, falling back to `$HOME/.cache`.
 /// Returns `None` when neither is set (the caller should skip silently).
 pub fn cache_path(crate_name: &str) -> Option<PathBuf> {
+    if !is_valid_crate_name(crate_name) {
+        return None;
+    }
     let base = std::env::var("XDG_CACHE_HOME")
         .ok()
         .filter(|v| !v.is_empty())
@@ -113,12 +121,17 @@ pub fn check_with(
     cache_dir: &std::path::Path,
     api_base: &str,
 ) -> Option<UpdateInfo> {
+    if !is_valid_crate_name(crate_name) {
+        debug_emit("rejecting invalid crate name");
+        return None;
+    }
     let cache_file = cache_dir.join(format!("{crate_name}.json"));
 
-    // 1. Fresh cache short-circuits: zero HTTP, zero latency.
+    // 1. Fresh cache short-circuits: zero HTTP, zero latency. A future
+    //    checked_at (clock skew) counts as stale, never maximally fresh.
     if let Some(cached) = read_cache(&cache_file) {
         let now = unix_now();
-        if now.saturating_sub(cached.checked_at) < cached.ttl_secs {
+        if now >= cached.checked_at && now - cached.checked_at < cached.ttl_secs {
             return cached.latest.and_then(|latest| {
                 (latest != current_version).then(|| UpdateInfo {
                     crate_name: crate_name.to_string(),
@@ -194,43 +207,55 @@ fn fetch_latest(
     let body = match agent.get(&url).call() {
         Ok(resp) => match resp.into_string() {
             Ok(b) => b,
-            Err(_) => return None,
+            Err(_) => {
+                debug_emit("unreadable response body");
+                return None;
+            }
         },
-        Err(ureq::Error::Status(code, _)) if code == 403 || code == 429 => {
-            // Rate-limited: double the default TTL and cache the miss.
+        Err(ureq::Error::Status(code, _)) => {
+            let ttl_secs = if code == 403 || code == 429 {
+                // Rate-limited: double the default TTL.
+                DEFAULT_TTL_SECS * 2
+            } else {
+                // 404 (wrong crate name!), 5xx, …: short backoff.
+                ERROR_BACKOFF_SECS
+            };
+            debug_emit(&format!("HTTP {code} for {url}"));
             write_cache(
                 backoff_cache_file,
-                CacheEntry {
-                    checked_at: unix_now(),
-                    latest: None,
-                    published_at: None,
-                    ttl_secs: DEFAULT_TTL_SECS * 2,
-                },
+                backoff_entry(backoff_cache_file, ttl_secs),
             );
             return None;
         }
-        Err(_) => {
+        Err(err) => {
             // Transport error (offline, timeout, refused): short backoff.
+            debug_emit(&format!("transport error: {err}"));
             write_cache(
                 backoff_cache_file,
-                CacheEntry {
-                    checked_at: unix_now(),
-                    latest: None,
-                    published_at: None,
-                    ttl_secs: ERROR_BACKOFF_SECS,
-                },
+                backoff_entry(backoff_cache_file, ERROR_BACKOFF_SECS),
             );
             return None;
         }
     };
 
-    let parsed: CratesIoResponse = serde_json::from_str(&body).ok()?;
+    let parsed: CratesIoResponse = match serde_json::from_str(&body) {
+        Ok(p) => p,
+        Err(err) => {
+            debug_emit(&format!("malformed response body: {err}"));
+            return None;
+        }
+    };
+    // crates.io returns versions newest-first, so the first stable entry IS
+    // the latest — never compare created_at strings (ties would resolve to
+    // the oldest version). genesis-4mq CORR-001.
     let latest = parsed
         .versions
         .iter()
-        .filter(|v| !v.yanked)
-        .filter(|v| is_stable(&v.num))
-        .max_by(|a, b| a.created_at.cmp(&b.created_at))?;
+        .find(|v| !v.yanked && is_stable(&v.num));
+    let Some(latest) = latest else {
+        debug_emit("no non-yanked stable version published");
+        return None;
+    };
 
     Some(FetchOutcome {
         latest: Some(latest.num.clone()),
@@ -252,6 +277,40 @@ fn is_stable(version: &str) -> bool {
 struct CratesIoResponse {
     #[serde(default)]
     versions: Vec<CratesIoVersion>,
+}
+
+/// Backoff cache entry for a failed fetch. A previously known-good
+/// `latest`/`published_at` is preserved (genesis-4mq CORR-003) so a failed
+/// fetch never downgrades cached knowledge to "no update".
+fn backoff_entry(backoff_cache_file: &std::path::Path, ttl_secs: u64) -> CacheEntry {
+    let prior = read_cache(backoff_cache_file);
+    CacheEntry {
+        checked_at: unix_now(),
+        latest: prior.as_ref().and_then(|e| e.latest.clone()),
+        published_at: prior.as_ref().and_then(|e| e.published_at.clone()),
+        ttl_secs,
+    }
+}
+
+/// A crate name is safe to interpolate into URLs and cache filenames:
+/// non-empty, ASCII alphanumeric plus `-` and `_` (genesis-4mq CORR-002).
+fn is_valid_crate_name(crate_name: &str) -> bool {
+    !crate_name.is_empty()
+        && crate_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// One stderr line when `GENESIS_UPDATE_CHECK_DEBUG` is set to a non-empty
+/// value. De-risks silent 404s while wiring dependents (wai's crate is
+/// `wai-cli`, NOT `wai`). genesis-4mq EXCL-002.
+fn debug_emit(reason: &str) {
+    if std::env::var("GENESIS_UPDATE_CHECK_DEBUG")
+        .ok()
+        .is_some_and(|v| !v.is_empty())
+    {
+        eprintln!("genesis-vibes update-check: {reason}");
+    }
 }
 
 #[derive(Debug, serde::Deserialize)]
