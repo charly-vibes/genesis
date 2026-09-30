@@ -3,6 +3,40 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **update-check: version selection no longer compares `created_at`
+  timestamps** ([genesis-4mq]): the first non-yanked stable entry of the
+  crates.io response is selected directly. Timestamp-string comparison
+  resolved ties to the OLDEST version (crates.io is newest-first).
+- **update-check: crate names are validated before use** ([genesis-4mq]):
+  names must be non-empty ASCII alphanumeric plus `-`/`_`; anything else
+  (e.g. `../` traversal) returns `None` before any IO. Applies to
+  `check`, `check_with`, and `cache_path`.
+- **update-check: failed fetches preserve a known-good cached `latest`**
+  ([genesis-4mq]): backoff entries (transport errors, 404, rate limits)
+  keep the previously known `latest`/`published_at` instead of downgrading
+  cached knowledge to "no update".
+- **update-check: a future `checked_at` (clock skew) is treated as stale**
+  ([genesis-4mq]), forcing a refetch instead of being trusted as maximally
+  fresh.
+
+### Changed
+
+- **update-check: total request timeout raised from 2s to 5s**
+  ([genesis-4mq]) — connect stays at 2s (`CONNECT_TIMEOUT`/`TOTAL_TIMEOUT`
+  are now public constants), so responses over slow links still succeed.
+
+### Added
+
+- **update-check: `GENESIS_UPDATE_CHECK_DEBUG=1` emits one stderr line per
+  skip/fail reason** ([genesis-4mq]) — de-risks silent 404s when wiring
+  dependents (pass YOUR crate name; wai's is `wai-cli`, not `wai`).
+
+[genesis-4mq]: https://github.com/charly-vibes/genesis
+
 ## [0.8.3] — 2026-09-29
 
 ### Fixed
