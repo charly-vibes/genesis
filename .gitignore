@@ -64,3 +64,4 @@ target
 docs/_book/
 *.old
 .beads.gate.lock
+docs/src/specs/

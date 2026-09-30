@@ -1,0 +1,13 @@
+# Pinned ecosystem tool versions for this repo's CI and dev setup.
+# Standardization §4: installs are pinned, never `latest` — a broken release
+# of any tool must not break CI of the whole fleet.
+# Update deliberately; the conformance test (dulce-de-leche
+# tests/standard_conformance.rs) requires this file to exist.
+#
+# §4 matrix row (genesis): genesis is a lib crate — its CI installs no
+# in-org family tools (just Rust toolchain + just + mdbook). This file is
+# maintained for fleet conformance; add rows if genesis's CI starts
+# consuming family tooling. External: openspec (npm @fission-ai/openspec)
+# is used for spec authoring but not installed in CI.
+
+[tools]

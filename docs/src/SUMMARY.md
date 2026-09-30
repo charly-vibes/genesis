@@ -29,3 +29,13 @@
 - [Design Decisions](explanation/design-decisions.md)
 - [Why Weak Readers](explanation/why-weak-readers.md)
 - [Removed & Renamed APIs](explanation/removed-apis.md)
+
+# Design Specs
+
+- [`aix`](./specs/aix.md)
+- [`envelope`](./specs/envelope.md)
+- [`evals`](./specs/evals.md)
+- [`evals-guidelines`](./specs/evals-guidelines.md)
+- [`feedback`](./specs/feedback.md)
+- [`genesis`](./specs/genesis.md)
+- [`git-hooks`](./specs/git-hooks.md)

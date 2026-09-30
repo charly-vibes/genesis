@@ -8,6 +8,14 @@
 
 # genesis-vibes
 
+> **Why:** every CLI in the charly-vibes suite re-implemented the same
+> cross-cutting plumbing — JSON envelopes, verbosity, doctor checks, config
+> loading, AGENTS.md blocks — and the implementations drifted apart. genesis
+> centralizes it so behavior stays identical across tools and fixes land once.
+> [Motivation & design](docs/src/introduction.md)
+>
+> **Status:** [stable](docs/src/status.md) · shared foundation crate, consumed by all in-org CLIs · crates.io
+
 > A shared Rust crate of cross-cutting CLI/AIX/self-healing infrastructure
 > for the charly-vibes tool suite. Each tool depends on it instead of
 > reimplementing the same conventions.
