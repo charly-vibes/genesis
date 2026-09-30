@@ -16,10 +16,10 @@ to the `update-check` feature.
 
 #### Scenario: a binary wires its own crate name
 
-- **WHEN** a binary calls `check("wai", "2026.9.28")`
-- **THEN** the module SHALL query the crates.io API for `wai` only
-- **AND** any surfaced notice SHALL name `wai` and include the fix command
-  `cargo install wai`
+- **WHEN** a binary calls `check("mytool", "2026.9.28")`
+- **THEN** the module SHALL query the crates.io API for `mytool` only
+- **AND** any surfaced notice SHALL name `mytool` and include the fix command
+  `cargo install mytool`
 
 #### Scenario: the HTTP stack stays optional
 
@@ -154,7 +154,7 @@ versions, and the `cargo install <crate>` fix command.
 
 #### Scenario: the notice is a single actionable line
 
-- **WHEN** `notice` is called with an update info for `wai`
+- **WHEN** `notice` is called with an update info for `mytool`
 - **THEN** the notice SHALL be exactly one line
 - **AND** SHALL contain the tool name, latest version, installed version,
-  and `cargo install wai`
+  and `cargo install mytool`

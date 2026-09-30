@@ -22,7 +22,7 @@ use genesis::update_check::{check, notice};
 // In a dependent binary's CLI, after command output:
 if let Some(info) = check(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")) {
     eprintln!("{}", notice(&info));
-    // "wai 2026.10.12 available — you have 2026.9.28 (cargo install wai)"
+    // "mytool 2026.10.12 available — you have 2026.9.28 (cargo install mytool)"
 }
 ```
 

@@ -293,7 +293,7 @@ fn yanked_and_prerelease_versions_are_filtered_out() {
 
 #[test]
 fn calendar_versions_compare_without_semver_assumptions() {
-    // Calendar versioning (wai-style): 2026.10.12 is newer than 2026.9.28.
+    // Calendar versioning: 2026.10.12 is newer than 2026.9.28.
     let server = TestServer::spawn(
         "HTTP/1.1 200 OK",
         crates_io_payload(&[("2026.10.12", false), ("2026.9.28", false)]),
@@ -344,7 +344,7 @@ fn request_carries_genesis_user_agent() {
 #[test]
 fn notice_is_a_single_actionable_line() {
     let info = UpdateInfo {
-        crate_name: "wai".to_string(),
+        crate_name: "mytool".to_string(),
         latest: "2026.10.12".to_string(),
         current: "2026.9.28".to_string(),
         published_at: None,
@@ -353,14 +353,14 @@ fn notice_is_a_single_actionable_line() {
     let n = notice(&info);
 
     assert_eq!(n.lines().count(), 1, "notice must be exactly one line");
-    assert!(n.contains("wai"), "notice must name the tool");
+    assert!(n.contains("mytool"), "notice must name the tool");
     assert!(n.contains("2026.10.12"), "notice must show latest version");
     assert!(
         n.contains("2026.9.28"),
         "notice must show installed version"
     );
     assert!(
-        n.contains("cargo install wai"),
+        n.contains("cargo install mytool"),
         "notice must include the fix command"
     );
 }

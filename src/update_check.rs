@@ -16,7 +16,7 @@
 //!   and send a descriptive `User-Agent`.
 //! - **Scheme-agnostic versioning.** Comparison is `current != latest` with
 //!   yanked and semver pre-release versions filtered out — calendar versions
-//!   (e.g. wai's `2026.9.28`) need no special-casing.
+//!   (e.g. `2026.9.28`) need no special-casing.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -50,7 +50,7 @@ pub struct UpdateInfo {
 
 /// One-line, actionable update notice.
 ///
-/// Example: `wai 2026.10.12 available — you have 2026.9.28 (cargo install wai)`
+/// Example: `mytool 1.2.3 available — you have 1.2.2 (cargo install mytool)`
 pub fn notice(info: &UpdateInfo) -> String {
     format!(
         "{} {} available — you have {} (cargo install {})",
