@@ -29,19 +29,19 @@ fn norm(text: &str) -> String {
 }
 
 fn evals_howto() -> String {
-    norm(&doc("docs/how-to/evals.md"))
+    norm(&doc("docs/src/how-to/evals.md"))
 }
 
 fn evals_ci() -> String {
-    norm(&doc("docs/how-to/evals-ci.md"))
+    norm(&doc("docs/src/how-to/evals-ci.md"))
 }
 
 fn eval_report() -> String {
-    norm(&doc("docs/reference/eval-report.md"))
+    norm(&doc("docs/src/reference/eval-report.md"))
 }
 
 fn weak_readers() -> String {
-    norm(&doc("docs/explanation/why-weak-readers.md"))
+    norm(&doc("docs/src/explanation/why-weak-readers.md"))
 }
 
 // -- Tier ladder -----------------------------------------------------------
@@ -118,7 +118,7 @@ fn process_boundary_scoring_normative_content_is_published() {
     );
     // The executable check exists in the crate (hallucination remains
     // detectable) — guarded by the unit test suite, referenced here.
-    let modules = doc("docs/reference/modules.md");
+    let modules = doc("docs/src/reference/modules.md");
     assert!(modules.contains("ErrorTaxonomy"));
 }
 

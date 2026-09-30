@@ -6,15 +6,15 @@
 //! (genesis-0ut), instead of shipping broken onboarding examples.
 //!
 //! Mapping:
-//! - `step2_output`              → docs/getting-started.md, Step 2
-//! - `step3_emit_cli_format`     → docs/getting-started.md, Step 3
-//! - `step4_version_json`        → docs/getting-started.md, Step 4
+//! - `step2_output`              → docs/src/getting-started.md, Step 2
+//! - `step3_emit_cli_format`     → docs/src/getting-started.md, Step 3
+//! - `step4_version_json`        → docs/src/getting-started.md, Step 4
 //! - `step4_version_json_from_args` → src/cli.rs, maybe_print_version_json_from
-//! - `guide_emit_dispatch`       → docs/how-to/guide.md, "Format-dispatching with emit()"
-//! - `guide_error_sink`          → docs/how-to/guide.md, "Error handling with ErrorSink"
-//! - `envelope_error_result`     → docs/how-to/envelope.md, "Returning errors"
-//! - `envelope_read_envelope`    → docs/how-to/envelope.md, "Reading the envelope" (success)
-//! - `envelope_read_error_envelope` → docs/how-to/envelope.md, "Reading the envelope" (error)
+//! - `guide_emit_dispatch`       → docs/src/how-to/guide.md, "Format-dispatching with emit()"
+//! - `guide_error_sink`          → docs/src/how-to/guide.md, "Error handling with ErrorSink"
+//! - `envelope_error_result`     → docs/src/how-to/envelope.md, "Returning errors"
+//! - `envelope_read_envelope`    → docs/src/how-to/envelope.md, "Reading the envelope" (success)
+//! - `envelope_read_error_envelope` → docs/src/how-to/envelope.md, "Reading the envelope" (error)
 
 use genesis::cli::{maybe_print_version_json, maybe_print_version_json_from};
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
@@ -41,7 +41,7 @@ impl Streams {
     }
 }
 
-/// docs/getting-started.md, Step 2 — structured output with a next step.
+/// docs/src/getting-started.md, Step 2 — structured output with a next step.
 #[test]
 fn step2_output() {
     let output = Output::success("Project initialized")
@@ -62,7 +62,7 @@ fn step2_output() {
     );
 }
 
-/// docs/getting-started.md, Step 3 — `--json` output with format auto-detection.
+/// docs/src/getting-started.md, Step 3 — `--json` output with format auto-detection.
 #[test]
 fn step3_emit_cli_format() {
     use clap::Parser;
@@ -113,14 +113,14 @@ fn step3_emit_cli_format() {
     assert_eq!(parsed["ok"], serde_json::json!(true));
 }
 
-/// docs/getting-started.md, Step 4 — pre-parse `--version --json`.
+/// docs/src/getting-started.md, Step 4 — pre-parse `--version --json`.
 #[test]
 fn step4_version_json() {
     // No `--version` in the test runner's args → returns false and continues.
     assert!(!maybe_print_version_json("my-tool", "0.1.0"));
 }
 
-/// docs/getting-started.md, Step 4 — the explicit-args variant covers all
+/// docs/src/getting-started.md, Step 4 — the explicit-args variant covers all
 /// branches in-process (genesis-r0p): args come in, output goes to a writer.
 #[test]
 fn step4_version_json_from_args() {
@@ -173,7 +173,7 @@ fn step4_version_json_from_args() {
     assert!(out.is_empty());
 }
 
-/// docs/how-to/guide.md — "Format-dispatching with emit()".
+/// docs/src/how-to/guide.md — "Format-dispatching with emit()".
 #[test]
 fn guide_emit_dispatch() {
     fn list_items(
@@ -198,7 +198,7 @@ fn guide_emit_dispatch() {
     list_items("0.0.0-test", OutputFormat::Json, Verbosity::Normal).expect("json emit");
 }
 
-/// docs/how-to/guide.md — "Error handling with ErrorSink".
+/// docs/src/how-to/guide.md — "Error handling with ErrorSink".
 #[test]
 fn guide_error_sink() {
     let sink = ErrorSink::new("my-tool");
@@ -221,7 +221,7 @@ fn guide_error_sink() {
     assert!(stderr.contains("my-tool init"), "stderr: {stderr:?}");
 }
 
-/// docs/how-to/envelope.md — "Returning errors" (Invariant 3.2.5).
+/// docs/src/how-to/envelope.md — "Returning errors" (Invariant 3.2.5).
 #[test]
 fn envelope_error_result() {
     // Good — remediation is non-empty
@@ -254,7 +254,7 @@ fn envelope_error_result() {
     assert!(result.is_err(), "empty remediation must fail");
 }
 
-/// docs/how-to/envelope.md — "Reading the envelope" (check `ok` first).
+/// docs/src/how-to/envelope.md — "Reading the envelope" (check `ok` first).
 #[test]
 fn envelope_read_envelope() {
     let env: Envelope<&str> = Envelope::success(
@@ -274,7 +274,7 @@ fn envelope_read_envelope() {
     assert_eq!(parsed["envelope_kind"], serde_json::json!("ok"));
 }
 
-/// docs/how-to/envelope.md — "Reading the envelope", error branch:
+/// docs/src/how-to/envelope.md — "Reading the envelope", error branch:
 /// an error envelope carries an ErrorResult as its data.
 #[test]
 fn envelope_read_error_envelope() {

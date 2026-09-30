@@ -22,7 +22,7 @@ const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 /// here as a markdown table so the removed-API history is readable (and
 /// updatable) without touching this test. This file is excluded from the
 /// pattern scan — it necessarily quotes the forbidden APIs.
-const REMOVED_APIS_DOC: &str = "docs/explanation/removed-apis.md";
+const REMOVED_APIS_DOC: &str = "docs/src/explanation/removed-apis.md";
 
 /// Parse the `| `pattern` | reason |` rows out of the anchor doc.
 fn load_forbidden_patterns() -> Vec<(String, String)> {
@@ -69,18 +69,19 @@ fn read(rel: &str) -> String {
     fs::read_to_string(project_file(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
 }
 
-/// Markdown files on the onboarding path (docs/ recursively + README).
+/// Markdown files on the onboarding path (the mdBook source under docs/src,
+/// recursively) + README.
 fn markdown_files() -> Vec<(String, String)> {
     let mut out = Vec::new();
 
-    let docs = project_file("docs");
+    let docs = project_file("docs/src");
     fn visit(dir: &Path, out: &mut Vec<(String, String)>) {
         let entries = fs::read_dir(dir).expect("read docs dir");
         for entry in entries {
             let path = entry.expect("dir entry").path();
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-            if name.as_deref() == Some("_book") {
-                continue; // mdBook build output — may hold stale copies
+            if name.as_deref() == Some("_book") || name.as_deref() == Some("specs") {
+                continue; // mdBook build output / deployed spec copies — may hold stale content
             }
             if path.is_dir() {
                 visit(&path, out);
@@ -242,12 +243,12 @@ fn version_pins_match_manifest() {
     let tag_pin = format!("tag = \"v{full}\"");
 
     let readme = read("README.md");
-    let getting_started = read("docs/getting-started.md");
+    let getting_started = read("docs/src/getting-started.md");
 
     let mut problems = Vec::new();
     for (path, content) in [
         ("README.md", readme.as_str()),
-        ("docs/getting-started.md", getting_started.as_str()),
+        ("docs/src/getting-started.md", getting_started.as_str()),
     ] {
         if !content.contains(&pin) {
             problems.push(format!(
