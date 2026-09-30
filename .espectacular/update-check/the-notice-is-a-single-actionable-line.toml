@@ -1,0 +1,11 @@
+id = "the-notice-is-a-single-actionable-line"
+description = "the notice is a single actionable line"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "notice_is_a_single_actionable_line", timeout_seconds = 120 },
+]

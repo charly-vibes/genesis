@@ -1,0 +1,11 @@
+id = "a-missing-cache-fetches-on-first-run"
+description = "a missing cache fetches on first run"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "missing_cache_fetches", timeout_seconds = 120 },
+]

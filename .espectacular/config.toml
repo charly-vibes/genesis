@@ -5,4 +5,4 @@ specs = "openspec/specs"
 changes = "openspec/changes"
 
 [runners]
-cargo = ["cargo", "test"]
+cargo = ["cargo", "test", "--all-features"]

@@ -17,6 +17,7 @@
 //! - `status`        — cross-tool status/prime dashboard (new)
 //! - `suggestions`   — self-healing error suggestions (port from wai)
 //! - `suite_linter`  — suite-wide config lint checks (new)
+//! - `update_check`  — crates.io update notifications (feature `update-check`, new)
 
 pub mod aix;
 pub mod cli;
@@ -34,3 +35,5 @@ pub mod scaffold;
 pub mod status;
 pub mod suggestions;
 pub mod suite_linter;
+#[cfg(feature = "update-check")]
+pub mod update_check;

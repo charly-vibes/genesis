@@ -1,0 +1,11 @@
+id = "requests-identify-genesis"
+description = "requests identify genesis"
+archetype = "BP"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "request_carries_genesis_user_agent", timeout_seconds = 120 },
+]

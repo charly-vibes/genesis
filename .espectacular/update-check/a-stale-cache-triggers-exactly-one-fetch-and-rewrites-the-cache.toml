@@ -1,0 +1,11 @@
+id = "a-stale-cache-triggers-exactly-one-fetch-and-rewrites-the-cache"
+description = "a stale cache triggers exactly one fetch and rewrites the cache"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "stale_cache_fetches_and_rewrites_cache", timeout_seconds = 120 },
+]

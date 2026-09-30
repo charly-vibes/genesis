@@ -1,0 +1,11 @@
+id = "an-unwritable-cache-directory-still-returns-the-result"
+description = "an unwritable cache directory still returns the result"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "unwritable_cache_dir_still_returns_result_without_panicking", timeout_seconds = 120 },
+]

@@ -1,0 +1,11 @@
+id = "an-empty-opt-out-value-does-not-skip"
+description = "an empty opt-out value does not skip"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "empty_opt_out_value_does_not_skip", timeout_seconds = 120 },
+]

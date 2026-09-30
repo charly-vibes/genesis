@@ -1,0 +1,11 @@
+id = "a-corrupt-cache-falls-back-to-a-live-fetch"
+description = "a corrupt cache falls back to a live fetch"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "corrupt_cache_is_treated_as_missing", timeout_seconds = 120 },
+]

@@ -1,0 +1,11 @@
+id = "the-opt-out-variable-skips-the-check-before-any-io"
+description = "the opt-out variable skips the check before any IO"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "opt_out_env_var_skips_check_entirely", timeout_seconds = 120 },
+]

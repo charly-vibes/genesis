@@ -1,0 +1,11 @@
+id = "an-unreachable-server-returns-none"
+description = "an unreachable server returns none"
+archetype = "BP"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "connection_refused_is_fail_silent", timeout_seconds = 120 },
+]

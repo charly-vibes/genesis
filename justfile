@@ -27,7 +27,7 @@ install:
 
 # Run all tests
 test:
-    cargo test
+    cargo test --all-features
 
 # Run tests with output
 test-verbose:

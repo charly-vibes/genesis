@@ -1,0 +1,11 @@
+id = "calendar-versions-compare-without-semver-assumptions"
+description = "calendar versions compare without semver assumptions"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "calendar_versions_compare_without_semver_assumptions", timeout_seconds = 120 },
+]

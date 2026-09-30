@@ -1,0 +1,11 @@
+id = "a-fresh-cache-surfaces-the-cached-update-without-any-http"
+description = "a fresh cache surfaces the cached update without any HTTP"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "fresh_cache_returns_cached_update_without_http", timeout_seconds = 120 },
+]

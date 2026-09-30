@@ -1,0 +1,11 @@
+id = "the-http-stack-stays-optional"
+description = "the HTTP stack stays optional"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "feature_gate_keeps_http_stack_optional", timeout_seconds = 120 },
+]

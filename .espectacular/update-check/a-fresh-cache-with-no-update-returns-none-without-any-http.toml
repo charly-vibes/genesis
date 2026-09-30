@@ -1,0 +1,11 @@
+id = "a-fresh-cache-with-no-update-returns-none-without-any-http"
+description = "a fresh cache with no update returns none without any HTTP"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "fresh_cache_with_no_update_returns_none_without_http", timeout_seconds = 120 },
+]

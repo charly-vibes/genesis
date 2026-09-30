@@ -1,0 +1,11 @@
+id = "a-rate-limit-response-extends-the-cache-ttl"
+description = "a rate-limit response extends the cache TTL"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "rate_limit_response_extends_ttl", timeout_seconds = 120 },
+]

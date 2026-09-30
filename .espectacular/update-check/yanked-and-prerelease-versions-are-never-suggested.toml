@@ -1,0 +1,11 @@
+id = "yanked-and-prerelease-versions-are-never-suggested"
+description = "yanked and prerelease versions are never suggested"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "yanked_and_prerelease_versions_are_filtered_out", timeout_seconds = 120 },
+]

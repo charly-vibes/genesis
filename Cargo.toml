@@ -30,6 +30,7 @@ clap_complete = "4"
 # String similarity (suggestions module)
 strsim = "0.11"
 
+
 # Config file parsing
 toml = "0.8"
 
@@ -38,6 +39,13 @@ regex = "1"
 
 # Test fixtures
 tempfile = "3"
+
+# Update check (feature-gated; see `update-check` feature)
+semver = { version = "1", optional = true }
+ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
+
+[features]
+update-check = ["dep:semver", "dep:ureq"]
 
 [dev-dependencies]
 # Doc-example tests (tests/doc_examples.rs) mirror the mdBook snippets and

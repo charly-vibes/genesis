@@ -1,0 +1,11 @@
+id = "an-http-error-returns-none"
+description = "an HTTP error returns none"
+archetype = "BP"
+status = "active"
+superseded_by = ""
+authored_with = "0.8.0"
+
+[tests]
+cargo = [
+    { flags = "http_error_is_fail_silent", timeout_seconds = 120 },
+]
