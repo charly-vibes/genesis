@@ -57,11 +57,22 @@ fn empty_opt_out_value_does_not_skip() {
     let _guard = env_lock();
     // SAFETY: see env_lock() comment above.
     unsafe { std::env::set_var("GENESIS_NO_UPDATE_CHECK", "") };
-    // Cannot hit the network hermetically — but an empty value means "not set",
-    // so the check proceeds to the fetch path and fails silently (offline-safe
-    // assertion: just verify it does not return a fabricated update).
+    // Hermetic: pin XDG_CACHE_HOME to a fresh temp dir so the fetch path's
+    // backoff write (and the crates.io hit that precedes it) can never touch
+    // the user's real ~/.cache (genesis-4mq EDGE-001).
+    let tmp = tempfile::TempDir::new().expect("temp cache home");
+    unsafe { std::env::set_var("XDG_CACHE_HOME", tmp.path()) };
+    // An empty value means "not set", so the check proceeds to the fetch
+    // path; a nonexistent crate 404s and fails silently.
     let result = check("genesis-update-check-env-test-nonexistent-crate", "0.0.1");
+    let p = cache_path("genesis-update-check-env-test-nonexistent-crate")
+        .expect("XDG_CACHE_HOME set so cache_path must resolve");
+    unsafe { std::env::remove_var("XDG_CACHE_HOME") };
     unsafe { std::env::remove_var("GENESIS_NO_UPDATE_CHECK") };
 
     assert!(result.is_none());
+    assert!(
+        p.starts_with(tmp.path()),
+        "cache writes must stay inside the hermetic XDG_CACHE_HOME"
+    );
 }

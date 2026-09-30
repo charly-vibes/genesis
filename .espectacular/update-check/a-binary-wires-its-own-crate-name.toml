@@ -8,4 +8,5 @@ authored_with = "0.8.0"
 [tests]
 cargo = [
     { flags = "notice_is_a_single_actionable_line", timeout_seconds = 120 },
+    { flags = "request_path_is_the_crate_endpoint", timeout_seconds = 120 },
 ]
