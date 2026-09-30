@@ -46,14 +46,14 @@ Domain logic (metrics, stores, engines, analysis) stays in each tool.
 
 ```toml
 [dependencies]
-genesis-vibes = "0.8"
+genesis-vibes = "0.9"
 ```
 
 Or use a git dependency for bleeding-edge changes:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.8.3" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.9.0" }
 ```
 
 ## Modules
