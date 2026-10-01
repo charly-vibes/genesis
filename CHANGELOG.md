@@ -3,6 +3,29 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **update-check/test files: locals named `raw` referenced as `&raw`
+  renamed** ([genesis-kn6]): a local named `raw` borrowed as `&raw`
+  collides with the `&raw const/mut` expression in tree-sitter-rust
+  0.23.3 (pretender's pinned grammar), producing spurious "Parse errors
+  detected" warnings. Workaround genesis-side; the real fix is upstream
+  (pretender-mlw: bump tree-sitter-rust 0.23 → 0.24, which parses it
+  clean).
+- **docs: install pins 0.9 → 0.10 in README/getting-started** missed in
+  the v0.10.0 release commit (caught by the doc_sync drift guard).
+
+### Refactored
+
+- **git-hooks: `ensure_command_wired` decomposed into single-
+  responsibility helpers** ([genesis-8og]): `marker_outcome`,
+  `entry_at`/`wrapper_at`, `infer_entry_indent`, `insert_after_line`,
+  `wired_at_anchor`, `insert_wrapper`, `append_missing_stage`.
+  function_lines 146 → 33, abc 77.32 → 16.16, cyclomatic 9 → 2.
+  Behavior-preserving — the 12 wiring tests are byte-identical.
+
 ## [0.10.0] — 2026-10-01
 
 ### Added
@@ -59,6 +82,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dependents (pass YOUR crate name; wai's is `wai-cli`, not `wai`).
 
 [genesis-au8]: https://github.com/charly-vibes/genesis
+[genesis-kn6]: https://github.com/charly-vibes/genesis
+[genesis-8og]: https://github.com/charly-vibes/genesis
 [genesis-4mq]: https://github.com/charly-vibes/genesis
 
 ## [0.8.3] — 2026-09-29
