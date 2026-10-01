@@ -68,8 +68,9 @@ impl FeedbackArgs {
     }
 }
 
-/// Valid issue kinds.
-const VALID_KINDS: &[&str] = &["bug", "feature", "question", "chore"];
+/// Valid issue kinds. `aix-gap` reports AIX-artifact failures
+/// (stale generated docs, drifted managed blocks) per add-artifact-provenance §5.
+const VALID_KINDS: &[&str] = &["bug", "feature", "question", "chore", "aix-gap"];
 
 /// Partition piped stdin into an issue title and a Description body.
 ///
@@ -462,6 +463,79 @@ mod tests {
         // ::new keeps the 3-arg signature — no override by default.
         let plain = FeedbackArgs::new("bug", true, false);
         assert_eq!(plain.title, None);
+    }
+
+    // -- aix-gap kind (add-artifact-provenance §5) ------------------------
+
+    #[test]
+    fn test_aix_gap_kind_is_accepted() {
+        let dir = tmp();
+        let tool = test_tool("aix-gap");
+        write_scratch(&tool, 1);
+        let args = FeedbackArgs::new("aix-gap", true, true);
+        let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
+        assert!(
+            result.is_ok(),
+            "aix-gap should pass validation: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_aix_gap_near_misses_suggest_aix_gap() {
+        let dir = tmp();
+        let tool = test_tool("aix-gap-typo");
+        for kind in ["aix_gap", "aixgap"] {
+            let args = FeedbackArgs::new(kind, true, false);
+            let result = handle_feedback(&args, &tool, "0.1.0", "owner/repo", dir.path());
+            assert!(result.is_err(), "'{kind}' should be rejected");
+            let err = result.unwrap_err();
+            assert!(
+                err.contains("aix-gap"),
+                "'{kind}' should suggest aix-gap: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_aix_gap_capture_converts_to_replayable_scenario() {
+        use crate::evals::AgentStep;
+        use crate::feedback::context::ContextBundle;
+
+        // The bundle an AIX-artifact consumer captures on a stale-artifact
+        // failure: sync exited 1 pointing at a repair command.
+        let bundle = ContextBundle {
+            tool_name: "my-tool".into(),
+            tool_version: "1.0.0".into(),
+            command: Some("my-tool sync".into()),
+            exit_code: Some(1),
+            suggestion_footer: Some("llms.txt stale\n  → Run: my-tool sync --force".into()),
+            os_arch: "linux/x86_64".into(),
+            shell: None,
+            gh_version: None,
+            git_remote: None,
+            git_branch: None,
+            git_dirty: None,
+            repo_state: vec![],
+            repro_hash: 0xa17, // arbitrary stable signature
+        };
+        let scenario = Scenario::from_feedback_context(&bundle, vec![]);
+
+        // Replay the recorded transcript: sync failed with the repair hint.
+        let recorded = AgentStep {
+            command: "my-tool sync".into(),
+            stdout: serde_json::json!({
+                "ok": false,
+                "data": {"code": "E_STALE"},
+                "hints": [{"command": "my-tool sync --force"}]
+            })
+            .to_string(),
+            stderr: String::new(),
+            exit_code: 1,
+            executed: true,
+        };
+        let report = scenario.run(vec![recorded]).expect("fixture");
+        assert!(report.passed, "failures: {:?}", report.failures);
     }
 }
 

@@ -44,11 +44,11 @@ Validation after every task: `just test` (or `cargo test --all-features`).
 
 ## 5. aix-gap feedback kind
 
-- [ ] 5.1 RED: test — `--kind aix-gap` passes validation; `aix_gap`/`aixgap`
+- [x] 5.1 RED: test — `--kind aix-gap` passes validation; `aix_gap`/`aixgap`
       yield a typo suggestion (spec `feedback` delta scenarios)
-- [ ] 5.2 GREEN: extend `VALID_KINDS` in `src/feedback.rs`; verify redaction
+- [x] 5.2 GREEN: extend `VALID_KINDS` in `src/feedback.rs`; verify redaction
       and ContextBundle capture route unchanged
-- [ ] 5.3 Test — end-to-end: aix-gap capture → `from_feedback_context` →
+- [x] 5.3 Test — end-to-end: aix-gap capture → `from_feedback_context` →
       replayable Scenario (extends the existing doc example)
 
 ## 6. Docs & validation
