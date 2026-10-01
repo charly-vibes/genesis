@@ -34,12 +34,12 @@ Validation after every task: `just test` (or `cargo test --all-features`).
 
 ## 4. Receipt terminal-outcome eval check
 
-- [ ] 4.1 RED: test — final envelope with receipt passes; missing receipt is
+- [x] 4.1 RED: test — final envelope with receipt passes; missing receipt is
       `tool_fault`; `success` receipt over `ok: false` is a tool fault citing
       the contradiction (spec `evals` delta scenarios)
-- [ ] 4.2 GREEN: implement `receipt_records_terminal_outcome` check fn in
+- [x] 4.2 GREEN: implement `receipt_records_terminal_outcome` check fn in
       `src/evals.rs` alongside `ok_envelope` / `doc_drift_blindness`
-- [ ] 4.3 Test — check composes into an existing Scenario without breaking
+- [x] 4.3 Test — check composes into an existing Scenario without breaking
       current checks
 
 ## 5. aix-gap feedback kind
