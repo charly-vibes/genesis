@@ -1806,7 +1806,10 @@ mod tests {
             .unwrap();
             let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
             assert!(after.contains("AH:START"), "block should be wired");
-            assert!(after.starts_with("# pre-commit hooks are managed by ah\n"),);
+            assert!(
+                after.starts_with("# pre-commit hooks are managed by ah\npre-commit:\n<!--"),
+                "block must sit directly after the stage key, comment preserved\n---\n{after}"
+            );
         }
 
         #[test]

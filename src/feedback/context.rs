@@ -167,8 +167,9 @@ fn get_git_remote(cwd: &Path) -> Option<String> {
 
 /// Get the current git branch name.
 /// `git branch --show-current` (not `rev-parse --abbrev-ref HEAD`) so a
-/// fresh repo on an unborn branch still reports its branch name; empty
-/// output (detached/unknown) degrades to `None` (genesis-w6h).
+/// fresh repo on an unborn branch still reports its branch name (git
+/// ≥ 2.22; older git fails the command and degrades to `None`). Empty
+/// output (detached HEAD) also degrades to `None` (genesis-w6h).
 fn get_git_branch(cwd: &Path) -> Option<String> {
     std::process::Command::new("git")
         .args(["branch", "--show-current"])
@@ -343,7 +344,7 @@ mod tests {
     fn test_git_remote_via_process() {
         let dir = tempfile::tempdir().unwrap();
         std::process::Command::new("git")
-            .args(["init"])
+            .args(["-c", "init.templateDir=", "init"])
             .current_dir(dir.path())
             .output()
             .unwrap();
@@ -379,7 +380,7 @@ mod tests {
     fn test_gather_context_git_repo_without_cargo_toml() {
         let dir = tempfile::tempdir().unwrap();
         std::process::Command::new("git")
-            .args(["init"])
+            .args(["-c", "init.templateDir=", "init"])
             .current_dir(dir.path())
             .output()
             .unwrap();

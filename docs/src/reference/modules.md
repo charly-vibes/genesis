@@ -386,7 +386,7 @@ and lands verbatim in the Description. Empty input is an error.
 
 | Module | Purpose |
 | :--- | :--- |
-| `feedback::context` | Environment bundle collection |
+| `feedback::context` | Environment bundle collection; degrades gracefully outside Rust workspaces and non-git directories (missing Cargo.toml means "not Rust", never an error); branch via `git branch --show-current` so unborn-HEAD repos report their branch |
 | `feedback::gh` | GitHub issue creation via `gh` CLI |
 | `feedback::redactor` | Privacy redaction |
 | `feedback::scratch` | Error persistence from previous runs |
@@ -600,7 +600,7 @@ as parameters (guard-tested boundary).
 | `uninstall(root, hook_name, marker)` | Remove a marker-owned hook file; refuses foreign hooks |
 | `owner(root, hook_name)` | Detect which known tool owns a hook (ordered sigil table) |
 | `framework(root)` | Detect the active hook framework (`Lefthook` > `Prek` > `Husky`) |
-| `lefthook::ensure_wired(root, stage, block, content)` | Idempotently wire a gate into a lefthook stage section |
+| `lefthook::ensure_wired(root, stage, block, content)` | Idempotently wire a gate into a lefthook stage section; comment lines never anchor or trigger the unanchorable refusal (a comment-only stage mention counts as an absent section) |
 | `lefthook::is_wired(root, stage, command)` | Report whether a gate command is wired in a stage |
 | `has_manifest(project)` | Check if manifest exists |
 ---
