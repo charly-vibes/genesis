@@ -1,0 +1,11 @@
+id = "bounded-generation-degrades-content-but-keeps-the-footer"
+description = "bounded generation degrades content but keeps the footer"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_bounded_degrades_deterministically_with_degraded_hash", timeout_seconds = 60 },
+]

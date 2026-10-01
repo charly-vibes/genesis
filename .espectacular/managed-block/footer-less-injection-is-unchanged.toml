@@ -1,0 +1,11 @@
+id = "footer-less-injection-is-unchanged"
+description = "footer-less injection is byte-identical to pre-footer output"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_footerless_injection_byte_identical_to_golden", timeout_seconds = 60 },
+]

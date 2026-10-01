@@ -1,0 +1,11 @@
+id = "drifted-block-is-reported-with-a-fix-command"
+description = "drifted block reported as warning with file, block, fix command"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_drift_reported_with_file_block_and_fix", timeout_seconds = 60 },
+]

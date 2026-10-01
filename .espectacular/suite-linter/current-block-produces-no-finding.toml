@@ -1,0 +1,11 @@
+id = "current-block-produces-no-finding"
+description = "current block produces no finding"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_current_block_no_finding", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "footer-states-generator-version-and-content-hash"
+description = "footer states generator version and content hash"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_llms_txt_footer_final_line_hash_excludes_footer", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "aix-gap-near-miss-gets-a-typo-suggestion"
+description = "aix_gap/aixgap get a typo suggestion for aix-gap"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_aix_gap_near_misses_suggest_aix_gap", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "envelope-with-receipt-passes-the-check"
+description = "envelope with receipt passes the check"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_receipt_present_passes", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "missing-receipt-is-a-tool-fault"
+description = "missing receipt is a tool fault citing the receipt"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_missing_receipt_is_tool_fault_citing_receipt", timeout_seconds = 60 },
+]

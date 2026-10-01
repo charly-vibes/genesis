@@ -1,0 +1,11 @@
+id = "content-hash-excludes-the-footer-line-itself"
+description = "content hash excludes the footer line — version changes do not move it"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "test_footer_hash_excludes_footer_line_and_version", timeout_seconds = 60 },
+]
