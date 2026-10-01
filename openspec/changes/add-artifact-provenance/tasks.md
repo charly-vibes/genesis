@@ -25,12 +25,12 @@ Validation after every task: `just test` (or `cargo test --all-features`).
 
 ## 3. ManagedBlockDrift lint check
 
-- [ ] 3.1 RED: test — drifted block yields warning `LintResult` with file,
+- [x] 3.1 RED: test — drifted block yields warning `LintResult` with file,
       block name, and caller fix command; current block yields none
-- [ ] 3.2 GREEN: implement `ManagedBlockDrift` implementing `LintCheck`
+- [x] 3.2 GREEN: implement `ManagedBlockDrift` implementing `LintCheck`
       (hash fast-path, full-text fallback) in `src/suite_linter.rs`
-- [ ] 3.3 Test — hand-edited block (markers intact) is a finding
-- [ ] 3.4 Register in `LinterRegistry`; unit-test registry wiring
+- [x] 3.3 Test — hand-edited block (markers intact) is a finding
+- [x] 3.4 Register in `LinterRegistry`; unit-test registry wiring
 
 ## 4. Receipt terminal-outcome eval check
 
