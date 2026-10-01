@@ -21,6 +21,7 @@
 | `scaffold` | new | `Scaffold`, `ScaffoldResult` | `Scaffold::new()` |
 | `discovery` | new | `scan()`, `register()`, `unregister()`, `Manifest`, `DetectedTool` | `scan()`, `register()` |
 | `git_hooks` | new | `HookName`, `Owner`, `Framework`, `GitHooksError`, `lefthook::Stage`, `lefthook::WireOutcome` | `install()`, `uninstall()`, `owner()`, `framework()`, `resolve_hooks_dir()` |
+| `update_check` | new | `UpdateInfo` | `check()`, `notice()` |
 
 ---
 
@@ -602,3 +603,71 @@ as parameters (guard-tested boundary).
 | `lefthook::ensure_wired(root, stage, block, content)` | Idempotently wire a gate into a lefthook stage section |
 | `lefthook::is_wired(root, stage, command)` | Report whether a gate command is wired in a stage |
 | `has_manifest(project)` | Check if manifest exists |
+---
+
+## update_check
+
+**Signature:** `genesis::update_check` — feature-gated behind `update-check`
+
+Crates.io update availability checks for dependent binaries. Opt in by enabling
+the feature on the consumer's `genesis-vibes` dependency (`update-check =
+[...]`); nothing activates at runtime otherwise.
+
+### Design contract ([genesis-2ex])
+
+- **Binaries, not libs, notify.** Call [`check()`](#update_check) with **your
+  own** published crate name and installed version — genesis never checks
+  itself from inside a dependent. The crate name must match the published
+  crates.io package *exactly*: a mismatch 404s and fails silent by design
+  (e.g. a crate published as `wai-cli` must not pass `"wai"`).
+- **Cached-passive.** At most one fetch per cache TTL (default 7 days,
+  `DEFAULT_TTL_SECS`); results cached at
+  `<cache>/genesis/update-check/<crate>.json`, honoring `XDG_CACHE_HOME`.
+- **Fail-silent.** Any error — network, timeout, corrupt cache, unwritable
+  cache dir — degrades to `None`. Never panics, never blocks meaningfully
+  (2s connect / 5s total: `CONNECT_TIMEOUT`, `TOTAL_TIMEOUT`), never produces
+  user-facing errors.
+- **CI-aware.** `CI=true` (or `1`) or `GENESIS_NO_UPDATE_CHECK=<non-empty>`
+  skips the check entirely, before any IO.
+- **Rate-limit polite.** crates.io 403/429 responses double the cache TTL and
+  send a descriptive `User-Agent`.
+- **Scheme-agnostic versioning.** Comparison is `current != latest` with
+  yanked and semver pre-release versions filtered out — calendar versions
+  need no special-casing.
+
+### Key Types
+
+| Type | Description |
+| :--- | :--- |
+| `UpdateInfo` | An available update: `crate_name`, `latest`, `current`, `published_at` (RFC 3339, when known) |
+
+### Functions
+
+| Function | Description |
+| :--- | :--- |
+| `check(crate_name, current_version)` | Query crates.io (cached, CI-aware, fail-silent); `None` on any skip/failure |
+| `notice(&UpdateInfo)` | One-line actionable notice: `mytool 1.2.3 available — you have 1.2.2 (cargo install mytool)` |
+| `cache_path(crate_name)` | Resolve the cache file path; `None` when the crate name is invalid or the cache root is unset |
+| `check_with(crate_name, current_version, cache_dir, api_base)` | `#[doc(hidden)]` hermetic-test and advanced-wiring entry point: explicit cache dir + API base, performs **no** env-var skipping |
+
+### Validation and debugging
+
+- Crate names are validated (`is_valid_crate_name`): non-empty,
+  ASCII alphanumeric plus `-` and `_` only — invalid names return `None`
+  without IO.
+- `GENESIS_UPDATE_CHECK_DEBUG=1` emits one stderr line per skip/fail reason
+  ([genesis-4mq]) — de-risks silent 404s while wiring a dependent.
+- Minimal wiring in a binary's `main`:
+
+```rust
+if let Some(info) = genesis::update_check::check(
+    env!("CARGO_PKG_NAME"),
+    env!("CARGO_PKG_VERSION"),
+) {
+    eprintln!("{}", genesis::update_check::notice(&info));
+}
+```
+
+`env!("CARGO_PKG_NAME")` guarantees the crate name matches the published
+package — hardcoding a name invites exactly the silent mismatch the design
+contract warns about.
