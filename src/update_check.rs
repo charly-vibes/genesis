@@ -65,17 +65,21 @@ pub fn notice(info: &UpdateInfo) -> String {
 
 /// Resolve the cache file path for a crate: `<cache>/genesis/update-check/<crate>.json`
 ///
-/// `<cache>` honors `XDG_CACHE_HOME`, falling back to `$HOME/.cache`.
+/// `<cache>` honors `XDG_CACHE_HOME` as the cache root (XDG Base Directory
+/// spec, genesis-39r), falling back to `$HOME/.cache`.
 /// Returns `None` when neither is set (the caller should skip silently).
 pub fn cache_path(crate_name: &str) -> Option<PathBuf> {
     if !is_valid_crate_name(crate_name) {
         return None;
     }
-    let base = std::env::var("XDG_CACHE_HOME")
+    let base = if let Some(xdg) = std::env::var("XDG_CACHE_HOME")
         .ok()
         .filter(|v| !v.is_empty())
-        .or_else(|| std::env::var("HOME").ok().filter(|v| !v.is_empty()))
-        .map(|home| PathBuf::from(home).join(".cache"))?;
+    {
+        PathBuf::from(xdg)
+    } else {
+        PathBuf::from(std::env::var("HOME").ok().filter(|v| !v.is_empty())?).join(".cache")
+    };
     Some(
         base.join("genesis")
             .join("update-check")

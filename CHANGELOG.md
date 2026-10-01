@@ -7,6 +7,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **update-check: `cache_path` honors `XDG_CACHE_HOME` as the cache root**
+  ([genesis-39r]): the cache path was `\$XDG_CACHE_HOME/.cache/genesis/...`;
+  per the XDG Base Directory spec — and the codebase precedent in
+  `feedback/scratch.rs` — it is now `\$XDG_CACHE_HOME/genesis/...` when the
+  variable is set, falling back to `\$HOME/.cache` otherwise.
+
 - **update-check/test files: locals named `raw` referenced as `&raw`
   renamed** ([genesis-kn6]): a local named `raw` borrowed as `&raw`
   collides with the `&raw const/mut` expression in tree-sitter-rust
@@ -85,6 +91,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-kn6]: https://github.com/charly-vibes/genesis
 [genesis-8og]: https://github.com/charly-vibes/genesis
 [genesis-4mq]: https://github.com/charly-vibes/genesis
+[genesis-39r]: https://github.com/charly-vibes/genesis
 
 ## [0.8.3] — 2026-09-29
 

@@ -76,3 +76,50 @@ fn empty_opt_out_value_does_not_skip() {
         "cache writes must stay inside the hermetic XDG_CACHE_HOME"
     );
 }
+
+// genesis-39r: XDG_CACHE_HOME IS the cache root (XDG Base Directory spec),
+// matching the doc comment and feedback/scratch.rs precedent — the base must
+// NOT get a .cache component appended when XDG_CACHE_HOME is set.
+#[test]
+fn cache_path_honors_xdg_cache_home_as_cache_root() {
+    let _guard = env_lock();
+    let tmp = tempfile::TempDir::new().expect("temp cache home");
+    unsafe { std::env::set_var("XDG_CACHE_HOME", tmp.path()) };
+    let p = cache_path("somecrate");
+    unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+    assert_eq!(
+        p.as_deref(),
+        Some(
+            tmp.path()
+                .join("genesis")
+                .join("update-check")
+                .join("somecrate.json")
+        )
+        .as_deref(),
+        "XDG_CACHE_HOME must be used as the cache root directly, no .cache suffix"
+    );
+}
+
+#[test]
+fn cache_path_falls_back_to_home_cache_when_xdg_unset() {
+    let _guard = env_lock();
+    let tmp = tempfile::TempDir::new().expect("temp home");
+    unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+    unsafe { std::env::set_var("HOME", tmp.path()) };
+    let p = cache_path("somecrate");
+    unsafe { std::env::remove_var("HOME") };
+
+    assert_eq!(
+        p.as_deref(),
+        Some(
+            tmp.path()
+                .join(".cache")
+                .join("genesis")
+                .join("update-check")
+                .join("somecrate.json")
+        )
+        .as_deref(),
+        "unset XDG_CACHE_HOME falls back to $HOME/.cache"
+    );
+}
