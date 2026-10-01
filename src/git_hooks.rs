@@ -37,6 +37,21 @@ pub enum GitHooksError {
         /// Operation being performed: `overwrite` or `remove`.
         action: &'static str,
     },
+    /// A managed-block marker is present but its pair is not — the
+    /// config is in an unknown state and wiring refuses to guess; the
+    /// file is left unmodified.
+    #[error(
+        "unbalanced managed-block markers in {}: found one of the '{start}'/'{end}' pair but not both — fix or remove the markers manually",
+        path.display()
+    )]
+    UnbalancedLefthookMarkers {
+        /// Config file with the unbalanced markers.
+        path: PathBuf,
+        /// The start marker that was searched.
+        start: String,
+        /// The end marker that was searched.
+        end: String,
+    },
     /// An I/O or process error during a git or filesystem operation.
     #[error("io error at {}: {message}", path.display())]
     Io {
@@ -428,6 +443,36 @@ pub mod lefthook {
         matches!(first, Some(c) if c != ' ' && c != '\t' && c != '#' && c != '\n')
     }
 
+    /// Indent of the stage section's first child line (skips the anchor
+    /// line itself, blank lines and comments). `None` when the stage is
+    /// empty — used to classify the wiring case.
+    fn children_indent(section: &str) -> Option<usize> {
+        for line in section.split_inclusive('\n').skip(1) {
+            let trimmed = line.trim_end();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            return Some(line.len() - line.trim_start().len());
+        }
+        None
+    }
+
+    /// Byte offset (within `section`) and indent of a `commands:` key
+    /// line, at any indent — the caller compares against
+    /// [`children_indent`] to classify: at-children → insert inside the
+    /// mapping, elsewhere → refuse, absent → wrapper path.
+    fn find_commands_key(section: &str) -> Option<(usize, usize)> {
+        let mut offset = 0usize;
+        for line in section.split_inclusive('\n') {
+            let start = offset;
+            offset += line.len();
+            if line.trim() == "commands:" {
+                return Some((start, line.len() - line.trim_start().len()));
+            }
+        }
+        None
+    }
+
     /// Find the column-0 stage-key anchor and return its byte offset.
     /// Returns `Err(())` when the stage key appears only in a
     /// non-anchorable form (quoted, indented) — design D6.
@@ -523,6 +568,14 @@ pub mod lefthook {
                     updated.push('\n'); // anchor was the last line without a newline
                 }
                 updated.push_str(&block_text);
+                // The block always ends on its own line: without this, a
+                // caller content ending in `\n` leaves the END marker
+                // glued onto the next existing line — with comment-
+                // prefixed markers that line becomes a YAML comment and
+                // the following key is silently deleted (genesis-au8).
+                if !block_text.ends_with('\n') {
+                    updated.push('\n');
+                }
                 updated.push_str(&existing[line_end..]);
                 std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
                     path: path.clone(),
@@ -540,6 +593,176 @@ pub mod lefthook {
                 updated.push_str(":\n");
                 updated.push_str(&block_text);
                 updated.push('\n');
+                std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
+                    path: path.clone(),
+                    message: "failed to write lefthook config".to_string(),
+                    source,
+                })?;
+                Ok(WiredOutcome::Injected)
+            }
+        }
+    }
+
+    /// Wire a single command into a stage's `commands:` mapping of the
+    /// lefthook config, idempotently (genesis-au8).
+    ///
+    /// Two-case anchor, lifted from specodelic `src/hooks.rs` (donor for
+    /// [`ensure_wired`]'s sibling contract):
+    /// - stage section has `commands:` at the children indent → the
+    ///   marker-guarded entry is inserted *inside* the existing mapping,
+    ///   at the mapping's own entry indent (per-level YAML indent is
+    ///   config-dependent: a 4-space config nests at commands+4; the
+    ///   default for an empty mapping is commands indent + 2);
+    /// - otherwise (stage missing, empty, or without a `commands:` key)
+    ///   a full `commands:` wrapper is injected after the stage anchor
+    ///   or appended as a new stage section.
+    ///
+    /// Every marker sits alone on its own line and every emitted line
+    /// ends with a newline — the END marker is never glued onto the next
+    /// existing line (with comment-prefixed markers that would turn the
+    /// following key into a YAML comment and silently delete it).
+    /// Errors without modifying the file when: no config exists (never
+    /// creates one, design D4); the stage key is not anchorable; the
+    /// `commands:` key sits at an indent other than the children's
+    /// (unrecognized structure); or exactly one block marker is present
+    /// (unknown state, never guess).
+    pub fn ensure_command_wired(
+        root: &Path,
+        stage: Stage,
+        command: &str,
+        run: &str,
+        block: &BlockDef,
+    ) -> Result<WiredOutcome, GitHooksError> {
+        let path = config_path(root).ok_or_else(|| GitHooksError::MissingLefthookConfig {
+            root: root.to_path_buf(),
+        })?;
+        let existing = std::fs::read_to_string(&path).map_err(|source| GitHooksError::Io {
+            path: path.clone(),
+            message: "failed to read lefthook config".to_string(),
+            source,
+        })?;
+
+        // Idempotence at file level; exactly one marker = unknown state.
+        let has_start = existing.contains(&block.start_marker);
+        let has_end = existing.contains(&block.end_marker);
+        if has_start && has_end {
+            return Ok(WiredOutcome::AlreadyWired);
+        }
+        if has_start || has_end {
+            return Err(GitHooksError::UnbalancedLefthookMarkers {
+                path,
+                start: block.start_marker.clone(),
+                end: block.end_marker.clone(),
+            });
+        }
+
+        let entry_at = |indent: usize| -> String {
+            let pad = " ".repeat(indent);
+            format!(
+                "{pad}{start}\n{pad}{command}:\n{pad}  run: {run}\n{pad}{end}\n",
+                start = block.start_marker,
+                end = block.end_marker
+            )
+        };
+        let wrapper_at = |indent: usize| -> String {
+            format!("{}commands:\n{}", " ".repeat(indent), entry_at(indent + 2))
+        };
+
+        /// Insert `insertion` after the line containing byte offset
+        /// `line_start`, keeping every emitted line newline-terminated.
+        fn insert_after_line(
+            path: &Path,
+            text: &str,
+            line_start: usize,
+            insertion: &str,
+        ) -> Result<(), GitHooksError> {
+            let line_end = text[line_start..]
+                .find('\n')
+                .map_or(text.len(), |nl| line_start + nl + 1);
+            let mut updated = String::with_capacity(text.len() + insertion.len() + 1);
+            updated.push_str(&text[..line_end]);
+            if line_end == text.len() && !text.ends_with('\n') {
+                updated.push('\n');
+            }
+            updated.push_str(insertion);
+            updated.push_str(&text[line_end..]);
+            std::fs::write(path, updated).map_err(|source| GitHooksError::Io {
+                path: path.to_path_buf(),
+                message: "failed to write lefthook config".to_string(),
+                source,
+            })
+        }
+
+        match find_anchor(&existing, stage) {
+            Err(()) => Err(GitHooksError::UnanchorableLefthookConfig {
+                path,
+                stage: stage.key().to_string(),
+                message: "stage key is quoted or otherwise not anchorable at column 0".to_string(),
+            }),
+            Ok(Some(anchor)) => {
+                let sec = section(&existing, anchor);
+                match (children_indent(sec), find_commands_key(sec)) {
+                    // Empty stage → wrapper directly after the anchor.
+                    (None, _) => {
+                        insert_after_line(&path, &existing, anchor, &wrapper_at(2))?;
+                        Ok(WiredOutcome::Injected)
+                    }
+                    // `commands:` at the children indent → in-mapping insert.
+                    (Some(ci), Some((coff, ki))) if ki == ci => {
+                        // Entry indent = the mapping's first existing
+                        // entry's indent (deeper than the commands key);
+                        // commands indent + 2 when the mapping is empty.
+                        let commands_line_start = anchor + coff;
+                        let commands_line_end = existing[commands_line_start..]
+                            .find('\n')
+                            .map_or(existing.len(), |nl| commands_line_start + nl + 1);
+                        let mut entry_indent = ki + 2;
+                        for line in existing[commands_line_end..].split_inclusive('\n') {
+                            let trimmed = line.trim_end();
+                            let indent = line.len() - line.trim_start().len();
+                            if !trimmed.is_empty() && !trimmed.trim_start().starts_with('#') {
+                                if indent > ki {
+                                    entry_indent = indent;
+                                }
+                                break; // mapping closed (or first entry seen)
+                            }
+                            if !trimmed.is_empty() && indent <= ki {
+                                break; // mapping closed before any entry
+                            }
+                        }
+                        insert_after_line(
+                            &path,
+                            &existing,
+                            commands_line_start,
+                            &entry_at(entry_indent),
+                        )?;
+                        Ok(WiredOutcome::Injected)
+                    }
+                    // `commands:` at another indent — refuse to guess.
+                    (Some(_), Some((_, ki))) => Err(GitHooksError::UnanchorableLefthookConfig {
+                        path,
+                        stage: stage.key().to_string(),
+                        message: format!(
+                            "commands key is at indent {ki}, which differs from the stage's children indentation — unrecognized structure"
+                        ),
+                    }),
+                    // Children but no `commands:` key → wrapper at the
+                    // stage's own children indent.
+                    (Some(ci), None) => {
+                        insert_after_line(&path, &existing, anchor, &wrapper_at(ci))?;
+                        Ok(WiredOutcome::Injected)
+                    }
+                }
+            }
+            Ok(None) => {
+                // Missing stage section → append at EOF.
+                let mut updated = existing.clone();
+                if !updated.ends_with('\n') {
+                    updated.push('\n');
+                }
+                updated.push_str(stage.key());
+                updated.push_str(":\n");
+                updated.push_str(&wrapper_at(2));
                 std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
                     path: path.clone(),
                     message: "failed to write lefthook config".to_string(),
@@ -1357,8 +1580,14 @@ mod tests {
                 ah_content(),
                 ah_block().end_marker
             );
+            // The injected block always ends on its own line: the END
+            // marker must be followed by a newline, never glued onto the
+            // next existing line. With comment-prefixed markers a glued
+            // line turns that next line into a YAML comment — silently
+            // deleting the following key (found wiring specodelic-gates,
+            // genesis-au8).
             let expected = format!(
-                "pre-commit:\n{block_text}{}",
+                "pre-commit:\n{block_text}\n{}",
                 &basic_config()["pre-commit:\n".len()..]
             );
             assert_eq!(after, expected);
@@ -1546,6 +1775,306 @@ mod tests {
                 lefthook::Stage::PreCommit,
                 "ah check"
             ));
+        }
+
+        // === ensure_command_wired (genesis-au8) ===
+
+        /// Command-level wiring fixture: comment-prefixed markers (the
+        /// YAML convention) around a generic command name/run.
+        fn cmd_block() -> BlockDef {
+            BlockDef::with_markers("T", "# <!-- T:START -->", "# <!-- T:END -->")
+        }
+
+        const CMD_NAME: &str = "tcmd";
+        const CMD_RUN: &str = "echo hi";
+
+        /// The marker-guarded entry lines at `indent` (mapping-entry
+        /// level); every line ends with a newline.
+        fn cmd_entry(indent: usize) -> String {
+            let pad = " ".repeat(indent);
+            format!(
+                "{pad}# <!-- T:START -->\n{pad}{CMD_NAME}:\n{pad}  run: {CMD_RUN}\n{pad}# <!-- T:END -->\n"
+            )
+        }
+
+        /// The full `commands:` wrapper at `indent` (stage-children
+        /// level), entry nested at indent + 2.
+        fn cmd_wrapper(indent: usize) -> String {
+            format!("{}commands:\n{}", " ".repeat(indent), cmd_entry(indent + 2))
+        }
+
+        #[test]
+        fn ensure_command_wired_inserts_inside_existing_commands_mapping() {
+            let fixture = config_fixture(basic_config());
+            let outcome = lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            assert_eq!(outcome, lefthook::WiredOutcome::Injected);
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let expected = format!(
+                "pre-commit:\n  commands:\n{}{}",
+                cmd_entry(4),
+                &basic_config()["pre-commit:\n  commands:\n".len()..]
+            );
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_command_wired_infers_entry_indent_from_mapping_children() {
+            // Per-level YAML indent is config-dependent: a 4-space config
+            // nests entries at commands+4, not +2.
+            let config = "pre-commit:\n    commands:\n        lint:\n            run: lint\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let expected = format!(
+                "pre-commit:\n    commands:\n{}        lint:\n            run: lint\n",
+                cmd_entry(8)
+            );
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_command_wired_empty_mapping_defaults_to_commands_indent_plus_two() {
+            let config =
+                "pre-commit:\n  commands:\npre-push:\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let expected = format!(
+                "pre-commit:\n  commands:\n{}pre-push:\n  commands:\n    test:\n      run: test\n",
+                cmd_entry(4)
+            );
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_command_wired_creates_wrapper_when_stage_is_empty() {
+            let config = "pre-commit:\npre-push:\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let expected = format!(
+                "pre-commit:\n{}pre-push:\n  commands:\n    test:\n      run: test\n",
+                cmd_wrapper(2)
+            );
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_command_wired_appends_missing_stage_section() {
+            // Config has only a pre-push section; wiring pre-commit must
+            // append the missing stage section with the wrapper.
+            let config = "pre-push:\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert!(after.starts_with(config));
+            assert_eq!(
+                after[config.len()..],
+                format!("pre-commit:\n{}", cmd_wrapper(2))
+            );
+        }
+
+        #[test]
+        fn ensure_command_wired_wraps_commands_into_stage_with_children() {
+            // Stage exists with children but no `commands:` key — the
+            // wrapper goes directly after the anchor at the children indent.
+            let config = "pre-commit:\n  parallel: true\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let expected = format!("pre-commit:\n{}  parallel: true\n", cmd_wrapper(2));
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_command_wired_is_idempotent_when_markers_present() {
+            let fixture = config_fixture(basic_config());
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let once = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let outcome = lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            assert_eq!(outcome, lefthook::WiredOutcome::AlreadyWired);
+            let twice = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert_eq!(once, twice);
+            assert_eq!(twice.matches("T:START").count(), 1);
+        }
+
+        #[test]
+        fn ensure_command_wired_refuses_mismatched_commands_indent() {
+            // children at indent 6 but `commands:` at indent 2 —
+            // unrecognized structure, refuse unmodified (honest_anchor).
+            let config =
+                "pre-commit:\n      parallel: true\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(config);
+            let err = lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, GitHooksError::UnanchorableLefthookConfig { .. }),
+                "got: {err}"
+            );
+            assert!(err.to_string().contains("commands key is at indent"));
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert_eq!(after, config, "config must not be modified");
+        }
+
+        #[test]
+        fn ensure_command_wired_errors_unmodified_on_quoted_stage_key() {
+            let quoted = "\"pre-commit\":\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(quoted);
+            let err = lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, GitHooksError::UnanchorableLefthookConfig { .. }),
+                "got: {err}"
+            );
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert_eq!(after, quoted, "config must not be modified");
+        }
+
+        #[test]
+        fn ensure_command_wired_errors_on_missing_config_and_never_creates_one() {
+            let fixture = match Fixture::new().build() {
+                Ok(f) => f,
+                Err(e) => panic!("fixture build failed: {e}"),
+            };
+            let err = lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, GitHooksError::MissingLefthookConfig { .. }),
+                "got: {err}"
+            );
+            assert!(!fixture.root().join("lefthook.yml").exists());
+        }
+
+        #[test]
+        fn ensure_command_wired_refuses_unbalanced_markers_unmodified() {
+            // Exactly one marker present — unknown state, refuse rather
+            // than guess (same idempotence contract as spk hooks install).
+            let config =
+                "pre-commit:\n  commands:\n    lint:\n      run: lint\n# <!-- T:START -->\n";
+            let fixture = config_fixture(config);
+            let err = lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, GitHooksError::UnbalancedLefthookMarkers { .. }),
+                "got: {err}"
+            );
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert_eq!(after, config, "config must not be modified");
+        }
+
+        #[test]
+        fn ensure_command_wired_keeps_markers_on_their_own_lines() {
+            // Guard against the ensure_wired glue class: the END marker
+            // must be followed by a newline, never glued onto the next
+            // existing line — with comment-prefixed markers that would
+            // turn the next line into a YAML comment (silent key loss).
+            let fixture = config_fixture(basic_config());
+            lefthook::ensure_command_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                CMD_NAME,
+                CMD_RUN,
+                &cmd_block(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert!(
+                after.contains("# <!-- T:END -->\n    lint:\n"),
+                "END marker must be followed by a newline, not the next key: {after}"
+            );
+            for line in after.lines() {
+                if line.contains("T:START") || line.contains("T:END") {
+                    assert_eq!(
+                        line.trim(),
+                        if line.contains("T:START") {
+                            "# <!-- T:START -->"
+                        } else {
+                            "# <!-- T:END -->"
+                        },
+                        "marker must sit alone on its line: {line:?}"
+                    );
+                }
+            }
         }
 
         /// Guard (spec: "Tool-specific gates stay in tools"): the

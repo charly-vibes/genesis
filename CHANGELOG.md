@@ -3,6 +3,29 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **git-hooks: `lefthook::ensure_command_wired()`** ([genesis-au8]):
+  command-level wiring — inserts a marker-guarded command entry *inside*
+  an existing stage `commands:` mapping at the mapping's own entry indent
+  (per-level YAML indent is config-dependent), and injects a full
+  `commands:` wrapper when the stage is missing, empty, or childless.
+  Honest refusals, file unmodified: missing config (never created, D4),
+  quoted stage key, `commands:` at an indent other than the children's,
+  and exactly-one-marker present (new `UnbalancedLefthookMarkers` error).
+  Donor: specodelic `src/hooks.rs` (specodelic-x56) — consumers stop
+  re-implementing inside-mapping insertion.
+
+### Fixed
+
+- **git-hooks: `ensure_wired` no longer glues the END marker onto the
+  next existing line** ([genesis-au8]): a block injected after the stage
+  key always ends on its own line now. With comment-prefixed markers the
+  glued line turned the following YAML key into a comment — silently
+  deleting it (found wiring specodelic-gates).
+
 ## [0.9.0] — 2026-09-30
 
 ### Fixed
@@ -35,6 +58,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   skip/fail reason** ([genesis-4mq]) — de-risks silent 404s when wiring
   dependents (pass YOUR crate name; wai's is `wai-cli`, not `wai`).
 
+[genesis-au8]: https://github.com/charly-vibes/genesis
 [genesis-4mq]: https://github.com/charly-vibes/genesis
 
 ## [0.8.3] — 2026-09-29
