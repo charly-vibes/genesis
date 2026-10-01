@@ -14,8 +14,8 @@
 > centralizes it so behavior stays identical across tools and fixes land once.
 > [Motivation & design](docs/src/introduction.md)
 >
-> **Status:** [stable](docs/src/status.md) · shared foundation crate, consumed by all in-org CLIs · crates.io
-
+> **Status:** [stable](docs/src/status.md) · shared foundation crate, consumed by all in-org CLIs · crates.io · [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
+>
 > A shared Rust crate of cross-cutting CLI/AIX/self-healing infrastructure
 > for the charly-vibes tool suite. Each tool depends on it instead of
 > reimplementing the same conventions.
