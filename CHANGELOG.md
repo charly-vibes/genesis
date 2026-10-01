@@ -3,6 +3,17 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **git_hooks: comment lines no longer trigger the lefthook
+  `UnanchorableLefthookConfig` refusal** — `find_anchor` now skips comment
+  lines entirely, so a config whose stage name appears in comments before a
+  clean column-0 `pre-commit:`/`pre-push:` key anchors normally (downstream:
+  espectacular GH#28 item 1, tracked by espectacular-n4v). Comment-only
+  mentions are treated as an absent stage (section is appended).
+
 ## [0.11.0] — 2026-10-01
 
 ### Added

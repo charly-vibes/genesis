@@ -475,7 +475,10 @@ pub mod lefthook {
 
     /// Find the column-0 stage-key anchor and return its byte offset.
     /// Returns `Err(())` when the stage key appears only in a
-    /// non-anchorable form (quoted, indented) — design D6.
+    /// non-anchorable form (quoted, indented) — design D6. Comment
+    /// lines (trimmed starts with `#`) are skipped entirely: a mention
+    /// of the stage name in a comment neither anchors nor refuses
+    /// (GH#28 item 1).
     fn find_anchor(content: &str, stage: Stage) -> Result<Option<usize>, ()> {
         let anchor = format!("{}:", stage.key());
         for (offset, line) in content.split_inclusive('\n').scan(0usize, |acc, line| {
@@ -483,6 +486,12 @@ pub mod lefthook {
             *acc += line.len();
             Some((start, line))
         }) {
+            if line.trim_start().starts_with('#') {
+                // Comment: mention of the stage name here is prose, not
+                // structure — skip before both the anchor and refusal
+                // checks.
+                continue;
+            }
             if line.trim_end() == anchor && is_column_zero_key(line) {
                 return Ok(Some(offset));
             }
@@ -1779,6 +1788,42 @@ mod tests {
             );
             let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
             assert_eq!(after, quoted, "config must not be modified");
+        }
+
+        #[test]
+        fn ensure_wired_anchors_past_comment_lines_mentioning_the_stage() {
+            // GH#28 item 1: comments mentioning `pre-commit` before the real
+            // column-0 key must not trip the contains-refusal (D6) — the
+            // stage is anchorable.
+            let config = "# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n    test:\n      run: test\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert!(after.contains("AH:START"), "block should be wired");
+            assert!(after.starts_with("# pre-commit hooks are managed by ah\n"),);
+        }
+
+        #[test]
+        fn ensure_wired_treats_comment_only_stage_mention_as_absent() {
+            // Stage name appears only in a comment: not present (D6 refusal
+            // must not fire), so the section is appended.
+            let config = "# no pre-commit stage yet, see docs\nother: key\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            assert!(after.contains("AH:START"), "block should be wired");
         }
 
         #[test]
