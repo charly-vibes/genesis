@@ -2,6 +2,16 @@
 //!
 //! Port from `wai/src/managed_block.rs` (also used in dont/espectacular).
 //!
+//! ## Provenance footer
+//!
+//! Injection optionally appends a provenance footer line inside the end
+//! marker: generator name, generator version, registry block name, and a
+//! short content hash. The hash covers only the injected content (never the
+//! footer itself), so drift is machine-checkable by recomputing expected
+//! content and comparing hashes (`ManagedBlockDrift`, suite_linter). Footer
+//! is opt-in via [`BlockInjector::with_provenance`]; footer-less output is
+//! byte-identical to pre-footer releases.
+//!
 //! ## Changes from wai
 //!
 //! - Generalized from wai-specific to any named block via `BlockRegistry`.
@@ -99,17 +109,66 @@ pub enum InjectResult {
     Updated,
 }
 
+/// Compute the 8-hex-char content hash used in provenance footers.
+///
+/// Hashing style matches feedback's `repro_hash` (DefaultHasher over the
+/// content bytes) so there is one hashing story across the crate. Truncated
+/// to 8 hex chars — collision-resistant enough for drift detection.
+pub fn content_sha8(content: &str) -> String {
+    use std::hash::BuildHasher;
+    let full = format!(
+        "{:016x}",
+        std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default().hash_one(content)
+    );
+    full[..8].to_string()
+}
+
+/// Build the opt-in provenance footer line for a managed block.
+///
+/// The footer is an HTML comment (inert in rendered markdown and ignored by
+/// plain-text readers) placed inside the block's markers, after the content.
+/// The `sha` field covers only `content` — never the footer line itself — so
+/// changing the generator version does not move the hash.
+pub fn provenance_footer(
+    generator: &str,
+    version: &str,
+    block_name: &str,
+    content: &str,
+) -> String {
+    format!(
+        "<!-- provenance: generator={} version={} source={} sha={} -->",
+        generator,
+        version,
+        block_name,
+        content_sha8(content)
+    )
+}
+
 /// Injector for managed blocks.
 ///
 /// Reads, writes, and updates managed blocks in files.
 pub struct BlockInjector {
     registry: BlockRegistry,
+    provenance_generator: Option<String>,
 }
 
 impl BlockInjector {
     /// Create a new injector with the given block registry.
     pub fn new(registry: BlockRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            provenance_generator: None,
+        }
+    }
+
+    /// Enable the provenance footer with the given generator name.
+    ///
+    /// The version is taken from this crate's `CARGO_PKG_VERSION`. Footer-less
+    /// injectors (the default) produce byte-identical output to pre-footer
+    /// releases.
+    pub fn with_provenance(mut self, generator: &str) -> Self {
+        self.provenance_generator = Some(generator.to_string());
+        self
     }
 
     /// Get a reference to the block registry.
@@ -135,7 +194,16 @@ impl BlockInjector {
             )
         })?;
 
-        let block_text = format!("{}{}{}", block.start_marker, content, block.end_marker);
+        let block_text = match &self.provenance_generator {
+            Some(generator) => format!(
+                "{}{}\n{}\n{}",
+                block.start_marker,
+                content,
+                provenance_footer(generator, env!("CARGO_PKG_VERSION"), &block.name, content),
+                block.end_marker
+            ),
+            None => format!("{}{}{}", block.start_marker, content, block.end_marker),
+        };
 
         if path.exists() {
             let existing = std::fs::read_to_string(path)?;
@@ -472,5 +540,86 @@ mod tests {
         reg.register(BlockDef::new("WAI"));
         reg.register(BlockDef::new("WAI"));
         assert_eq!(reg.names().len(), 1);
+    }
+
+    // ── Provenance footer (add-artifact-provenance §1) ─────────────────
+
+    /// Extract the sha8 field from a provenance footer line.
+    fn footer_sha(line: &str) -> &str {
+        let rest = line.split("sha=").nth(1).expect("footer has sha=");
+        rest.split(' ').next().expect("sha terminated by space")
+    }
+
+    /// RED 1.1: footer-less injection is byte-identical to pre-footer output.
+    #[test]
+    fn test_footerless_injection_byte_identical_to_golden() {
+        let dir = tmp();
+        let path = dir.path().join("golden.md");
+        let injector = test_injector();
+        injector.inject(&path, "WAI", "\n# Content\n").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(content, "<!-- WAI:START -->\n# Content\n<!-- WAI:END -->");
+        assert!(!content.contains("provenance:"));
+    }
+
+    /// RED 1.2: opt-in provenance footer written inside the markers.
+    #[test]
+    fn test_provenance_footer_written_inside_markers() {
+        let dir = tmp();
+        let path = dir.path().join("prov.md");
+        let injector = BlockInjector::new(test_registry()).with_provenance("genesis");
+        injector.inject(&path, "WAI", "\n# Content\n").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+
+        let footer = content
+            .lines()
+            .find(|l| l.contains("provenance:"))
+            .expect("footer line present");
+        assert!(footer.starts_with("<!-- ") && footer.ends_with(" -->"));
+        assert!(footer.contains("genesis"));
+        assert!(footer.contains(env!("CARGO_PKG_VERSION")));
+        assert!(footer.contains("source=WAI"));
+        assert!(footer.contains(&format!("sha={}", content_sha8("\n# Content\n"))));
+
+        // Footer lives inside the markers.
+        let start = content.find("<!-- WAI:START -->").unwrap();
+        let end = content.find("<!-- WAI:END -->").unwrap();
+        let fpos = content.find("provenance:").unwrap();
+        assert!(start < fpos && fpos < end);
+    }
+
+    /// RED 1.3a: footer round-trips through re-inject with updated hash.
+    #[test]
+    fn test_footer_round_trip_updates_hash() {
+        let dir = tmp();
+        let path = dir.path().join("rt.md");
+        let injector = BlockInjector::new(test_registry()).with_provenance("genesis");
+
+        injector.inject(&path, "WAI", "\n# Old\n").unwrap();
+        let first = std::fs::read_to_string(&path).unwrap();
+        let first_sha =
+            footer_sha(first.lines().find(|l| l.contains("provenance:")).unwrap()).to_string();
+
+        let result = injector.inject(&path, "WAI", "\n# New\n").unwrap();
+        assert_eq!(result, InjectResult::Updated);
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let second_sha = footer_sha(content.lines().find(|l| l.contains("provenance:")).unwrap());
+        assert_ne!(first_sha, second_sha);
+        assert_eq!(second_sha, content_sha8("\n# New\n"));
+        assert!(injector.has_block(&path, "WAI"));
+        assert_eq!(content.matches("provenance:").count(), 1);
+    }
+
+    /// RED 1.3b: content hash excludes the footer line itself — version
+    /// changes do not move the hash for identical content.
+    #[test]
+    fn test_footer_hash_excludes_footer_line_and_version() {
+        let c = "\n# Same content\n";
+        let f_v1 = provenance_footer("genesis", "0.1.0", "WAI", c);
+        let f_v2 = provenance_footer("genesis", "9.9.9", "WAI", c);
+        assert_ne!(f_v1, f_v2, "footer text carries the version");
+        assert_eq!(footer_sha(&f_v1), footer_sha(&f_v2));
+        assert_eq!(footer_sha(&f_v1), content_sha8(c));
     }
 }
