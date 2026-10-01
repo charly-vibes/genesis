@@ -6,8 +6,11 @@
 //! - `LintCheck` trait — tools implement this for each check
 //! - `LintResult` — severity + message + optional fix command
 //! - `LinterRegistry` — tools register checks, genesis runs them
+//! - `ManagedBlockDrift` — provenance-footer drift check for managed blocks
 
 use std::path::Path;
+
+use crate::managed_block::{BlockDef, content_sha8};
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -189,6 +192,160 @@ impl LintCheck for EvalsGuidelinesAdoption {
         Ok(findings)
     }
 }
+
+// ── ManagedBlockDrift check ───────────────────────────────────────
+
+/// One managed block to check for drift: its definition, where it lives,
+/// the regenerated expected content, and the command that fixes it.
+pub struct DriftTarget {
+    /// Block definition (name + markers).
+    pub block: BlockDef,
+    /// File path holding the block, relative to the repo root.
+    pub path: std::path::PathBuf,
+    /// Expected (footer-free) block content, as the generator would emit it.
+    pub expected: String,
+    /// Caller-supplied fix command — only the owning tool knows its sync
+    /// command, so drift findings carry it verbatim.
+    pub fix: String,
+}
+
+impl DriftTarget {
+    /// Create a new drift target.
+    pub fn new(
+        block: BlockDef,
+        path: impl Into<std::path::PathBuf>,
+        expected: impl Into<String>,
+        fix: impl Into<String>,
+    ) -> Self {
+        Self {
+            block,
+            path: path.into(),
+            expected: expected.into(),
+            fix: fix.into(),
+        }
+    }
+}
+
+/// Drift check for managed blocks (`add-artifact-provenance` §3).
+///
+/// For each registered [`DriftTarget`], compares the block on disk against
+/// the regenerated expected content — via the provenance footer's content
+/// hash where a footer exists (fast path), and via full-text comparison for
+/// older footer-less blocks. Drift is a Warning (not breakage); a registered
+/// block missing from its file is Advisory.
+pub struct ManagedBlockDrift {
+    targets: Vec<DriftTarget>,
+}
+
+impl ManagedBlockDrift {
+    /// Create a drift check for the given targets.
+    pub fn new(targets: Vec<DriftTarget>) -> Self {
+        Self { targets }
+    }
+}
+
+/// Split the provenance footer off block-internal content.
+///
+/// Returns the footer-free body and, when the last line is a provenance
+/// footer, its `sha=` value. Matches the inject format
+/// `{content}\n{footer}\n` — the separating newline is dropped too, so the
+/// body hashes byte-identically to the generator's content.
+fn split_provenance_footer(inner: &str) -> (&str, Option<&str>) {
+    let trimmed = inner.trim_end_matches('\n');
+    let last_line = match trimmed.rfind('\n') {
+        Some(idx) => &trimmed[idx + 1..],
+        None if !trimmed.is_empty() => trimmed,
+        None => return (inner, None),
+    };
+    match parse_footer_sha(last_line) {
+        Some(sha) => {
+            let cut = trimmed.len() - last_line.len();
+            (&trimmed[..cut.saturating_sub(1)], Some(sha))
+        }
+        None => (inner, None),
+    }
+}
+
+/// Extract `sha=<value>` from a provenance footer line, if it is one.
+fn parse_footer_sha(line: &str) -> Option<&str> {
+    let rest = line
+        .strip_prefix("<!-- provenance: ")?
+        .strip_suffix(" -->")?;
+    let idx = rest.find("sha=")?;
+    let sha = &rest[idx + 4..];
+    Some(sha.split_whitespace().next().unwrap_or(sha))
+}
+
+impl LintCheck for ManagedBlockDrift {
+    fn name(&self) -> &'static str {
+        "genesis.managed_block_drift"
+    }
+
+    fn description(&self) -> &'static str {
+        "managed blocks match their regenerated generator content"
+    }
+
+    fn run(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let mut findings = Vec::new();
+        for target in &self.targets {
+            let content = match std::fs::read_to_string(repo_root.join(&target.path)) {
+                Ok(c) => c,
+                Err(_) => {
+                    findings.push(LintResult::with_fix(
+                        format!(
+                            "managed block '{}' file not found: {}",
+                            target.block.name,
+                            target.path.display()
+                        ),
+                        Severity::Advisory,
+                        &target.fix,
+                    ));
+                    continue;
+                }
+            };
+            let inner = match content
+                .find(&target.block.start_marker)
+                .zip(content.find(&target.block.end_marker))
+                .filter(|(start, end)| start < end)
+            {
+                Some((start, end)) => &content[start + target.block.start_marker.len()..end],
+                None => {
+                    findings.push(LintResult::with_fix(
+                        format!(
+                            "managed block '{}' absent from {}",
+                            target.block.name,
+                            target.path.display()
+                        ),
+                        Severity::Advisory,
+                        &target.fix,
+                    ));
+                    continue;
+                }
+            };
+            let (body, footer_sha) = split_provenance_footer(inner);
+            let drifted = match footer_sha {
+                // Fast path: footer hash over the footer-free body.
+                Some(sha) => sha != content_sha8(body),
+                // Fallback: footer-less (older) blocks — full-text compare.
+                None => body.trim() != target.expected.trim(),
+            };
+            if drifted {
+                findings.push(LintResult::with_fix(
+                    format!(
+                        "managed block '{}' in {} has drifted from generator output",
+                        target.block.name,
+                        target.path.display()
+                    ),
+                    Severity::Warning,
+                    &target.fix,
+                ));
+            }
+        }
+        Ok(findings)
+    }
+}
+
+// ── LinterRegistry ────────────────────────────────────────────────────
 
 /// A registry of lint checks that tools register at startup.
 ///
@@ -716,5 +873,132 @@ mod tests {
         let results = EvalsGuidelinesAdoption.run(&root).unwrap();
         assert_eq!(results.len(), 1);
         assert!(results[0].message.contains("no eval docs"));
+    }
+
+    // ── ManagedBlockDrift ─────────────────────────────────────────────
+
+    use crate::managed_block::{BlockInjector, BlockRegistry};
+
+    fn drift_target(rel: &str, expected: &str, fix: &str) -> DriftTarget {
+        DriftTarget::new(
+            BlockDef::new("WAI"),
+            PathBuf::from(rel),
+            expected.to_string(),
+            fix.to_string(),
+        )
+    }
+
+    /// A file whose block carries a footer with a stale (wrong) sha.
+    fn drifted_footer_file(expected: &str) -> String {
+        format!(
+            "# head\n\n{}stale hand-edited body\n<!-- provenance: generator=genesis version=0.1.0 source=WAI sha={} -->\n{}",
+            BlockDef::new("WAI").start_marker,
+            content_sha8(expected),
+            BlockDef::new("WAI").end_marker,
+        )
+    }
+
+    #[test]
+    fn test_drift_reported_with_file_block_and_fix() {
+        let expected = "# generated\ncontent";
+        let root = write_repo(&[("AGENTS.md", &drifted_footer_file(expected))]);
+        let check =
+            ManagedBlockDrift::new(vec![drift_target("AGENTS.md", expected, "my-tool init")]);
+        let results = check.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Warning);
+        assert!(
+            results[0].message.contains("AGENTS.md"),
+            "names file: {}",
+            results[0].message
+        );
+        assert!(
+            results[0].message.contains("WAI"),
+            "names block: {}",
+            results[0].message
+        );
+        assert_eq!(results[0].fix.as_deref(), Some("my-tool init"));
+    }
+
+    #[test]
+    fn test_current_block_no_finding() {
+        let expected = "# generated\ncontent";
+        let mut reg = BlockRegistry::new();
+        reg.register(BlockDef::new("WAI"));
+        let injector = BlockInjector::new(reg).with_provenance("genesis");
+        let root = write_repo(&[("AGENTS.md", "# head\n")]);
+        injector
+            .inject(&root.join("AGENTS.md"), "WAI", expected)
+            .unwrap();
+        let check =
+            ManagedBlockDrift::new(vec![drift_target("AGENTS.md", expected, "my-tool init")]);
+        assert!(check.run(&root).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_footerless_drift_full_text_fallback() {
+        // Older blocks have no footer — drift is detected by full-text compare.
+        let block = BlockDef::new("WAI");
+        let file = format!("{}old body{}", block.start_marker, block.end_marker);
+        let root = write_repo(&[("AGENTS.md", &file)]);
+        let check =
+            ManagedBlockDrift::new(vec![drift_target("AGENTS.md", "new body", "my-tool init")]);
+        let results = check.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Warning);
+
+        // Matching content (no footer) is clean.
+        let file = format!("{}new body{}", block.start_marker, block.end_marker);
+        let root = write_repo(&[("AGENTS.md", &file)]);
+        assert!(check.run(&root).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_hand_edited_block_is_finding_not_crash() {
+        let expected = "# generated\ncontent";
+        let mut reg = BlockRegistry::new();
+        reg.register(BlockDef::new("WAI"));
+        let injector = BlockInjector::new(reg).with_provenance("genesis");
+        let root = write_repo(&[("AGENTS.md", "# head\n")]);
+        injector
+            .inject(&root.join("AGENTS.md"), "WAI", expected)
+            .unwrap();
+        // Hand-edit: markers intact, body changed, footer untouched.
+        let edited = std::fs::read_to_string(root.join("AGENTS.md"))
+            .unwrap()
+            .replace("content", "hand-edited");
+        std::fs::write(root.join("AGENTS.md"), edited).unwrap();
+        let check =
+            ManagedBlockDrift::new(vec![drift_target("AGENTS.md", expected, "my-tool init")]);
+        let results = check.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn test_missing_block_is_advisory() {
+        let root = write_repo(&[("AGENTS.md", "# head — no block here\n")]);
+        let check =
+            ManagedBlockDrift::new(vec![drift_target("AGENTS.md", "anything", "my-tool init")]);
+        let results = check.run(&root).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Advisory);
+    }
+
+    #[test]
+    fn test_managed_block_drift_registry_wiring() {
+        let expected = "# generated";
+        let root = write_repo(&[("AGENTS.md", &drifted_footer_file(expected))]);
+        let mut registry = LinterRegistry::new();
+        registry.register(Box::new(ManagedBlockDrift::new(vec![drift_target(
+            "AGENTS.md",
+            expected,
+            "my-tool init",
+        )])));
+        let results = registry
+            .run_named("genesis.managed_block_drift", &root)
+            .expect("check registered");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].severity, Severity::Warning);
     }
 }
