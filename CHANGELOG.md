@@ -5,6 +5,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Artifact provenance & staleness loop** ([add-artifact-provenance]):
+  managed-block injection can append an opt-in provenance footer
+  (`generator`/`version`/`source`/`sha`) whose hash covers only the block
+  content, so version bumps never move the hash. New `ManagedBlockDrift`
+  lint (`genesis.managed_block_drift`) detects drifted blocks via the
+  footer hash (fast path) or full-text comparison (footer-less blocks);
+  new `receipt_records_terminal_outcome` eval check faults missing
+  receipts and `success` receipts over `ok:false` envelopes; `feedback
+  --kind aix-gap` files AIX-artifact failures through the standard
+  pipeline and converts to replayable regression scenarios.
+
 ## [0.10.1] — 2026-10-01
 
 ### Fixed
@@ -294,3 +307,4 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [genesis-r13]: https://github.com/charly-vibes/genesis
 [genesis-9us]: https://github.com/charly-vibes/genesis
 [genesis-kpv]: https://github.com/charly-vibes/genesis
+[add-artifact-provenance]: openspec/changes/add-artifact-provenance

@@ -53,9 +53,9 @@ Validation after every task: `just test` (or `cargo test --all-features`).
 
 ## 6. Docs & validation
 
-- [ ] 6.1 Update module docs (footer format, check names) and `llms.txt`
+- [x] 6.1 Update module docs (footer format, check names) and `llms.txt`
       module table if it lists module functions
-- [ ] 6.2 `openspec validate add-artifact-provenance --strict` passes
-- [ ] 6.3 CHANGELOG entry under Unreleased (pending EXCL-002 decision)
-- [ ] 6.4 Follow-up beads: per-repo footer/drift-lint adoption tickets (wai,
+- [x] 6.2 `openspec validate add-artifact-provenance --strict` passes
+- [x] 6.3 CHANGELOG entry under Unreleased (pending EXCL-002 decision)
+- [x] 6.4 Follow-up beads: per-repo footer/drift-lint adoption tickets (wai,
       dont, pretender, testaruda); CI eval-gate recipe ticket
