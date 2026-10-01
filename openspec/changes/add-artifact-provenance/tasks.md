@@ -5,14 +5,14 @@ Validation after every task: `just test` (or `cargo test --all-features`).
 
 ## 1. Managed-block provenance footer
 
-- [ ] 1.1 RED: test — footer-less injection is byte-identical to current
+- [x] 1.1 RED: test — footer-less injection is byte-identical to current
       output (lock existing behavior first)
-- [ ] 1.2 GREEN: add opt-in footer builder (`BlockDef::with_provenance` or
+- [x] 1.2 GREEN: add opt-in footer builder (`BlockDef::with_provenance` or
       injector builder) writing `BEGIN:name (version, sha8, source)` footer
       into `src/managed_block.rs`
-- [ ] 1.3 Test — content hash covers only inter-marker content; re-inject
+- [x] 1.3 Test — content hash covers only inter-marker content; re-inject
       updates the hash (spec `managed-block` scenarios)
-- [ ] 1.4 Refactor: extract hash helper (reuse feedback `repro_hash` style);
+- [x] 1.4 Refactor: extract hash helper (reuse feedback `repro_hash` style);
       clippy + rustfmt clean
 
 ## 2. AIX artifact provenance
