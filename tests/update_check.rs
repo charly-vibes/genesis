@@ -64,10 +64,10 @@ impl TestServer {
                         Err(_) => break,
                     }
                 }
-                let raw = String::from_utf8_lossy(&buf).to_string();
+                let body_text = String::from_utf8_lossy(&buf).to_string();
                 reqs.fetch_add(1, Ordering::SeqCst);
-                *value.lock().unwrap() = raw.clone();
-                let (status, body) = handler(&raw);
+                *value.lock().unwrap() = body_text.clone();
+                let (status, body) = handler(&body_text);
                 let response = format!(
                     "{status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()

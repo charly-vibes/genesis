@@ -298,9 +298,9 @@ fn report_fixtures_are_loadable_and_versioned() {
         "tests/golden/eval_report_tier2.json",
         "tests/golden/eval_report_replay.json",
     ] {
-        let raw = doc(name);
-        let v: serde_json::Value =
-            serde_json::from_str(&raw).unwrap_or_else(|e| panic!("{name} is not valid JSON: {e}"));
+        let raw_json = doc(name);
+        let v: serde_json::Value = serde_json::from_str(&raw_json)
+            .unwrap_or_else(|e| panic!("{name} is not valid JSON: {e}"));
         assert_eq!(v["report_version"], 1, "{name}");
     }
 }

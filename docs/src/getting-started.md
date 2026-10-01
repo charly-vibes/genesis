@@ -17,7 +17,7 @@ Add genesis-vibes to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-genesis-vibes = "0.9"
+genesis-vibes = "0.10"
 ```
 
 If you want the bleeding-edge version from the repository instead of the crates.io release:

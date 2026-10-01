@@ -338,8 +338,8 @@ fn unix_now() -> u64 {
 }
 
 fn read_cache(path: &std::path::Path) -> Option<CacheEntry> {
-    let raw = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&raw).ok()
+    let contents = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&contents).ok()
 }
 
 /// Best-effort atomic cache write (temp file + rename). All failures —
