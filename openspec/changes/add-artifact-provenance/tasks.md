@@ -17,10 +17,10 @@ Validation after every task: `just test` (or `cargo test --all-features`).
 
 ## 2. AIX artifact provenance
 
-- [ ] 2.1 RED: test — `generate_llms_txt` output unchanged (determinism guard)
-- [ ] 2.2 GREEN: add footer line + `*_timestamped` variants to `generate_llms_txt`,
+- [x] 2.1 RED: test — `generate_llms_txt` output unchanged (determinism guard)
+- [x] 2.2 GREEN: add footer line + `*_timestamped` variants to `generate_llms_txt`,
       `generate_llm_txt`, and bounded variants (`src/aix.rs`)
-- [ ] 2.3 Test — bounded degradation still deterministic; footer hash reflects
+- [x] 2.3 Test — bounded degradation still deterministic; footer hash reflects
       degraded content (spec `aix` delta scenarios)
 
 ## 3. ManagedBlockDrift lint check
