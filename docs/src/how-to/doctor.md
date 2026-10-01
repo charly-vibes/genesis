@@ -129,6 +129,7 @@ for individual checks.
 | `fix()` never called | `run()` called with `false` | Pass `true` as the second argument |
 | LintResult not showing in report | Wrong severity level | Use `LintResult::error()` for failures, `LintResult::warn()` for warnings, `LintResult::info()` for informational |
 | DoctorCheck panics on missing repo path | Path doesn't exist | Check `repo.exists()` before running checks |
+| Parsed envelope data doesn't match my check payload | Envelope kind is `doctor`, not `check` — the data is a `DoctorReport` | Deserialize as `DoctorReport`; per-check statuses live in `checks`, and each `fix` also surfaces as an envelope hint |
 
 ## Further Exploration
 

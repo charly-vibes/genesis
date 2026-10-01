@@ -133,6 +133,23 @@ if !envelope.ok {
 | Compile error: `ErrorResult::new` returns `Err` | Empty remediation string | Provide a non-empty remediation suggestion |
 | Envelope not printed in JSON format | CLI not using `CliFormat` or `Output::emit()` | Use `Output::emit(cli_version, format, verbosity, ...)` instead of `output.print(...)` |
 | Warnings not showing | Verbosity set to `Normal` or `Quiet` | Bump to `Verbose` to see warnings |
+| Deserializing `data` fails or misreads across tools | `EnvelopeKind::Check` payloads are consumer-defined — there is no shared schema; `Doctor` payloads are a `DoctorReport` | Read `envelope.kind` first: `check` → your own documented payload schema, `doctor` → `DoctorReport` |
+
+### `Check` vs `Doctor` kinds
+
+Both are success-path kinds; machine readers dispatch on `envelope.kind`:
+
+- **`check`** — the payload is **consumer-defined**. Your check pipeline
+  serializes whatever it computes (see `dont`'s check commands); another tool
+  parsing your payload needs your docs. There is no shared schema.
+- **`doctor`** — the payload is a `DoctorReport` with per-check
+  `name`/`status`/`message` entries; `fix` commands are lifted into envelope
+  hints and `CheckStatus::Warn` checks are surfaced as warnings. Produced by
+  `DoctorRunner` / `DoctorReport::into_envelope()`.
+
+The cross-tool parse failure mode: deserializing a `doctor` payload as a
+generic check payload (or vice versa) fails or silently misreads — always
+branch on `envelope.kind` before choosing a schema.
 
 ## Further Exploration
 
