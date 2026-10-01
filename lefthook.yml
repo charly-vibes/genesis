@@ -36,6 +36,6 @@ pre-push:
       # §9: mode explicit BY CHOICE — tiered is advisory (always exit 0);
       # upgrading to --mode gate requires tuning [thresholds] to baseline
       # first (genesis src/ has 57 violations under strict defaults).
-      run: pretender check --mode tiered src/
+      run: pretender check --mode tiered --advisory-until 2027-03-31 src/
     validate:
       run: ah check
