@@ -7,6 +7,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **feedback: git branch gathered on unborn HEAD** — `get_git_branch` now
+  uses `git branch --show-current` instead of `rev-parse --abbrev-ref
+  HEAD`, so a freshly `git init`-ed repo (no commits yet) still reports
+  its branch name in the feedback context bundle; empty output (detached
+  HEAD) degrades to omitted. Non-Rust-workspace graceful degradation of
+  `gather_context` is now pinned by regression tests (downstream:
+  espectacular GH#28 item 3 — the hard `Cargo.toml` read there lives in
+  ah's own main.rs, not genesis).
 - **git_hooks: comment lines no longer trigger the lefthook
   `UnanchorableLefthookConfig` refusal** — `find_anchor` now skips comment
   lines entirely, so a config whose stage name appears in comments before a

@@ -166,9 +166,12 @@ fn get_git_remote(cwd: &Path) -> Option<String> {
 }
 
 /// Get the current git branch name.
+/// `git branch --show-current` (not `rev-parse --abbrev-ref HEAD`) so a
+/// fresh repo on an unborn branch still reports its branch name; empty
+/// output (detached/unknown) degrades to `None` (genesis-w6h).
 fn get_git_branch(cwd: &Path) -> Option<String> {
     std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .args(["branch", "--show-current"])
         .current_dir(cwd)
         .output()
         .ok()
@@ -177,6 +180,7 @@ fn get_git_branch(cwd: &Path) -> Option<String> {
                 String::from_utf8(o.stdout)
                     .ok()
                     .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
             } else {
                 None
             }
@@ -345,5 +349,43 @@ mod tests {
             .unwrap();
         let remote = get_git_remote(dir.path());
         assert!(remote.is_none() || remote.is_some());
+    }
+
+    /// genesis-w6h contract pin: outside a Rust workspace (no Cargo.toml,
+    /// no git), gather_context must degrade gracefully — no error, git
+    /// fields None — because the downstream report flow (handle_feedback,
+    /// and ah's inline copy) depends on it being usable from any cwd.
+    /// (The GH#28 item 3 'cannot read Cargo.toml' defect is downstream:
+    /// espectacular main.rs hard-reads Cargo.toml before calling us.)
+    #[test]
+    fn test_gather_context_non_rust_workspace_degrades_gracefully() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = gather_context("ah", "0.8.0", None, None, None, dir.path());
+        assert_eq!(bundle.tool_name, "ah");
+        assert!(bundle.git_remote.is_none(), "no git repo → no remote");
+        assert!(bundle.git_branch.is_none(), "no git repo → no branch");
+        assert!(bundle.git_dirty.is_none(), "no git repo → not dirty");
+        assert!(bundle.repo_state.is_empty());
+        let rendered = format_context_bundle(&bundle);
+        assert!(rendered.contains("tool: ah 0.8.0"));
+        assert!(rendered.contains("repro_hash:"));
+        assert!(!rendered.contains("git_remote:"), "None fields are omitted");
+    }
+
+    /// Same contract in a git repo that is NOT a Rust workspace: the
+    /// missing Cargo.toml must mean nothing more than 'not Rust' — git
+    /// metadata is still gathered.
+    #[test]
+    fn test_gather_context_git_repo_without_cargo_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let bundle = gather_context("ah", "0.8.0", None, None, None, dir.path());
+        assert!(bundle.git_branch.is_some(), "git repo → branch gathered");
+        let rendered = format_context_bundle(&bundle);
+        assert!(rendered.contains("git_branch:"));
     }
 }
