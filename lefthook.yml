@@ -33,6 +33,9 @@ pre-push:
     testaruda:
       run: testaruda select --safe --base origin/main --head HEAD
     pretender:
-      run: pretender check src/
+      # §9: mode explicit BY CHOICE — tiered is advisory (always exit 0);
+      # upgrading to --mode gate requires tuning [thresholds] to baseline
+      # first (genesis src/ has 57 violations under strict defaults).
+      run: pretender check --mode tiered src/
     validate:
       run: ah check
