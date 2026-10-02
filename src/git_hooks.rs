@@ -530,10 +530,15 @@ pub mod lefthook {
     /// Inject a managed block into a stage section of the lefthook config,
     /// idempotently.
     ///
-    /// The block is inserted directly after the stage key (`pre-commit:` /
-    /// `pre-push:` at column 0); a missing stage section is appended.
-    /// Errors without modifying the file when no config exists (never
-    /// creates one) or when the stage key cannot be anchored (design D6).
+    /// The block is nested inside the stage's `commands:` mapping — inserted
+    /// directly after the `commands:` line, with `  commands:` emitted after
+    /// the stage anchor (`pre-commit:` / `pre-push:` at column 0) when the
+    /// stage lacks one. Caller content is the entries belonging inside
+    /// `commands:` (inserted verbatim, no re-indentation); a stage-level
+    /// key is silently ignored by lefthook at runtime (genesis-r99). A
+    /// missing stage section is appended (with `commands:`). Errors without
+    /// modifying the file when no config exists (never creates one) or when
+    /// the stage key cannot be anchored (design D6).
     /// Donor: espectacular `init.rs::install_lefthook`, rebuilt on
     /// [`BlockDef`] markers per design D4.
     pub fn ensure_wired(
@@ -566,16 +571,43 @@ pub mod lefthook {
                 if existing.contains(&block_text) || section(&existing, offset).contains(content) {
                     return Ok(WiredOutcome::AlreadyWired);
                 }
-                // Insert directly after the anchor line (spec: "directly
-                // after `pre-commit:`").
-                let line_end = existing[offset..]
+                // genesis-r99: lefthook only honors commands declared under
+                // the stage's `commands:` mapping — a stage-level key is
+                // silently ignored at runtime (validate rejects it, commit
+                // skips it). Nest the block inside `commands:`, emitting
+                // the mapping after the stage anchor when the stage lacks
+                // one. Caller content is inserted verbatim: it is written
+                // for the `commands:` child level.
+                let stage_section = section(&existing, offset);
+                let mut commands_end: Option<usize> = None;
+                let mut scanned = 0usize;
+                for (i, line) in stage_section.split_inclusive('\n').enumerate() {
+                    if i > 0 {
+                        let trimmed = line.trim_end();
+                        if trimmed.trim() == "commands:" && !trimmed.starts_with('#') {
+                            commands_end = Some(scanned + line.len());
+                            break;
+                        }
+                    }
+                    scanned += line.len();
+                }
+                // Anchor line end, as a byte offset into `existing`.
+                let anchor_line_end = existing[offset..]
                     .find('\n')
                     .map_or(existing.len(), |nl| offset + nl + 1);
-                let mut updated = String::with_capacity(existing.len() + block_text.len() + 1);
-                updated.push_str(&existing[..line_end]);
-                if line_end == existing.len() {
-                    updated.push('\n'); // anchor was the last line without a newline
+                let (insert_at, prefix) = match commands_end {
+                    // `commands_end` is relative to the stage section:
+                    // re-base it onto the full config before splicing.
+                    Some(end) => (offset + end, ""),
+                    None => (anchor_line_end, "  commands:\n"),
+                };
+                let mut updated =
+                    String::with_capacity(existing.len() + block_text.len() + prefix.len() + 2);
+                updated.push_str(&existing[..insert_at]);
+                if insert_at == existing.len() {
+                    updated.push('\n'); // anchor/commands was the last line without a newline
                 }
+                updated.push_str(prefix);
                 updated.push_str(&block_text);
                 // The block always ends on its own line: without this, a
                 // caller content ending in `\n` leaves the END marker
@@ -585,7 +617,7 @@ pub mod lefthook {
                 if !block_text.ends_with('\n') {
                     updated.push('\n');
                 }
-                updated.push_str(&existing[line_end..]);
+                updated.push_str(&existing[insert_at..]);
                 std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
                     path: path.clone(),
                     message: "failed to write lefthook config".to_string(),
@@ -594,12 +626,15 @@ pub mod lefthook {
                 Ok(WiredOutcome::Injected)
             }
             Ok(None) => {
+                // genesis-r99: appended stages also nest the block inside
+                // `commands:` so the wired command is a real lefthook
+                // command, not a silently-ignored stage-level key.
                 let mut updated = existing.clone();
                 if !updated.ends_with('\n') {
                     updated.push('\n');
                 }
                 updated.push_str(stage.key());
-                updated.push_str(":\n");
+                updated.push_str(":\n  commands:\n");
                 updated.push_str(&block_text);
                 updated.push('\n');
                 std::fs::write(&path, updated).map_err(|source| GitHooksError::Io {
@@ -1631,7 +1666,11 @@ mod tests {
         }
 
         fn ah_content() -> &'static str {
-            "  commands:\n    ah:\n      run: ah check\n"
+            // Caller content is the ENTRIES INSIDE the stage's `commands:`
+            // mapping (genesis-r99): inserted verbatim after the `commands:`
+            // line, so it carries the commands:-child indent (4 spaces).
+            // Leading \n keeps the start marker on its own line.
+            "\n    ah:\n      run: ah check\n"
         }
 
         fn basic_config() -> &'static str {
@@ -1648,7 +1687,10 @@ mod tests {
         }
 
         #[test]
-        fn ensure_wired_inserts_block_directly_after_stage_key() {
+        fn ensure_wired_nests_block_inside_existing_commands_mapping() {
+            // genesis-r99: lefthook silently ignores stage-level unknown
+            // keys — the block MUST land inside the stage's `commands:`
+            // mapping, and the stage must not gain a duplicate key.
             let fixture = config_fixture(basic_config());
             lefthook::ensure_wired(
                 fixture.root(),
@@ -1664,16 +1706,36 @@ mod tests {
                 ah_content(),
                 ah_block().end_marker
             );
-            // The injected block always ends on its own line: the END
-            // marker must be followed by a newline, never glued onto the
-            // next existing line. With comment-prefixed markers a glued
-            // line turns that next line into a YAML comment — silently
-            // deleting the following key (found wiring specodelic-gates,
-            // genesis-au8).
             let expected = format!(
-                "pre-commit:\n{block_text}\n{}",
-                &basic_config()["pre-commit:\n".len()..]
+                "pre-commit:\n  commands:\n{block_text}\n{}",
+                &basic_config()["pre-commit:\n  commands:\n".len()..]
             );
+            assert_eq!(after, expected);
+        }
+
+        #[test]
+        fn ensure_wired_emits_commands_mapping_when_stage_lacks_one() {
+            // Stage exists but has no `commands:` key: create it, then the
+            // block, so the wired command is a real lefthook command.
+            let config = "pre-commit:\n  skip: true\n";
+            let fixture = config_fixture(config);
+            lefthook::ensure_wired(
+                fixture.root(),
+                lefthook::Stage::PreCommit,
+                &ah_block(),
+                ah_content(),
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
+            let block_text = format!(
+                "{}{}{}",
+                ah_block().start_marker,
+                ah_content(),
+                ah_block().end_marker
+            );
+            // `commands:` is emitted right after the anchor; existing stage
+            // children (e.g. `skip:`) follow the block, still stage-level.
+            let expected = format!("pre-commit:\n  commands:\n{block_text}\n  skip: true\n");
             assert_eq!(after, expected);
         }
 
@@ -1702,7 +1764,7 @@ mod tests {
                 ah_block().end_marker
             );
             assert!(after.starts_with(config));
-            assert!(after.contains(&format!("\npre-push:\n{block_text}\n")));
+            assert!(after.contains(&format!("\npre-push:\n  commands:\n{block_text}\n")));
         }
 
         #[test]
@@ -1807,8 +1869,10 @@ mod tests {
             let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).unwrap();
             assert!(after.contains("AH:START"), "block should be wired");
             assert!(
-                after.starts_with("# pre-commit hooks are managed by ah\npre-commit:\n<!--"),
-                "block must sit directly after the stage key, comment preserved\n---\n{after}"
+                after.starts_with(
+                    "# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n<!--"
+                ),
+                "block must nest inside commands:, comment preserved\n---\n{after}"
             );
         }
 

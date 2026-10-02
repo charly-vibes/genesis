@@ -3,6 +3,22 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **git_hooks: lefthook managed blocks now nest inside the stage's
+  `commands:` mapping** — `ensure_wired` previously inserted the block
+  directly after the stage key, producing a stage-level command key that
+  lefthook silently ignores at runtime (only `lefthook validate` rejects
+  it), so downstream wiring like espectacular's `ah check` never ran
+  (genesis-r99, charly-vibes/espectacular#31). Caller content is now the
+  entries inside `commands:` (inserted verbatim, 4-space indent at the
+  `commands:` child level); `ensure_wired` emits `  commands:` after the
+  stage anchor when the stage lacks one, and appended missing stages get
+  `commands:` too. **Breaking for callers that passed a stage-level
+  mapping** — re-indent content one level deeper.
+
 ## [0.11.1] — 2026-10-01
 
 ### Fixed
