@@ -24,7 +24,7 @@ If you want the bleeding-edge version from the repository instead of the crates.
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.12.0" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.12.1" }
 ```
 
 ## Step 2: Emit structured output

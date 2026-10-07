@@ -3,6 +3,21 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.1] — 2026-10-07
+
+### Fixed
+
+- **update-check: no more downgrade suggestions when the installed version
+  is newer than the cached latest** — `check_with` compared with plain
+  string inequality, so a binary upgraded past the cached `latest` (e.g.
+  cache from 7 days ago holding `2026.9.28`, binary now `2026.10.4`)
+  printed `2026.9.28 available — you have 2026.10.4` on every run until
+  the TTL expired (genesis-u47, reproduced with wai-cli). Comparison now
+  goes through `is_newer`: semver when both versions parse (pre-release
+  ordering included), otherwise numeric calendar/dot-component ranking
+  (`2026.9.28` < `2026.10.4`, missing trailing components rank as `0`).
+  Non-comparable pairs stay silent; fail-silent contract unchanged.
+
 ## [0.12.0] — 2026-10-03
 
 ### Fixed
