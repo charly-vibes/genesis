@@ -185,6 +185,42 @@ fn fresh_cache_returns_cached_update_without_http() {
     );
 }
 
+/// genesis-u47: a cached `latest` older than the installed version must NOT
+/// surface as an update — that reads as "downgrade available".
+#[test]
+fn cached_latest_older_than_installed_returns_none() {
+    let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("1.2.3", false)]));
+    let dir = temp_cache_dir();
+    write_cache(&dir, "mytool", now_secs(), Some("1.2.3"), TTL_SECS);
+
+    let result = check_with("mytool", "2.0.0", &dir, &server.url);
+
+    assert!(
+        result.is_none(),
+        "cached 1.2.3 vs installed 2.0.0 must not suggest a downgrade"
+    );
+    assert_eq!(server.request_count(), 0);
+}
+
+/// genesis-u47: calendar scheme — cached 2026.9.28 vs installed 2026.10.4.
+#[test]
+fn cached_calendar_latest_older_than_installed_returns_none() {
+    let server = TestServer::spawn(
+        "HTTP/1.1 200 OK",
+        crates_io_payload(&[("2026.9.28", false)]),
+    );
+    let dir = temp_cache_dir();
+    write_cache(&dir, "mytool", now_secs(), Some("2026.9.28"), TTL_SECS);
+
+    let result = check_with("mytool", "2026.10.4", &dir, &server.url);
+
+    assert!(
+        result.is_none(),
+        "cached 2026.9.28 vs installed 2026.10.4 must not suggest a downgrade"
+    );
+    assert_eq!(server.request_count(), 0);
+}
+
 #[test]
 fn fresh_cache_with_no_update_returns_none_without_http() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("1.0.0", false)]));

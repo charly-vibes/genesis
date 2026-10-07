@@ -16,9 +16,11 @@
 //!   the check entirely, before any IO.
 //! - **Rate-limit polite.** crates.io 403/429 responses double the cache TTL
 //!   and send a descriptive `User-Agent`.
-//! - **Scheme-agnostic versioning.** Comparison is `current != latest` with
-//!   yanked and semver pre-release versions filtered out — calendar versions
-//!   (e.g. `2026.9.28`) need no special-casing.
+//! - **Newest-wins versioning.** Notification only when the latest stable
+//!   version is strictly newer than the installed one (genesis-u47): semver
+//!   comparison when both parse, calendar/numeric dot-component comparison
+//!   otherwise (e.g. `2026.9.28` < `2026.10.4`). Yanked and semver
+//!   pre-release versions are filtered out.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -137,7 +139,7 @@ pub fn check_with(
         let now = unix_now();
         if now >= cached.checked_at && now - cached.checked_at < cached.ttl_secs {
             return cached.latest.and_then(|latest| {
-                (latest != current_version).then(|| UpdateInfo {
+                is_newer(&latest, current_version).then(|| UpdateInfo {
                     crate_name: crate_name.to_string(),
                     latest,
                     current: current_version.to_string(),
@@ -164,7 +166,7 @@ pub fn check_with(
                     ttl_secs: DEFAULT_TTL_SECS,
                 },
             );
-            (latest != current_version).then(|| UpdateInfo {
+            is_newer(&latest, current_version).then(|| UpdateInfo {
                 crate_name: crate_name.to_string(),
                 latest,
                 current: current_version.to_string(),
@@ -269,7 +271,7 @@ fn fetch_latest(
 
 /// A version is "stable" if it does not carry a semver pre-release identifier.
 /// Versions that do not parse as semver (shouldn't happen on crates.io) are
-/// treated as stable — comparison itself is scheme-agnostic (`current != latest`).
+/// treated as stable — ranking itself is scheme-agnostic ([`is_newer`]).
 fn is_stable(version: &str) -> bool {
     match semver::Version::parse(version) {
         Ok(v) => v.pre.is_empty(),
@@ -303,6 +305,41 @@ fn is_valid_crate_name(crate_name: &str) -> bool {
         && crate_name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Returns `true` when `latest` is strictly newer than `current` (genesis-u47).
+///
+/// Semver when both versions parse as such (pre-release ordering included);
+/// otherwise a calendar/numeric comparison of dot-separated components
+/// (`2026.9.28` < `2026.10.4`, missing trailing components rank as `0`).
+/// Non-comparable pairs (non-numeric components) conservatively report "no
+/// update" — a cached `latest` must never surface as a downgrade suggestion.
+fn is_newer(latest: &str, current: &str) -> bool {
+    if let (Ok(latest_v), Ok(current_v)) = (
+        semver::Version::parse(latest),
+        semver::Version::parse(current),
+    ) {
+        return latest_v > current_v;
+    }
+    let mut latest_parts = latest.split('.');
+    let mut current_parts = current.split('.');
+    loop {
+        let l = latest_parts.next();
+        let c = current_parts.next();
+        if l.is_none() && c.is_none() {
+            return false;
+        }
+        let (Some(ln), Some(cn)) = (
+            l.unwrap_or("0").parse::<u64>().ok(),
+            c.unwrap_or("0").parse::<u64>().ok(),
+        ) else {
+            // Non-numeric components: not rankable, stay silent.
+            return false;
+        };
+        if ln != cn {
+            return ln > cn;
+        }
+    }
 }
 
 /// One stderr line when `GENESIS_UPDATE_CHECK_DEBUG` is set to a non-empty
