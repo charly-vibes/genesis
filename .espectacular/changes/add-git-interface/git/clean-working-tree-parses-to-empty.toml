@@ -1,0 +1,11 @@
+id = "clean-working-tree-parses-to-empty"
+description = "clean working tree parses to empty"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "porcelain_empty_status_is_empty_ok", timeout_seconds = 60 },
+]

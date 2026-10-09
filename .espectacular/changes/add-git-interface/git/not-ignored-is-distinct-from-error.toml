@@ -1,0 +1,11 @@
+id = "not-ignored-is-distinct-from-error"
+description = "not-ignored is distinct from error"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "is_ignored_not_ignored_distinct_from_error", timeout_seconds = 60 },
+]

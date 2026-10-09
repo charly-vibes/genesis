@@ -1,0 +1,11 @@
+id = "lossy-variants-degrade-silently-by-contract"
+description = "lossy variants degrade silently by contract"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "lossy_variant_returns_empty_on_failure", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "quoted-paths-are-unquoted"
+description = "quoted paths are unquoted"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "porcelain_quoted_paths_are_unquoted", timeout_seconds = 60 },
+]

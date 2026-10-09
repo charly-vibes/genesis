@@ -1,0 +1,11 @@
+id = "tracked-reports-files-known-to-git"
+description = "tracked reports files known to git"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "tracked_lists_files_known_to_git", timeout_seconds = 60 },
+]

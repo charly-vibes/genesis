@@ -1,0 +1,11 @@
+id = "nested-subdirectory-resolves-to-the-enclosing-root"
+description = "nested subdirectory resolves to the enclosing root"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "repo_root_resolves_nested_subdirectory", timeout_seconds = 60 },
+]

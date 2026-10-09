@@ -1,0 +1,11 @@
+id = "outside-a-repository-yields-a-typed-error"
+description = "outside a repository yields a typed error"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "repo_root_not_in_repo_is_typed_error", timeout_seconds = 60 },
+]

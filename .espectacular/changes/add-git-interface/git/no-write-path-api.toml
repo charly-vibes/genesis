@@ -1,0 +1,11 @@
+id = "no-write-path-api"
+description = "no write-path API"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "no_write_path_api", timeout_seconds = 60 },
+]

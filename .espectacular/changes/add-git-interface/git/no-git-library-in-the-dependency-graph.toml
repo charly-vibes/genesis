@@ -1,0 +1,11 @@
+id = "no-git-library-in-the-dependency-graph"
+description = "no git library in the dependency graph"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "no_git_library_in_dependency_graph", timeout_seconds = 60 },
+]

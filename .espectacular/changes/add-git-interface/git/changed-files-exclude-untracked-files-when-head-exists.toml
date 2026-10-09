@@ -1,0 +1,11 @@
+id = "changed-files-exclude-untracked-files-when-head-exists"
+description = "changed files exclude untracked files when HEAD exists"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "changed_files_exclude_untracked_with_head", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "a-failed-git-invocation-surfaces-as-a-typed-error"
+description = "a failed git invocation surfaces as a typed error"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "runner_failure_yields_typed_git_error", timeout_seconds = 60 },
+]

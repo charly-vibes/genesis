@@ -1,0 +1,11 @@
+id = "rename-records-report-the-new-path"
+description = "rename records report the new path"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "porcelain_rename_reports_new_path", timeout_seconds = 60 },
+]
