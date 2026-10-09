@@ -1,6 +1,6 @@
 [package]
 name = "genesis-vibes"
-version = "0.12.1"
+version = "0.12.2"
 edition = "2024"
 description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes tool suite"
 license = "Apache-2.0"
