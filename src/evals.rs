@@ -607,9 +607,9 @@ pub fn receipt_records_terminal_outcome(step: usize) -> impl Fn(&ScenarioResult)
 /// different command was issued.
 pub fn agent_followed_hint(
     recovery_index: usize,
-    suggested_command: &str,
-) -> impl Fn(&ScenarioResult) -> CheckOutcome + '_ {
-    let suggested = suggested_command.to_owned();
+    suggested_command: impl Into<String>,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let suggested = suggested_command.into();
     // Exact match, or suggested command as the word prefix — a recorded
     // agent that followed the hint but appended flags/args still followed
     // the hint (mirrors doc_drift_blindness matching; evallerina-2rr).
