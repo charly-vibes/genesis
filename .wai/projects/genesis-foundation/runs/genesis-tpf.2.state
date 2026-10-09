@@ -4,3 +4,4 @@ brief_path:
 steps:
   - claim @ bcd7fa8629ede8ee8e0b0b99ca05a276d7412069
   - gates @ bcd7fa8629ede8ee8e0b0b99ca05a276d7412069
+  - brief @ 7b282137530fc651953aa27abf056eb5d6ec40da
