@@ -610,8 +610,14 @@ pub fn agent_followed_hint(
     suggested_command: &str,
 ) -> impl Fn(&ScenarioResult) -> CheckOutcome + '_ {
     let suggested = suggested_command.to_owned();
+    // Exact match, or suggested command as the word prefix — a recorded
+    // agent that followed the hint but appended flags/args still followed
+    // the hint (mirrors doc_drift_blindness matching; evallerina-2rr).
+    let suggested_prefix = format!("{suggested} ");
     move |result| match result.steps.get(recovery_index) {
-        Some(s) if s.command == suggested => CheckOutcome::pass(),
+        Some(s) if s.command == suggested || s.command.starts_with(&suggested_prefix) => {
+            CheckOutcome::pass()
+        }
         Some(s) => CheckOutcome::agent_fault(
             ErrorTaxonomy::EnvelopeHintBlindness,
             format!(
@@ -1035,6 +1041,71 @@ mod tests {
         let report = scenario.run(replay).expect("fixture");
         assert!(!report.passed);
         assert_eq!(report.failures.len(), 1);
+        let (_, outcome) = &report.failures[0];
+        match outcome {
+            CheckOutcome::Fail {
+                taxonomy: Some(t), ..
+            } => assert_eq!(*t, ErrorTaxonomy::EnvelopeHintBlindness),
+            other => panic!("expected agent fault, got {other:?}"),
+        }
+    }
+
+    /// A recorded agent that followed the hint but appended a flag —
+    /// `my-tool fix --json` vs the suggested `my-tool fix` — followed the
+    /// hint. Exact-or-prefix matching (mirrors doc_drift_blindness):
+    /// flags/args must not classify hint-following as
+    /// ERR_ENVELOPE_HINT_BLINDNESS (evallerina-2rr).
+    #[test]
+    fn scenario_hint_followed_with_appended_flag_passes() {
+        let scenario = Scenario::new("hint-with-flag", "prompt")
+            .check("agent-followed-hint", agent_followed_hint(1, "my-tool fix"));
+        let replay = vec![
+            AgentStep {
+                command: "my-tool check".into(),
+                stdout: error_envelope_stdout("my-tool fix"),
+                stderr: String::new(),
+                exit_code: 1,
+                executed: true,
+            },
+            AgentStep {
+                command: "my-tool fix --json".into(),
+                stdout: ok_envelope_stdout(),
+                stderr: String::new(),
+                exit_code: 0,
+                executed: true,
+            },
+        ];
+        let report = scenario.run(replay).expect("fixture");
+        assert!(report.passed, "failures: {:?}", report.failures);
+    }
+
+    /// A truly different command still classifies as
+    /// ERR_ENVELOPE_HINT_BLINDNESS — the prefix must be the suggested
+    /// command followed by a word boundary, not any prefix characters.
+    #[test]
+    fn scenario_different_command_still_hint_blind() {
+        let scenario = Scenario::new("hint-different", "prompt")
+            .check("agent-followed-hint", agent_followed_hint(1, "my-tool fix"));
+        let replay = vec![
+            AgentStep {
+                command: "my-tool check".into(),
+                stdout: error_envelope_stdout("my-tool fix"),
+                stderr: String::new(),
+                exit_code: 1,
+                executed: true,
+            },
+            AgentStep {
+                // Shares a character prefix with the suggestion but is a
+                // different command ("fixtur" vs "fix") — must stay blind.
+                command: "my-tool fixtur".into(),
+                stdout: ok_envelope_stdout(),
+                stderr: String::new(),
+                exit_code: 0,
+                executed: true,
+            },
+        ];
+        let report = scenario.run(replay).expect("fixture");
+        assert!(!report.passed);
         let (_, outcome) = &report.failures[0];
         match outcome {
             CheckOutcome::Fail {
