@@ -1,0 +1,6 @@
+ticket: genesis-tpf.1
+branch: main
+brief_path: (pending)
+steps:
+  - claim @ 73a1a55
+  - gates @ 73a1a55
