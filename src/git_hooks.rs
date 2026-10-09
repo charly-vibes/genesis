@@ -104,17 +104,37 @@ pub fn repo_root() -> Result<PathBuf, GitHooksError> {
 /// Like [`repo_root()`], but walks up from an explicit starting directory.
 ///
 /// Exposed for tests and callers that already hold a working directory.
+///
+/// Alias delegating to [`crate::git::repo_root_from`] — the walk logic
+/// moved into the shared `git` module (genesis-tpf); behavior is
+/// unchanged, and `git::GitError::NotInRepo`/`Io` map back onto the
+/// matching [`GitHooksError`] variants.
 pub fn repo_root_from(start: &Path) -> Result<PathBuf, GitHooksError> {
-    let mut current = Some(start);
-    while let Some(dir) = current {
-        if dir.join(".git").exists() {
-            return Ok(dir.to_path_buf());
-        }
-        current = dir.parent();
+    crate::git::repo_root_from(start).map_err(map_root_error)
+}
+
+/// Map a [`crate::git::GitError`] from the root walk onto the
+/// [`GitHooksError`] variants callers of this module expect.
+fn map_root_error(error: crate::git::GitError) -> GitHooksError {
+    match error {
+        crate::git::GitError::NotInRepo { start } => GitHooksError::NotInRepo { start },
+        crate::git::GitError::Io {
+            path,
+            message,
+            source,
+        } => GitHooksError::Io {
+            path,
+            message,
+            source,
+        },
+        // The root walk never spawns git, so `Git`/`Spawn` are unreachable;
+        // still map them exhaustively onto `Io` for future-proofing.
+        other => GitHooksError::Io {
+            path: PathBuf::from("."),
+            message: other.to_string(),
+            source: std::io::Error::other(other.to_string()),
+        },
     }
-    Err(GitHooksError::NotInRepo {
-        start: start.to_path_buf(),
-    })
 }
 
 /// Resolve the repository's hook directory.

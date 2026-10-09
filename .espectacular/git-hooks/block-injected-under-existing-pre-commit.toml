@@ -7,5 +7,5 @@ authored_with = "0.3.0"
 
 [tests]
 cargo = [
-    { flags = "ensure_wired_inserts_block_directly_after_stage_key", timeout_seconds = 60 },
+    { flags = "ensure_wired_nests_block_inside_existing_commands_mapping", timeout_seconds = 60 },
 ]
