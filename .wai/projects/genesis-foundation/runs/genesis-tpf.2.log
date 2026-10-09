@@ -1,0 +1,34 @@
+Done. Final state verified — working tree is clean except hook-managed `.pretender` artifacts (regenerated on every commit, left alone deliberately).
+
+## Final Report — genesis-tpf.2 (twin: testaruda-licv)
+
+**Commits** (on `feat/genesis-git-migration`, base `6997713`):
+1. `14ed844` — **RED**: failing non-repo test + characterization guards + shared-parser port tests + genesis-vibes `0.10 → 0.13` bump (includes the lead's staged `.beads/issues.jsonl` claim, as the brief permitted)
+2. `507dff7` — **GREEN + tidy**: full migration of `src/change.rs` onto `genesis::git` (−100/+37 lines)
+
+**Red/green sequence followed strictly:**
+- RED test `test_from_diff_nonrepo_is_error_not_silent_empty` ran and **failed** against the pre-migration code, proving the old silent-empty behavior (`Ok(ChangeSet { files: [] })` outside a repo)
+- Migration then made it pass with the mapped `NotInRepo` miette error
+
+**What changed in `src/change.rs`:**
+- Range diff → `genesis::git::repo_root()` + `changed_files_between(root, base, head)`; `from_revisions: true` preserved
+- Uncommitted path → `uncommitted_files(root)` (includes untracked, shared `parse_porcelain`)
+- `GitError` → miette mapping preserves code+stderr for git failures, walk-start for `NotInRepo`, no silent degradation
+- Explicit-file-list branch and `commands.rs` call site untouched
+- Local `parse_porcelain_line` deleted (no external callers — verified by grep); local parse tests replaced by 4 shared-parser characterization ports (rename, rename+modified, quoted/untracked, mixed statuses)
+
+**Completion criteria (all exit 0):**
+| Check | Result |
+|---|---|
+| `cargo test --quiet` | ✅ 331 passed, 0 failed |
+| `cargo clippy --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --check` | ✅ clean |
+| `cargo tree -p genesis-vibes -i` | ✅ `genesis-vibes v0.13.0` |
+
+**Deviations from the brief:**
+1. **Test count baseline**: brief cites a 269-test baseline; the full suite now totals 331 passed (all green — the delta is pre-existing tests in other binaries, not added by this ticket; my net addition is 3 tests: 8 change-module tests vs 7 original).
+2. **Crate name**: brief referred to `genesis::git` via crate `genesis-vibes`; the lib target is named `genesis` (not `genesis_vibes`) — code references use `genesis::git`.
+3. First commit attempt was rejected once by the pre-commit `fmt-check` hook (rustfmt reflow of one test line); fixed with `cargo fmt` and recommitted.
+4. No follow-up threshold trips: shared parser semantics (rename→new-path, unquoting) are a superset of the local parser with no behavioral regression; all needed ops exist in genesis 0.13.
+
+Not done per brief: no push, no ticket close, no changes outside the worktree.

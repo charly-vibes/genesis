@@ -5,3 +5,7 @@ steps:
   - claim @ bcd7fa8629ede8ee8e0b0b99ca05a276d7412069
   - gates @ bcd7fa8629ede8ee8e0b0b99ca05a276d7412069
   - brief @ 7b282137530fc651953aa27abf056eb5d6ec40da
+  - spawn @ 5bf5b45b048cc471cf37ee1b818aece06671babd
+  - verify @ 5bf5b45b048cc471cf37ee1b818aece06671babd
+  - ship @ 5bf5b45b048cc471cf37ee1b818aece06671babd
+  - stop @ 5bf5b45b048cc471cf37ee1b818aece06671babd
