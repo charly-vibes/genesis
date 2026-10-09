@@ -3,6 +3,32 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0] — 2026-10-09
+
+### Added
+
+- **`genesis::git` — shared read-only git plumbing** (genesis-tpf.1, epic
+  genesis-tpf): one subprocess-based module consolidating the git queries
+  seven suite tools had re-implemented with drift. Walk-based repo-root
+  detection (worktree `.git`-file aware, works inside `.git`, ignores
+  `GIT_DIR` — `git_hooks::repo_root_from` now delegates to it, no behavior
+  change); canonical `run()` with opt-in env hygiene
+  (`EnvPolicy::Inherit` default, `StripHookContext` removes
+  `GIT_DIR`/`GIT_INDEX_FILE`/`GIT_WORK_TREE`); `changed_files` /
+  `changed_files_between` / `uncommitted_files` (+ documented
+  `uncommitted_files_lossy`) with unborn-HEAD untracked fallback and
+  declared enumeration sets (uncommitted ⊇ untracked; changed excludes
+  untracked while HEAD resolves); porcelain v1 `parse_porcelain` with
+  rename→new-path semantics (fixes the `old -> new` joined-string defect
+  class) and C-style path unquoting; `tracked`, single-path
+  `is_ignored` tri-state (exit 0/1/≥128), `content_hash` and
+  `committed_content_hash`. Typed `GitError::{NotInRepo, Git, Spawn, Io}`;
+  no `git2`/`gitoxide` dependency — subprocess only; no write-path API
+  (`init`/`add`/`commit` stay in wai). Spec: `git` (19 scenarios,
+  contracts under `.espectacular/git/`); downstream migrations tracked in
+  epic genesis-tpf (testaruda/espectacular/pretender/dont/wai/whisper/
+  dulce).
+
 ## [0.12.1] — 2026-10-07
 
 ### Fixed

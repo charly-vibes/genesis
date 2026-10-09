@@ -49,6 +49,10 @@ fn main() {
             "agent evals: ErrorTaxonomy, deterministic Scenario replay, eval report contract",
         ),
         ModuleEntry::new(
+            "git",
+            "shared read-only git plumbing: repo root, changed/uncommitted files, tracked/ignored, content hash",
+        ),
+        ModuleEntry::new(
             "git_hooks",
             "shared git hook primitives: install/uninstall with ownership markers, owner/framework detection, lefthook wiring",
         ),
@@ -79,6 +83,10 @@ fn main() {
         (
             "evals",
             "ErrorTaxonomy, parse_envelope(), Scenario, ScenarioReport — deterministic in-process eval replay",
+        ),
+        (
+            "git",
+            "repo_root(), run(), changed_files(), uncommitted_files(), tracked(), is_ignored(), content_hash(), parse_porcelain()",
         ),
         (
             "git_hooks",

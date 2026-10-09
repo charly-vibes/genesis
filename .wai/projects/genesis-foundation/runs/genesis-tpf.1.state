@@ -1,6 +1,11 @@
 ticket: genesis-tpf.1
 branch: main
-brief_path: (pending)
+brief_path: .wai/projects/genesis-foundation/briefs/genesis-tpf.1-implement-genesis-git.md
 steps:
   - claim @ 73a1a55
   - gates @ 73a1a55
+  - brief @ 3a9f6bc
+  - spawn @ 3a9f6bc
+  - verify @ 4bc3caf
+  - ship @ 4bc3caf
+  - stop @ 4bc3caf
