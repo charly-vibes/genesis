@@ -1,0 +1,6 @@
+ticket: genesis-tpf.2
+branch: feat/genesis-git-migration (worktree testaruda-git-epic, base 6997713)
+brief_path:
+steps:
+  - claim @ bcd7fa8629ede8ee8e0b0b99ca05a276d7412069
+  - gates @ bcd7fa8629ede8ee8e0b0b99ca05a276d7412069
