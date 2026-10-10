@@ -92,6 +92,82 @@ NOT have both silent and erroring behavior hidden behind one signature.
 - **THEN** the variant SHALL return an empty collection
 - **AND** its documentation SHALL state the degradation explicitly
 
+#### Scenario: changed-files lossy variant degrades silently by contract
+
+- **WHEN** the underlying `git` process fails during `changed_files_lossy`
+- **THEN** the variant SHALL return an empty collection
+- **AND** when `git` succeeds, the variant SHALL match `changed_files`
+- **AND** its documentation SHALL state the degradation explicitly
+
+### Requirement: Policy-aware named helpers
+
+Every named helper that spawns git (`changed_files`,
+`changed_files_between`, `uncommitted_files`, `tracked`, `is_ignored`,
+`content_hash`, `committed_content_hash`, and the single-path status)
+SHALL expose a `*_with_policy` variant taking an explicit environment
+policy as its last argument. The plain variants SHALL keep the
+`Inherit` default, and both variants SHALL share one internal
+implementation (no logic duplication).
+
+#### Scenario: policy variants propagate the environment policy
+
+- **WHEN** a named helper's `*_with_policy` variant is invoked with the
+  strip-hook-context policy in a hook-like environment (`GIT_DIR` set to
+  a value that cannot be a git directory)
+- **THEN** the spawned `git` process SHALL NOT receive `GIT_DIR`
+- **AND** the helper SHALL succeed with correct values
+
+#### Scenario: named helpers default to inherit
+
+- **WHEN** a plain named helper is invoked in a hook-like environment
+  (`GIT_DIR` set to a value that cannot be a git directory)
+- **THEN** the spawned `git` process SHALL receive `GIT_DIR`
+- **AND** the helper SHALL fail with a typed error (inheritance is
+  observable)
+
+### Requirement: Single-path status with porcelain XY
+
+`path_status` SHALL query `git status --porcelain -- <path>` for exactly
+one path and SHALL map the `XY` code to a tri-state: `??` → untracked;
+unmerged entries (`U` in either column, or `DD`/`AA`) → dirty (documented
+mapping); non-blank `Y` (worktree differs from index) → dirty; non-blank
+`X` (index differs from `HEAD`) → staged. A clean path (empty porcelain
+body) SHALL yield no status. The worktree column SHALL win when both
+columns are set. Git failures SHALL surface as typed errors.
+
+#### Scenario: single-path status maps the XY columns
+
+- **WHEN** `path_status` is called for an untracked path, a
+  worktree-modified path, and a staged-only path
+- **THEN** the results SHALL be untracked, dirty, and staged
+  respectively
+- **AND** when both columns are set (`MM`), the worktree state SHALL win
+  (dirty)
+
+#### Scenario: a clean path reports no status
+
+- **WHEN** `path_status` is called for a committed, unmodified path
+- **THEN** the result SHALL be no status (empty porcelain body)
+- **AND** the operation SHALL succeed
+
+#### Scenario: unmerged states map to dirty
+
+- **WHEN** the index carries unmerged entries for the path (`UU`)
+- **THEN** `path_status` SHALL report dirty
+- **AND** SHALL NOT report staged or untracked
+
+#### Scenario: absolute paths under the root are accepted
+
+- **WHEN** `path_status` is called with an absolute path under `root`
+- **THEN** the path SHALL be relativized against `root` and the query
+  SHALL succeed like its relative form
+
+#### Scenario: a git failure surfaces as a typed error
+
+- **WHEN** `path_status` runs outside a repository
+- **THEN** the operation SHALL return a typed error
+- **AND** SHALL NOT report any status
+
 ### Requirement: Porcelain v1 parsing contract
 
 Uncommitted-file enumeration SHALL parse `git status --porcelain` (v1)

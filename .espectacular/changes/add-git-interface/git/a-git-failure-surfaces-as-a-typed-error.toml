@@ -1,0 +1,11 @@
+id = "a-git-failure-surfaces-as-a-typed-error"
+description = "a single-path status git failure surfaces as a typed error"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "path_status_git_failure_is_typed_error", timeout_seconds = 60 },
+]

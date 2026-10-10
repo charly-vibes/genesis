@@ -182,10 +182,10 @@ fn is_unborn_head(stderr: &str) -> bool {
 }
 
 /// Enumerate untracked files (git's own ignore rules respected).
-fn untracked_files(root: &Path) -> Result<Vec<String>, GitError> {
+fn untracked_files_with_policy(root: &Path, policy: EnvPolicy) -> Result<Vec<String>, GitError> {
     let out = run(
         root,
-        EnvPolicy::Inherit,
+        policy,
         &["ls-files", "--others", "--exclude-standard"],
     )?;
     Ok(lines_of(&out.stdout))
@@ -198,29 +198,51 @@ fn untracked_files(root: &Path) -> Result<Vec<String>, GitError> {
 /// returning an empty set — the unborn-HEAD fallback is the only mode in
 /// which untracked files appear here.
 pub fn changed_files(root: &Path) -> Result<Vec<String>, GitError> {
-    match run(root, EnvPolicy::Inherit, &["diff", "--name-only", "HEAD"]) {
+    changed_files_with_policy(root, EnvPolicy::Inherit)
+}
+
+/// [`changed_files`] with an explicit environment policy (policy-aware
+/// variant; see [`run`] for what the policy controls).
+pub fn changed_files_with_policy(root: &Path, policy: EnvPolicy) -> Result<Vec<String>, GitError> {
+    match run(root, policy, &["diff", "--name-only", "HEAD"]) {
         Ok(out) => Ok(lines_of(&out.stdout)),
         Err(GitError::Git {
             code: 128, stderr, ..
-        }) if is_unborn_head(&stderr) => untracked_files(root),
+        }) if is_unborn_head(&stderr) => untracked_files_with_policy(root, policy),
         Err(other) => Err(other),
     }
 }
 
 /// Files with tracked changes between two revisions (both must resolve).
 pub fn changed_files_between(root: &Path, base: &str, head: &str) -> Result<Vec<String>, GitError> {
-    let out = run(
-        root,
-        EnvPolicy::Inherit,
-        &["diff", "--name-only", base, head],
-    )?;
+    changed_files_between_with_policy(root, base, head, EnvPolicy::Inherit)
+}
+
+/// [`changed_files_between`] with an explicit environment policy
+/// (policy-aware variant; see [`run`] for what the policy controls).
+pub fn changed_files_between_with_policy(
+    root: &Path,
+    base: &str,
+    head: &str,
+    policy: EnvPolicy,
+) -> Result<Vec<String>, GitError> {
+    let out = run(root, policy, &["diff", "--name-only", base, head])?;
     Ok(lines_of(&out.stdout))
 }
 
 /// Every entry of `git status --porcelain` (v1): staged, unstaged,
 /// renamed (new path), and untracked files.
 pub fn uncommitted_files(root: &Path) -> Result<Vec<String>, GitError> {
-    let out = run(root, EnvPolicy::Inherit, &["status", "--porcelain"])?;
+    uncommitted_files_with_policy(root, EnvPolicy::Inherit)
+}
+
+/// [`uncommitted_files`] with an explicit environment policy (policy-aware
+/// variant; see [`run`] for what the policy controls).
+pub fn uncommitted_files_with_policy(
+    root: &Path,
+    policy: EnvPolicy,
+) -> Result<Vec<String>, GitError> {
+    let out = run(root, policy, &["status", "--porcelain"])?;
     Ok(parse_porcelain(&String::from_utf8_lossy(&out.stdout)))
 }
 
@@ -230,6 +252,15 @@ pub fn uncommitted_files(root: &Path) -> Result<Vec<String>, GitError> {
 /// acceptable answer; the degradation is contractual and explicit.
 pub fn uncommitted_files_lossy(root: &Path) -> Vec<String> {
     uncommitted_files(root).unwrap_or_default()
+}
+
+/// Like [`changed_files`], but degrades silently: on any git failure
+/// (non-repo directory, spawn failure, non-zero exit) returns an empty
+/// set instead of an error. Symmetric with [`uncommitted_files_lossy`];
+/// use only where an empty result is an acceptable answer — the
+/// degradation is contractual and explicit.
+pub fn changed_files_lossy(root: &Path) -> Vec<String> {
+    changed_files(root).unwrap_or_default()
 }
 
 /// Parse a `git status --porcelain` (v1) body into file paths.
@@ -331,10 +362,16 @@ fn relative_to(root: &Path, path: &Path) -> String {
 /// of working-tree modifications. `Ok(false)` for paths git does not
 /// know; a typed error for any other failure.
 pub fn tracked(root: &Path, path: &Path) -> Result<bool, GitError> {
+    tracked_with_policy(root, path, EnvPolicy::Inherit)
+}
+
+/// [`tracked`] with an explicit environment policy (policy-aware variant;
+/// see [`run`] for what the policy controls).
+pub fn tracked_with_policy(root: &Path, path: &Path, policy: EnvPolicy) -> Result<bool, GitError> {
     let relative = relative_to(root, path);
     match run(
         root,
-        EnvPolicy::Inherit,
+        policy,
         &["ls-files", "--error-unmatch", "--", &relative],
     ) {
         Ok(_) => Ok(true),
@@ -350,12 +387,18 @@ pub fn tracked(root: &Path, path: &Path) -> Result<bool, GitError> {
 /// one path is accepted because `check-ignore` exits 0 when *any* of
 /// several paths is ignored, which cannot express a per-path tri-state.
 pub fn is_ignored(root: &Path, path: &Path) -> Result<bool, GitError> {
+    is_ignored_with_policy(root, path, EnvPolicy::Inherit)
+}
+
+/// [`is_ignored`] with an explicit environment policy (policy-aware
+/// variant; see [`run`] for what the policy controls).
+pub fn is_ignored_with_policy(
+    root: &Path,
+    path: &Path,
+    policy: EnvPolicy,
+) -> Result<bool, GitError> {
     let relative = relative_to(root, path);
-    match run(
-        root,
-        EnvPolicy::Inherit,
-        &["check-ignore", "-q", "--", &relative],
-    ) {
+    match run(root, policy, &["check-ignore", "-q", "--", &relative]) {
         Ok(_) => Ok(true),
         // exit 1: the path exists but is not ignored.
         Err(GitError::Git { code: 1, .. }) => Ok(false),
@@ -368,15 +411,104 @@ pub fn is_ignored(root: &Path, path: &Path) -> Result<bool, GitError> {
 /// Hash a worktree file's content via `git hash-object` (deterministic
 /// for the same content).
 pub fn content_hash(root: &Path, path: &Path) -> Result<String, GitError> {
+    content_hash_with_policy(root, path, EnvPolicy::Inherit)
+}
+
+/// [`content_hash`] with an explicit environment policy (policy-aware
+/// variant; see [`run`] for what the policy controls).
+pub fn content_hash_with_policy(
+    root: &Path,
+    path: &Path,
+    policy: EnvPolicy,
+) -> Result<String, GitError> {
     let relative = relative_to(root, path);
-    let out = run(root, EnvPolicy::Inherit, &["hash-object", "--", &relative])?;
+    let out = run(root, policy, &["hash-object", "--", &relative])?;
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// The single-path status of a worktree/index path, derived from the
+/// `XY` code of `git status --porcelain -- <path>` (see [`path_status`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathStatus {
+    /// The index differs from `HEAD` (non-blank `X` column) after the
+    /// worktree check below — i.e. staged-only change. Precedence:
+    /// when both columns are set (e.g. `MM`), [`PathStatus::Dirty`] wins
+    /// because the worktree state is the later snapshot.
+    Staged,
+    /// The worktree differs from the index (non-blank `Y` column), or the
+    /// path is unmerged (`U` in either column, or `DD`/`AA`) — unmerged
+    /// states map to dirty by contract because both mean "this path needs
+    /// attention before it can be committed".
+    Dirty,
+    /// The path is untracked (`??`).
+    Untracked,
+}
+
+/// Status of exactly one path via `git status --porcelain -- <path>`.
+///
+/// Returns `Ok(None)` when the path is clean (empty porcelain body —
+/// which also covers paths unknown to git), `Some(_)` otherwise:
+/// `??` → [`PathStatus::Untracked`]; unmerged (`U` in either column,
+/// `DD`, `AA`) → [`PathStatus::Dirty`] (documented mapping); non-blank
+/// `Y` (worktree differs from index) → [`PathStatus::Dirty`]; non-blank
+/// `X` (index differs from `HEAD`) → [`PathStatus::Staged`]. Exactly one
+/// path is queried because the dispatcher contract (hook-time decisions
+/// on a single file) needs one unambiguous answer, not a list. Git
+/// failures surface as typed errors.
+pub fn path_status(root: &Path, rel: &Path) -> Result<Option<PathStatus>, GitError> {
+    path_status_with_policy(root, rel, EnvPolicy::Inherit)
+}
+
+/// [`path_status`] with an explicit environment policy (policy-aware
+/// variant; see [`run`] for what the policy controls).
+pub fn path_status_with_policy(
+    root: &Path,
+    rel: &Path,
+    policy: EnvPolicy,
+) -> Result<Option<PathStatus>, GitError> {
+    let relative = relative_to(root, rel);
+    let out = run(root, policy, &["status", "--porcelain", "--", &relative])?;
+    let body = String::from_utf8_lossy(&out.stdout);
+    // A single-path status body carries at most one record.
+    let Some(line) = body.lines().next() else {
+        return Ok(None);
+    };
+    let bytes = line.as_bytes();
+    if bytes.len() < 2 {
+        return Ok(None);
+    }
+    let (x, y) = (bytes[0], bytes[1]);
+    Ok(Some(if x == b'?' || y == b'?' {
+        PathStatus::Untracked
+    } else if x == b'U' || y == b'U' || (x == b'D' && y == b'D') || (x == b'A' && y == b'A') {
+        // Unmerged maps to dirty (documented): both mean the path cannot
+        // be committed as-is.
+        PathStatus::Dirty
+    } else if y != b' ' {
+        PathStatus::Dirty
+    } else if x != b' ' {
+        PathStatus::Staged
+    } else {
+        // Both columns blank cannot appear for a listed path; treat as
+        // clean for safety.
+        return Ok(None);
+    }))
 }
 
 /// Resolve the committed content of a path via `git rev-parse
 /// HEAD:<path>` — the blob hash of the file as committed at HEAD.
 pub fn committed_content_hash(root: &Path, path: &Path) -> Result<String, GitError> {
+    committed_content_hash_with_policy(root, path, EnvPolicy::Inherit)
+}
+
+/// [`committed_content_hash`] with an explicit environment policy
+/// (policy-aware variant; see [`run`] for what the policy controls).
+pub fn committed_content_hash_with_policy(
+    root: &Path,
+    path: &Path,
+    policy: EnvPolicy,
+) -> Result<String, GitError> {
     let spec = format!("HEAD:{}", relative_to(root, path));
-    let out = run(root, EnvPolicy::Inherit, &["rev-parse", "--verify", &spec])?;
+    let out = run(root, policy, &["rev-parse", "--verify", &spec])?;
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }

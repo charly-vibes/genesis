@@ -1,0 +1,14 @@
+id = "single-path-status-maps-the-xy-columns"
+description = "single-path status maps the XY columns; worktree column wins when both are set"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "path_status_untracked_is_untracked", timeout_seconds = 60 },
+    { flags = "path_status_worktree_modification_is_dirty", timeout_seconds = 60 },
+    { flags = "path_status_staged_modification_is_staged", timeout_seconds = 60 },
+    { flags = "path_status_worktree_change_wins_over_staged", timeout_seconds = 60 },
+]

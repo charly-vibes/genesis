@@ -3,6 +3,28 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **`genesis::git` — policy-aware named helpers + single-path status**
+  (genesis-z0r, additive only — no breaking changes): every named helper
+  that spawns git (`changed_files`, `changed_files_between`,
+  `uncommitted_files`, `tracked`, `is_ignored`, `content_hash`,
+  `committed_content_hash`, `path_status`) now has a
+  `*_with_policy(root, ..., policy)` variant sharing one internal impl;
+  the default stays `EnvPolicy::Inherit`, and callers inside git hooks
+  (e.g. dont bd-hook dispatch) pass `EnvPolicy::StripHookContext` so git
+  discovers the repository from the explicit root alone. New
+  `path_status(root, rel) -> Result<Option<PathStatus>, GitError>` runs
+  single-path `git status --porcelain -- <path>` and maps the `XY` code:
+  `??` → `Untracked`; unmerged (`U`, `DD`, `AA`) → `Dirty` (documented
+  mapping); worktree change → `Dirty`; staged-only → `Staged`; clean →
+  `None` — the dispatch input tpf.5's dont migration needs. New
+  `changed_files_lossy(root)` completes lossy-variant symmetry with
+  `uncommitted_files_lossy` (tpf.3 finding). Compatibility: purely
+  additive; existing call sites keep their signatures and behavior.
+
 ## [0.13.0] — 2026-10-09
 
 ### Added

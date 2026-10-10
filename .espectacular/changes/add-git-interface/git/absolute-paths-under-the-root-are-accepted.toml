@@ -1,0 +1,11 @@
+id = "absolute-paths-under-the-root-are-accepted"
+description = "single-path status accepts absolute paths under the root"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "path_status_accepts_absolute_path_under_root", timeout_seconds = 60 },
+]

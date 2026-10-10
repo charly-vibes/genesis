@@ -1,0 +1,11 @@
+id = "unmerged-states-map-to-dirty"
+description = "unmerged states map to dirty"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "path_status_unmerged_maps_to_dirty", timeout_seconds = 60 },
+]

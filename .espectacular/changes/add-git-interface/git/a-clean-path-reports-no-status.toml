@@ -1,0 +1,11 @@
+id = "a-clean-path-reports-no-status"
+description = "a clean path reports no status"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "path_status_clean_committed_path_is_none", timeout_seconds = 60 },
+]

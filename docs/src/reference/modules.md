@@ -20,6 +20,7 @@
 | `status` | new | `StatusContributor` trait, `StatusBuilder`, `StatusLevel`, `StatusSection` | `StatusBuilder::new()` |
 | `scaffold` | new | `Scaffold`, `ScaffoldResult` | `Scaffold::new()` |
 | `discovery` | new | `scan()`, `register()`, `unregister()`, `Manifest`, `DetectedTool` | `scan()`, `register()` |
+| `git` | new | `GitError`, `GitOutput`, `EnvPolicy`, `PathStatus` | `repo_root()`, `changed_files()`, `uncommitted_files()`, `path_status()`, `run()` |
 | `git_hooks` | new | `HookName`, `Owner`, `Framework`, `GitHooksError`, `lefthook::Stage`, `lefthook::WireOutcome` | `install()`, `uninstall()`, `owner()`, `framework()`, `resolve_hooks_dir()` |
 | `update_check` | new | `UpdateInfo` | `check()`, `notice()` |
 
@@ -563,6 +564,53 @@ Tool discovery via `.genesis/tools.toml` manifest.
 | `register(project, name, desc, type, path)` | Register a tool |
 | `unregister(project, name)` | Remove a tool registration |
 | `list_tools(project)` | List all registered tools |
+
+---
+
+## git
+
+**Signature:** `genesis::git`
+
+Shared read-only git plumbing: one subprocess-based module for the repo
+queries every suite tool previously re-implemented with drift. Read-only
+only — no `git init`/`add`/commit (write paths stay with callers), no hook
+wiring ([git_hooks](#git_hooks) owns that), no git library (the `git`
+binary is spawned as a subprocess).
+
+### Key Types
+
+| Type | Description |
+| :--- | :--- |
+| `GitError` | `NotInRepo`, `Git` (args + exit code + stderr), `Spawn`, `Io` |
+| `GitOutput` | Exit code + captured stdout/stderr bytes of a successful run |
+| `EnvPolicy` | Environment policy for spawned git: `Inherit` (default) or `StripHookContext` (removes `GIT_DIR`/`GIT_INDEX_FILE`/`GIT_WORK_TREE`) |
+| `PathStatus` | Single-path status: `Staged` (index differs from HEAD), `Dirty` (worktree differs from index, or unmerged), `Untracked` (`??`) |
+
+### Functions
+
+| Function | Description |
+| :--- | :--- |
+| `repo_root()` / `repo_root_from(start)` | Walk up to the first `.git` entry (file or dir); never influenced by `GIT_DIR` |
+| `run(root, policy, args)` | Canonical runner: `root` becomes the child's cwd; non-zero exit / spawn failure → typed errors |
+| `changed_files(root)` | Tracked changes vs `HEAD`; untracked only in the unborn-HEAD fallback |
+| `changed_files_between(root, base, head)` | Tracked changes between two revisions (both must resolve) |
+| `uncommitted_files(root)` | Every `git status --porcelain` entry (staged, unstaged, renamed→new path, untracked) |
+| `uncommitted_files_lossy(root)` / `changed_files_lossy(root)` | Lossy variants: empty collection on any git failure, by documented contract |
+| `path_status(root, rel)` | Single-path status from the porcelain `XY` code: `??` → untracked; unmerged (`U`, `DD`, `AA`) → dirty; worktree change → dirty; staged-only → staged; clean → `None` |
+| `tracked(root, path)` | Whether git knows the path (`ls-files --error-unmatch`), independent of modifications |
+| `is_ignored(root, path)` | `check-ignore -q` tri-state: ignored / not-ignored (exit 1) / typed error (≥128) |
+| `content_hash(root, path)` | `git hash-object` of the worktree content (deterministic) |
+| `committed_content_hash(root, path)` | Blob hash at `HEAD:<path>` via `rev-parse --verify` |
+| `parse_porcelain(body)` | Porcelain v1 parsing: rename/copy → new path, C-style quoting unquoted, empty body → empty list |
+
+### Policy-aware variants
+
+Every named helper that spawns git has a `*_with_policy(root, ..., policy)`
+variant taking [`EnvPolicy`] as its last argument, sharing one internal
+implementation with the plain variant. The default stays `Inherit` because
+hook harnesses legitimately inject `GIT_DIR` et al.; call the variant with
+`EnvPolicy::StripHookContext` when running inside a git hook (e.g. the dont
+bd hooks) and the repository must be discovered from `root` alone.
 
 ---
 

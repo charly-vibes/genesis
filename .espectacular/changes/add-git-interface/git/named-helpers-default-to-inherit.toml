@@ -1,0 +1,11 @@
+id = "named-helpers-default-to-inherit"
+description = "named helpers default to inherit"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "policy_propagation_child", timeout_seconds = 60 },
+]

@@ -1,0 +1,12 @@
+id = "changed-files-lossy-variant-degrades-silently-by-contract"
+description = "changed_files_lossy degrades silently by contract and matches changed_files on success"
+archetype = "SA"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "changed_files_lossy_returns_empty_on_failure", timeout_seconds = 60 },
+    { flags = "changed_files_lossy_matches_changed_files_on_success", timeout_seconds = 60 },
+]
