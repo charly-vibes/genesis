@@ -153,7 +153,10 @@ impl Fixture {
         let program = args[0];
         let cmd_args = &args[1..];
 
-        let output = Command::new(program)
+        // Hermetic: hook environments inject `GIT_DIR` and friends (git
+        // exports them to hooks), which would hijack fixture-run git onto
+        // the real repository. Strip them — fixtures are self-contained.
+        let output = hermetic_git(&mut Command::new(program))
             .args(cmd_args)
             .current_dir(&self.root)
             .output()
@@ -183,6 +186,24 @@ pub struct CommandOutput {
     /// On Unix, the terminating signal if the process was killed by one;
     /// `None` otherwise (including on non-Unix platforms).
     pub signal: Option<i32>,
+}
+
+/// Remove the hook-context variables git exports to hook processes
+/// (`GIT_DIR`, `GIT_INDEX_FILE`, `GIT_WORK_TREE`) from a fixture command.
+///
+/// Rationale: when the test suite runs inside a git hook (the pre-commit
+/// testaruda selection runs the whole suite), the surrounding `git
+/// commit` exports `GIT_DIR` — and a fixture that inherits it would run
+/// its `git init`/`add`/`commit` against the *real* repository instead
+/// of the fixture's own (observed: a hook-time cargo test landed a bogus
+/// `initial` commit on a development branch). Fixtures are self-contained
+/// sandboxes; their git operations must discover the fixture repo from
+/// the command's working directory alone.
+fn hermetic_git(cmd: &mut Command) -> &mut Command {
+    for var in ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"] {
+        cmd.env_remove(var);
+    }
+    cmd
 }
 
 impl CommandOutput {
@@ -411,7 +432,7 @@ impl FixtureBuilder {
 /// Run `git init` plus an initial commit in `root`.
 fn git_init_repo(root: &Path) -> Result<(), FixtureError> {
     let run = |stage: &'static str, args: &[&str]| -> Result<std::process::Output, FixtureError> {
-        Command::new("git")
+        hermetic_git(&mut Command::new("git"))
             .args(args)
             .current_dir(root)
             .output()
@@ -452,7 +473,7 @@ fn git_init_repo(root: &Path) -> Result<(), FixtureError> {
         });
     }
 
-    let commit = Command::new("git")
+    let commit = hermetic_git(&mut Command::new("git"))
         .args(["commit", "-m", "initial"])
         .current_dir(root)
         .env("GIT_AUTHOR_DATE", "2020-01-01T00:00:00Z")
