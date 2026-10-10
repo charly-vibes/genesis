@@ -147,11 +147,25 @@ fn get_gh_version() -> Option<String> {
         })
 }
 
+/// Spawn git anchored at `cwd`, ignoring hook-context injection.
+///
+/// `git commit` exports `GIT_DIR`/`GIT_INDEX_FILE`/`GIT_WORK_TREE` to
+/// hook processes, and this code runs from inside hooks (feedback comes
+/// from agent sessions); the context must describe the workspace at
+/// `cwd`, never the ambient `GIT_DIR`'s repository.
+fn git_cmd(cwd: &Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
+    for var in ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"] {
+        cmd.env_remove(var);
+    }
+    cmd.current_dir(cwd);
+    cmd
+}
+
 /// Get the git remote URL (origin).
 fn get_git_remote(cwd: &Path) -> Option<String> {
-    std::process::Command::new("git")
+    git_cmd(cwd)
         .args(["config", "--get", "remote.origin.url"])
-        .current_dir(cwd)
         .output()
         .ok()
         .and_then(|o| {
@@ -171,9 +185,8 @@ fn get_git_remote(cwd: &Path) -> Option<String> {
 /// ≥ 2.22; older git fails the command and degrades to `None`). Empty
 /// output (detached HEAD) also degrades to `None` (genesis-w6h).
 fn get_git_branch(cwd: &Path) -> Option<String> {
-    std::process::Command::new("git")
+    git_cmd(cwd)
         .args(["branch", "--show-current"])
-        .current_dir(cwd)
         .output()
         .ok()
         .and_then(|o| {
@@ -190,9 +203,8 @@ fn get_git_branch(cwd: &Path) -> Option<String> {
 
 /// Check if the working tree is dirty.
 fn get_git_dirty(cwd: &Path) -> Option<bool> {
-    std::process::Command::new("git")
+    git_cmd(cwd)
         .args(["status", "--porcelain"])
-        .current_dir(cwd)
         .output()
         .ok()
         .and_then(|o| {
@@ -379,8 +391,13 @@ mod tests {
     #[test]
     fn test_gather_context_git_repo_without_cargo_toml() {
         let dir = tempfile::tempdir().unwrap();
-        std::process::Command::new("git")
-            .args(["-c", "init.templateDir=", "init"])
+        // Hermetic: the suite can run inside a git hook (which exports
+        // GIT_DIR); the fixture repo must be the tempdir, always.
+        let mut init = std::process::Command::new("git");
+        for var in ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"] {
+            init.env_remove(var);
+        }
+        init.args(["-c", "init.templateDir=", "init"])
             .current_dir(dir.path())
             .output()
             .unwrap();

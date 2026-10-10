@@ -10,6 +10,7 @@
 //! parallel threads, so the test process's own environment must never be
 //! mutated (poison the child's env via `.env()` instead).
 
+mod common;
 use std::path::PathBuf;
 use std::process::Command;
 

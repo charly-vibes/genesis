@@ -12,6 +12,7 @@
 //! Env probes run in spawned child processes (parallel test threads must
 //! never mutate the process environment).
 
+mod common;
 use std::path::PathBuf;
 use std::process::Command;
 

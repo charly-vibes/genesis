@@ -8,6 +8,7 @@
 //! config instead of the fixture's. Queries anchored at an explicit
 //! `root` must discover that repository from `root` alone.
 
+mod common;
 use std::path::PathBuf;
 use std::process::Command;
 

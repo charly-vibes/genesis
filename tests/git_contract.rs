@@ -3,6 +3,7 @@
 //! - read-only plumbing only: no write-path API (`init`/`add`/`commit`)
 //! - subprocess-only substrate: no git library in the dependency graph
 
+mod common;
 use std::path::{Path, PathBuf};
 
 use genesis::git::{self, EnvPolicy, GitError, GitOutput};
@@ -27,6 +28,29 @@ fn no_write_path_api() {
     let _content_hash: fn(&Path, &Path) -> Result<String, GitError> = git::content_hash;
     let _committed_hash: fn(&Path, &Path) -> Result<String, GitError> = git::committed_content_hash;
     let _parse_porcelain: fn(&str) -> Vec<String> = git::parse_porcelain;
+
+    // Policy-aware variants: every named helper that spawns git exposes a
+    // `*_with_policy` variant taking the policy as the last argument.
+    let _changed_files: fn(&Path, EnvPolicy) -> Result<Vec<String>, GitError> =
+        git::changed_files_with_policy;
+    let _changed_between: fn(&Path, &str, &str, EnvPolicy) -> Result<Vec<String>, _> =
+        git::changed_files_between_with_policy;
+    let _uncommitted: fn(&Path, EnvPolicy) -> Result<Vec<String>, GitError> =
+        git::uncommitted_files_with_policy;
+    let _tracked: fn(&Path, &Path, EnvPolicy) -> Result<bool, GitError> = git::tracked_with_policy;
+    let _is_ignored: fn(&Path, &Path, EnvPolicy) -> Result<bool, GitError> =
+        git::is_ignored_with_policy;
+    let _content_hash: fn(&Path, &Path, EnvPolicy) -> Result<String, GitError> =
+        git::content_hash_with_policy;
+    let _committed_hash: fn(&Path, &Path, EnvPolicy) -> Result<String, GitError> =
+        git::committed_content_hash_with_policy;
+    let _path_status: fn(&Path, &Path, EnvPolicy) -> Result<Option<git::PathStatus>, GitError> =
+        git::path_status_with_policy;
+
+    // Single-path status and the lossy changed-files variant.
+    let _path_status: fn(&Path, &Path) -> Result<Option<git::PathStatus>, GitError> =
+        git::path_status;
+    let _changed_files_lossy: fn(&Path) -> Vec<String> = git::changed_files_lossy;
 
     // No git invocation in the module may build a write-path command:
     // the string literals for `git init`, `git add`, and `git commit`

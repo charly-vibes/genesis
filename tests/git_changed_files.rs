@@ -3,6 +3,7 @@
 //! Spec: enumeration set definitions (staged vs HEAD, between two revs,
 //! untracked asymmetry), unborn-HEAD fallback, and lossy degradation.
 
+mod common;
 use genesis::fixture::Fixture;
 use genesis::git;
 

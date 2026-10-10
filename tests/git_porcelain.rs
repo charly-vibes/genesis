@@ -5,6 +5,7 @@
 //! (reporting `new` only), quoted paths (`core.quotePath` C-style
 //! escapes), non-ASCII names, and empty status bodies.
 
+mod common;
 use genesis::git::parse_porcelain;
 
 #[test]

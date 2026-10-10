@@ -245,7 +245,14 @@ fn query_hooks_path(
     scope_args: &[&str],
     envs: &[(String, String)],
 ) -> Result<Option<String>, GitHooksError> {
+    // Anchored at `root`: strip hook-context variables (git exports
+    // GIT_DIR to hook processes, and this suite runs inside hooks during
+    // testing) so the query reads the repository at `root`, never the
+    // ambient GIT_DIR's repository. Same rationale as the fixture guard.
     let mut cmd = std::process::Command::new("git");
+    for var in ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"] {
+        cmd.env_remove(var);
+    }
     cmd.args(["-C", &root.to_string_lossy(), "config"])
         .args(scope_args)
         .arg("core.hooksPath");

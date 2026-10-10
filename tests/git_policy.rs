@@ -10,6 +10,7 @@
 //! in parallel threads, so the test process's own environment must never
 //! be mutated (poison the child's env instead).
 
+mod common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -81,10 +82,8 @@ fn policy_propagation_child() {
         git::tracked(&repo, keep).is_err(),
         "plain tracked must inherit GIT_DIR (default policy)"
     );
-    assert!(
-        git::content_hash(&repo, keep).is_err(),
-        "plain content_hash must inherit GIT_DIR (default policy)"
-    );
+    // No plain-content_hash failure assertion: `git hash-object` does not
+    // need a repository, so an invalid GIT_DIR is not observable for it.
     assert!(
         git::committed_content_hash(&repo, keep).is_err(),
         "plain committed_content_hash must inherit GIT_DIR (default policy)"
@@ -99,42 +98,44 @@ fn policy_propagation_child() {
     // succeeds with correct values.
     let policy = genesis::git::EnvPolicy::StripHookContext;
     assert_eq!(
-        git::uncommitted_files_with_policy(repo, policy).expect("strip policy"),
+        git::uncommitted_files_with_policy(&repo, policy).expect("strip policy"),
         Vec::<String>::new(),
         "clean repo must report no uncommitted files"
     );
     assert_eq!(
-        git::changed_files_with_policy(repo, policy).expect("strip policy"),
+        git::changed_files_with_policy(&repo, policy).expect("strip policy"),
         Vec::<String>::new(),
         "clean repo must report no changed files"
     );
     assert!(
-        git::tracked_with_policy(repo, keep, policy).expect("strip policy"),
+        git::tracked_with_policy(&repo, keep, policy).expect("strip policy"),
         ".gitkeep is committed, hence tracked"
     );
     assert!(
-        !git::is_ignored_with_policy(repo, keep, policy).expect("strip policy"),
+        !git::is_ignored_with_policy(&repo, keep, policy).expect("strip policy"),
         ".gitkeep is not ignored"
     );
-    assert!(
-        !git::content_hash_with_policy(repo, keep, policy)
-            .expect("strip policy")
-            .is_empty(),
-        "content_hash must produce a hash"
+    let hash = git::content_hash_with_policy(&repo, keep, policy).expect("strip policy");
+    assert_eq!(
+        hash,
+        git::content_hash(&repo, keep).expect("content_hash works without a repo"),
+        "strip policy must hash the same worktree content"
     );
+    assert!(!hash.is_empty(), "content_hash must produce a hash");
     assert!(
-        !git::committed_content_hash_with_policy(repo, keep, policy)
+        !git::committed_content_hash_with_policy(&repo, keep, policy)
             .expect("strip policy")
             .is_empty(),
         "committed_content_hash must produce a hash"
     );
     assert_eq!(
-        git::changed_files_between_with_policy(repo, "HEAD", "HEAD", policy).expect("strip policy"),
+        git::changed_files_between_with_policy(&repo, "HEAD", "HEAD", policy)
+            .expect("strip policy"),
         Vec::<String>::new(),
         "identical revisions must report no changed files"
     );
     assert_eq!(
-        git::path_status_with_policy(repo, keep, policy).expect("strip policy"),
+        git::path_status_with_policy(&repo, keep, policy).expect("strip policy"),
         None,
         "clean tracked path must report no change"
     );

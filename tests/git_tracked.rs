@@ -6,6 +6,7 @@
 //! `rev-parse HEAD:<path>`); `is_ignored` is a tri-state single-path
 //! mapping of `check-ignore -q` exit codes 0/1/≥128.
 
+mod common;
 use std::process::Command;
 
 use genesis::fixture::Fixture;

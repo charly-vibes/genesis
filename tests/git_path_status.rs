@@ -5,6 +5,7 @@
 //! X → staged (after the dirty check), unmerged entries map to dirty
 //! (documented), a clean path → `None`, git failure → typed error.
 
+mod common;
 use std::path::Path;
 
 use genesis::fixture::Fixture;
