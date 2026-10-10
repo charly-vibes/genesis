@@ -130,3 +130,31 @@ fn lossy_variant_returns_empty_on_failure() {
         "lossy variant must return an empty set on git failure"
     );
 }
+
+#[test]
+fn changed_files_lossy_returns_empty_on_failure() {
+    // Symmetry with `uncommitted_files_lossy` (tpf.3 finding): the non-lossy
+    // variant errors, the lossy variant degrades to an empty collection.
+    let fixture = Fixture::new().build().expect("fixture without git");
+    assert!(git::changed_files(fixture.root()).is_err());
+    assert!(
+        git::changed_files_lossy(fixture.root()).is_empty(),
+        "lossy variant must return an empty set on git failure"
+    );
+}
+
+#[test]
+fn changed_files_lossy_matches_changed_files_on_success() {
+    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    std::fs::write(fixture.path("staged.txt"), "staged content").expect("write file");
+    let out = fixture
+        .run(&["git", "add", "staged.txt"])
+        .expect("run git add");
+    assert!(out.success(), "git add failed: {}", out.stderr);
+
+    assert_eq!(
+        git::changed_files_lossy(fixture.root()),
+        git::changed_files(fixture.root()).expect("changed_files"),
+        "lossy variant must match the erroring variant when git succeeds"
+    );
+}
