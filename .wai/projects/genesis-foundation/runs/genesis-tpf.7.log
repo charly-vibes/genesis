@@ -1,0 +1,19 @@
+Done. Summary of the work on `feat/genesis-git-migration`:
+
+**Commits**
+- `d0977d9` — RED: `tests/git_tracked.rs` characterization suite pinning pre-migration behavior (committed → true, untracked → false, outside any repo → false)
+- `f43869c` — GREEN: migration + characterization hardening
+
+**Changes**
+- `Cargo.toml`: `genesis-vibes` `0.10` → `0.13` (resolved 0.13.0, confirmed via `cargo tree`)
+- `src/dot_ddl.rs` (`is_git_tracked`): hand-rolled `git ls-files --error-unmatch` subprocess replaced with `genesis::git::repo_root_from(parent)` + `genesis::git::tracked(&root, path)`, with `Err` mapped to `false` to preserve the existing best-effort degradation verbatim
+
+**Two parity gotchas caught and handled**
+1. `detect_legacy_configs` returns bare relative paths (`.wai`), so `Path::parent()` is `Some("")` — the old code silently relied on `git -C ""` being a documented no-op. Normalized to `"."` for the root walk.
+2. `tracked` relativizes `path == root` to an empty pathspec, which git rejects with exit 128 (old code returned true there); the degenerate case now probes `"."`.
+
+My first dir-path test expectation was wrong (repo-root-as-path walks from *outside* the repo — false in both old and new code); corrected to the real gh#30 subdirectory shape.
+
+**Gates (all exit 0)**: `cargo test --quiet` ✓ · `clippy --all-targets -D warnings` ✓ · `fmt --check` ✓ · `cargo tree -p genesis-vibes -i` → `v0.13.0` ✓
+
+Per the brief: ticket `DDL-u8u` is claimed but **not closed**, and nothing was pushed. Context is healthy (~25%); ready for review/PR whenever you want.

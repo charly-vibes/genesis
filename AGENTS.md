@@ -50,8 +50,7 @@ bd close <id>         # Complete work
 <!-- TURU:END -->
 
 
-<!-- WAI:START -->
-# Workflow Tools
+<!-- WAI:START --># Workflow Tools
 
 This project uses **wai** to track the *why* behind decisions — research,
 reasoning, and design choices that shaped the code. Run `wai status` first
@@ -59,11 +58,8 @@ to orient yourself.
 
 Detected workflow tools:
 - **wai** — research, reasoning, and design decisions
+- **beads** — issue tracking (tasks, bugs, dependencies). CLI command: **`bd`** (not `beads`)
 - **openspec** — specifications and change proposals (see `openspec/AGENTS.md`)
-- **dont** — grounded claims and assertions (see `.dont/AGENTS.md`)
-- **pretender** — code quality checks (see `pretender.toml`)
-- **testaruda** — test selection (see `testaruda.toml`)
-- **espectacular** — architecture drift detection (see `.espectacular/AGENTS.md`)
 
 > **CRITICAL**: Apply TDD and Tidy First throughout — not just when writing code:
 > - **Planning/task creation**: each ticket should map to a red→green→refactor cycle; refactoring tasks must be separate tickets from feature tasks.
@@ -76,10 +72,20 @@ Detected workflow tools:
 
 1. `wai sync` — ensure agent tools are projected
 2. `wai status` — see active projects, phase, and suggestions
+3. `bd ready` — find available work items
 
 When context reaches ~40%: stop and tell the user — responses degrade past
 this point. Recommend `wai close` then `/clear` to resume cleanly.
 Do NOT skip `wai close` — it enables resume detection.
+
+## Available Pipelines
+
+| Pipeline | When to Use | Start |
+|----------|-------------|-------|
+| epic-orchestrator | Executing one ready child issue of an epic via subagent orchestration instead of inline implementation | `wai pipeline start epic-orchestrator --topic=<topic>` |
+
+> Pipeline steps may have gates that enforce artifact creation, review coverage, and oracle checks before advancement. Run `wai pipeline gates <name>` for details.
+> **Before any edit**: run `wai pipeline current --json`; if a run is active for this project, resume it (`wai pipeline next`) rather than starting ad-hoc work.
 
 ## Autonomous Work Policy
 
@@ -102,6 +108,8 @@ Read it at the start of your first session or when you need detailed guidance.
 
 Keep this managed block so `wai init` can refresh the instructions.
 
+
+<!-- provenance: generator=wai version=0.12.3 source=WAI sha=e91619f1 -->
 <!-- WAI:END -->
 
 <!-- WAI:REFLECT:REF:START -->
@@ -113,6 +121,9 @@ context before starting research or creating tickets.
 
 > **Before research or ticket creation**: always run `wai search "<topic>"` to
 > check for known patterns. Do not rediscover what is already documented.
+
+
+<!-- provenance: generator=wai version=0.12.3 source=WAI:REFLECT:REF sha=73879972 -->
 <!-- WAI:REFLECT:REF:END -->
 
 <!-- DONT:START -->
@@ -210,3 +221,21 @@ Run `testaruda select` to find affected tests from a code change.
 - `testaruda calibrate` — evaluate prediction ranking
 - `testaruda ingest` — ingest test run results
 - `testaruda explain <test>` — explain selection rationale
+<!-- DDL:START -->
+
+## dulce-de-leche (ddl v0.8.0)
+
+Orchestrator for the charly-vibes tool ecosystem. Run `ddl init` to
+install and configure all tools. Run `ddl status` for a health overview.
+
+Commands:
+- init     Bootstrap the toolset
+- install  Install a single tool
+- status   Show health overview
+- doctor   Run diagnostics
+- version  Show versions
+- upgrade  Update tools
+- migrate  Migrate configs
+- scope    Show active .ddl/
+
+<!-- DDL:END -->

@@ -1,0 +1,25 @@
+Done. All gates green, worktree clean, no push (per brief). Summary:
+
+## genesis-z0r — delivered on `feat/genesis-git-migration` (base 203ab3d)
+
+**Commits (RED → GREEN pairs):**
+- `209f55d` test(git): WIP RED — behavior tests first
+- `3b75464` test(fixture): WIP RED — fixture git ops vs hook-injected env
+- `232c08a` test(git-hooks): WIP RED — git_hooks queries vs `GIT_DIR`
+- `456f243` test: strip hook-exported git env at test-binary init
+- `99fa85f` feat(git): the genesis-z0r implementation + spec + docs
+- `7d956d3` chore: tool-generated managed blocks
+
+**Requested API (all additive, one internal impl, defaults unchanged):**
+- `*_with_policy(root, ..., EnvPolicy)` for every named helper that spawns git: `changed_files`, `changed_files_between`, `uncommitted_files`, `tracked`, `is_ignored`, `content_hash`, `committed_content_hash`
+- `path_status(root, rel) -> Result<Option<PathStatus>, GitError>` — single-path porcelain XY: `??`→`Untracked`, unmerged (`U`/`DD`/`AA`)→`Dirty` (documented), worktree change→`Dirty` (wins over staged), staged-only→`Staged`, clean→`None`
+- `changed_files_lossy(root)` — lossy symmetry with `uncommitted_files_lossy`
+
+**Spec & docs:** 8 new scenarios in `openspec/changes/add-git-interface/specs/git/spec.md`, 28 contract TOMLs under `.espectacular/changes/add-git-interface/git/` (`ah check`: 0 findings, 168 executions passed); new `## git` section in `docs/src/reference/modules.md`; CHANGELOG `[Unreleased]` compat note.
+
+**Unplanned but necessary — hook-env hijack class fixed (blocked all committing):**
+Committing from this worktree exports `GIT_DIR` into hooks; the pre-commit testaruda hook runs the whole suite, which hijacked fixture git ops onto the real repo — it landed a bogus `initial` commit on the branch (undone via soft reset, reflog clean). Fixed at three layers, TDD'd:
+1. `tests/common/mod.rs` — `.init_array` strip before threads start (lead's testaruda-c64 pattern), with sentinel exception for deliberate-poison child tests
+2. `src/fixture.rs` / `src/git_hooks.rs` / `src/feedback/context.rs` — production git spawns anchored at their explicit root, hook-context vars stripped
+
+**Incidents to know about:** RED commits used `--no-verify` + WIP per lefthook.yml's documented escape hatch (hooks can't pass when the suite doesn't compile); two of those GREENs got swept into adjacent commits rather than dedicated ones (`src/git_hooks.rs` into 456f243) — content correct, history slightly untidy. Follow-up threshold never triggered: no Envelope/evals API touched.
