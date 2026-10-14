@@ -1,0 +1,21 @@
+Release shipped. Report:
+
+## genesis-z0r → v0.13.1 release report
+
+**Deviations from plan (both resolved):**
+1. **origin/main had moved** (`d246297`, lead's wave-2 bd commit) — rebased the branch onto it and re-ran all gates before shipping.
+2. **Two test-pollution artifacts caught and fixed before push:**
+   - `git add -A` had swept in a stray test artifact (`docs/src/https:/.../ecosystem-map.html` written by a test into the source tree) — removed from the commit.
+   - The shared git config (lead's main checkout) is polluted to `Test <test@test.com>`; the release commit was re-authored to `charly vibes <charly.vibes@proton.me>` via env vars without touching the lead's checkout. **⚠️ Worth flagging to the lead — any commit made from either checkout inherits the wrong identity.**
+
+**Gates (re-run post-rebase):** fmt ✅, clippy `-D warnings` ✅, cargo test ✅ (495+doctests), `ah check --run-tests` ✅ (136 contract tests), `just ci` ✅.
+
+**Commits:**
+- `fe325b9` `chore(release): v0.13.1 — genesis::git policy-aware helpers + path_status XY` (Cargo.toml/lock 0.13.1, CHANGELOG `[0.13.1] — 2026-10-10`, README + docs/src/getting-started.md tag pins bumped `v0.13.0`→`v0.13.1` — doc_sync guard required it, the caret "0.13" pins needed no change)
+- Pushed: `d246297..fe325b9` → `main` (pre-push hooks: bd ✅ pretender ✅ testaruda ✅ validate ✅), branch force-with-lease updated, tag `v0.13.1` pushed.
+
+**crates.io:** `max_stable_version` = **0.13.1** ✅ (`cargo publish` won the race; tag-triggered Publish workflow still running — per brief, crates.io is authoritative).
+
+**CI on main:** CI ✅ success, Docs ✅ success (both on the release commit).
+
+**notify-downstream 0.13.1:** all 7 notified ✅ — wai, dont, espectacular, testaruda, vampiro, dulce-de-leche, pretender.

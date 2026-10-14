@@ -1,0 +1,23 @@
+Done. Migration complete on `feat/genesis-git-migration` in the epic worktree.
+
+## Summary
+
+**Ticket:** espectacular-o77 (claimed, not closed — lead closes)
+
+**RED** (`e8b2d24`): `changed_files_from_git` signature changed to `anyhow::Result<Vec<String>>` + new unit test `changed_files_git_failure_is_explicit_error` asserting a git failure surfaces as an explicit error. Fails pre-migration with `got Ok([])`, as required.
+
+**GREEN** (`1220eff`):
+- `src/main.rs` — the raw `std::process::Command::new("git") diff --name-only HEAD` is gone; `changed_files_from_git` now delegates to `genesis::git::changed_files(root)`, which carries the documented semantics from the spec (tracked changes vs HEAD, untracked excluded while HEAD resolves, unborn-HEAD fallback). No local git logic remains, and the explicit root (cwd-derived `std::env::current_dir()` at the call site) is passed through — no cwd reliance inside the op.
+- Contract decision: genesis 0.13 has **no `changed_files_lossy`** (only `uncommitted_files_lossy`), so per the brief's explicit alternative I mapped errors — the silent empty-`Vec` degradation is gone by design; git failures now propagate as anyhow errors with context from `GitError`'s Display.
+- `Cargo.toml`: `genesis-vibes = "0.13"` → resolves 0.13.0.
+- `tests/check_cli.rs`: fixtures become real git repos (shared `git_commit_all` helper, clean initial commit) so `--run-tests` fixtures keep pre-migration run-all selection semantics — a dirty or absent repo now activates the explicit error or test selection, both intended post-migration behaviors.
+
+**Completion criteria — all pass:**
+- `cargo test --quiet` — all 568 tests green across 17 suites
+- `cargo clippy --all-targets -- -D warnings` — clean
+- `cargo fmt --check` — clean
+- `cargo tree -p genesis-vibes -i` → `genesis-vibes v0.13.0`
+- `grep 'Command::new("git")' src/` → 0 matches (the remaining one in tests is fixture scaffolding, not migrated code)
+- `ah check` — clean envelope, 0 findings
+
+Not pushed, per brief. One heads-up for the lead: `ah check --run-tests` in a non-git directory is now a hard error — that's the intended explicit contract, but it's a user-visible CLI behavior change worth noting in the epic changelog.

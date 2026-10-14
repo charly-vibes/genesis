@@ -1,0 +1,17 @@
+Done — `whisper-tlp` migrated per `genesis-tpf.6`. Summary:
+
+**RED** — `47c5f5b` `test: characterize private-zone git probes`
+6 characterization tests in `src/workspace.rs` pinning the contract the migration had to preserve:
+- gitignore covers zone → `Ignored`
+- check-ignore exit 1 (not ignored) → definite `Exposed`, not an error
+- git failure (nonexistent checkout) → `Exposed` (fail-closed, never silent-ignore)
+- tracked: committed private file listed · untracked clean · no-checkout empty
+
+**GREEN** — `0823592` `refactor: migrate private-zone probes onto genesis::git`
+- `Cargo.toml`: `genesis-vibes` `"0.10"` → `"0.13"` (resolves 0.13.0)
+- `src/workspace.rs:593` — hand-rolled `git check-ignore -q` probe → `genesis::git::is_ignored(checkout, probe)` tri-state; fail-closed kept **at the call site**: `Ok(true) → Ignored`, `Ok(false) | Err(_) → Exposed`
+- `src/workspace.rs:616` — per-directory `git ls-files` → recursive worktree walk + `genesis::git::tracked(checkout, file)` per file; git failure on a file reports it as tracked (fail-closed leak check, no silent skip)
+
+**Gates (all exit 0):** `cargo test` (58 lib + 103 integration pass unchanged), `clippy -D warnings`, `fmt --check`, `cargo tree -p genesis-vibes -i` → `genesis-vibes v0.13.0`. Lefthook hooks green on both commits.
+
+Not closed and not pushed per the brief. Tickets left open: `whisper-tlp` (claimed, work complete — ready for orchestrator verify/close).

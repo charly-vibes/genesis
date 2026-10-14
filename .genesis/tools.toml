@@ -4,3 +4,10 @@ description = "Language-agnostic test selection engine"
 [tools.testaruda.detector]
 type = "file"
 path = "testaruda.toml"
+
+[tools.wai]
+description = "Workflow manager for AI-assisted development"
+
+[tools.wai.detector]
+type = "directory"
+path = ".wai"

@@ -1,0 +1,37 @@
+Done. Ticket **pretender-4hc** migrated and claimed (not closed — lead closes).
+
+## Summary
+
+**Worktree:** `feat/genesis-git-migration` — commits `13c37b2` (RED) → `63684a3` (GREEN)
+
+### RED — characterization tests (`13c37b2`)
+9 tests in `pretender/src/git.rs` pinning current semantics, pass-to-pass:
+- staged-only set excludes unstaged worktree changes and untracked files
+- staged deletions excluded (even though the file lingers on disk untracked)
+- staged rename reports new path only
+- unborn-HEAD repo: staged files still returned (empty-tree diff fallback)
+- non-repo cwd → typed error
+- diff-base set excludes deletions and untracked; bad base ref / unborn HEAD → typed error
+
+Two fixture iterations were needed (a mid-test commit swept up staged changes, and a "staged-then-modified" file is by definition staged) — implementation behavior was correct both times.
+
+### GREEN — migration (`63684a3`)
+- `pretender/src/git.rs`: reimplemented on `genesis::git` — `repo_root_from` for root discovery, canonical `run` with explicit root + `EnvPolicy::StripHookContext`
+  - `staged_files`: `git diff -z --name-only --cached --diff-filter=AMRCT HEAD`, with 128/unborn-HEAD fallback to the HEAD-less invocation (index vs empty tree — exact git2 `head_tree() == None` parity)
+  - `diff_base_files`: `git diff -z --name-only --diff-filter=AMRCT <base> HEAD`
+  - `-z` output gives unquoted, NUL-separated paths; canonicalize-with-fallback preserved
+- `pretender/Cargo.toml`: **git2 removed**, `genesis-vibes` bumped `"0.12.3"` → `"0.13"` (resolves to 0.13.0)
+- `pretender/src/main.rs`: `gitignore_walk` fixture now uses plain `git init` subprocess
+
+Gotcha worth noting: the genesis-vibes crate renames its lib (`[lib] name = "genesis"`), so the import is `use genesis::git::...`, not `genesis_vibes::...`.
+
+### Gates — all exit 0
+```
+cargo test --quiet          # 228 + 118 + 12 passed
+cargo clippy --all-targets -- -D warnings
+cargo fmt --check
+grep -rn "git2" pretender/Cargo.toml pretender/src/   # 0 matches
+cargo tree -p genesis-vibes -i   # genesis-vibes v0.13.0
+```
+
+No STOP condition hit: the staged/diff-base sets were fully expressible via the generic `run` runner. Not pushed per brief; `Cargo.lock` (git2/libgit2 fully evicted) is included in the GREEN commit.
