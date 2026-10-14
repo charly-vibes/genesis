@@ -158,3 +158,8 @@ so orchestration tools like wai discover them without hardcoding.
 ## Status
 
 Published on crates.io (v0.3.0). All 6 Rust tools in the suite depend on genesis.
+
+## Documentation provenance
+
+Rendered docs are generated artifacts; the repository sources are
+authoritative — edit the repo sources, not the rendered output.
