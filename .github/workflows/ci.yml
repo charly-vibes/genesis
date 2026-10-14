@@ -40,5 +40,9 @@ jobs:
       - name: Install mdBook
         uses: taiki-e/install-action@mdbook
 
+      # DDL-43g: smoke our own live Pages URL — a 404'd book must fail this
+      # repo's CI immediately, not wait for the next hub conformance run.
+      - name: Smoke live Pages URL
+        run: curl -fsS --max-time 10 --retry 2 https://charly-vibes.github.io/genesis/ >/dev/null
       - name: Run CI pipeline
         run: just ci
