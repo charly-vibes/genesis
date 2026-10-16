@@ -79,7 +79,7 @@ publish:
 notify-downstream version:
     #!/usr/bin/env bash
     set -euo pipefail
-    repos=(wai dont espectacular testaruda vampiro dulce-de-leche pretender)
+    repos=(wai dont espectacular testaruda vampiro dulce-de-leche pretender gently specodelic wai-git-epic whisper-git-epic)
     mm="{{version}}"; mm="${mm%.*}"
     for repo in "${repos[@]}"; do
         if gh issue create -R "charly-vibes/$repo" \
@@ -98,7 +98,7 @@ notify-downstream version:
 seed-dependabot:
     #!/usr/bin/env bash
     set -euo pipefail
-    repos=(wai dont espectacular testaruda vampiro dulce-de-leche pretender)
+    repos=(wai dont espectacular testaruda vampiro dulce-de-leche pretender gently specodelic wai-git-epic whisper-git-epic)
     root="$(git rev-parse --show-toplevel)"
     for repo in "${repos[@]}"; do
         d="$root/../$repo"
