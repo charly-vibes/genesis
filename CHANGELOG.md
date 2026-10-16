@@ -3,6 +3,20 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`guide` — flattened `CliVerbosity`/`CliFormat` no longer leak their doc
+  comments into downstream `--help`** (genesis-hjy): clap's
+  `#[command(flatten)]` merges the child struct's doc-derived help into the
+  parent command, and non-verbatim rustdoc (not starting with a code fence)
+  collapses to mangled prose — downstream tools embedding these structs
+  showed genesis library docs (including a broken rust example) at the top
+  of their `--help`. Both structs now carry explicit `about`/`long_about`
+  one-liners; the full rustdoc remains for docs.rs. Regression tests in
+  `tests/guide_help_hygiene.rs`.
+
 ## [0.13.1] — 2026-10-10
 
 ### Added

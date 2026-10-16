@@ -152,7 +152,15 @@ impl std::fmt::Display for Verbosity {
 ///
 /// The `-q`/`--quiet` flag overrides the `-v` count: if `--quiet` is set,
 /// verbosity is `Quiet` regardless of `-v`.
+// Explicit about/long_about keep this doc comment out of downstream
+// `--help` screens: clap flatten merges the child's doc-derived help into
+// the parent, and non-verbatim rustdoc collapses to mangled prose there
+// (genesis-hjy).
 #[derive(Debug, Clone, Copy, clap::Args)]
+#[command(
+    about = "Verbosity flags (-v/-vv/-vvv/-q)",
+    long_about = "Verbosity flags: `-v`/`-vv`/`-vvv` raise verbosity, `-q`/`--quiet` suppresses non-error output (--quiet wins over -v)."
+)]
 pub struct CliVerbosity {
     /// Increase output verbosity (-v, -vv, -vvv)
     #[arg(short, long, global = true, action = clap::ArgAction::Count)]
@@ -320,7 +328,15 @@ pub enum OutputFormat {
 ///
 /// This ensures agents and CI pipelines always receive machine-readable
 /// JSON by default, while humans at a terminal get readable output.
+// Explicit about/long_about keep this doc comment out of downstream
+// `--help` screens: clap flatten merges the child's doc-derived help into
+// the parent, and non-verbatim rustdoc collapses to mangled prose there
+// (genesis-hjy).
 #[derive(Debug, Clone, Copy, clap::Args)]
+#[command(
+    about = "Output format flags (--json / --human)",
+    long_about = "Output format flags: `--json` emits the JSON envelope, `--human` forces readable text; with neither, the format auto-detects (Human on a TTY, Json piped)."
+)]
 pub struct CliFormat {
     /// Output machine-readable JSON (default when stdout is not a TTY)
     #[arg(short = 'j', long, global = true)]
