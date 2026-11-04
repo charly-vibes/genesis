@@ -263,52 +263,18 @@ fn test_integration_full_lifecycle() {
     // 1. Create registry with two tools
     let mut reg = ConfigRegistry::new();
     reg.register::<MockConfig>("mock", ".mock/config.toml");
-
-    // 2. Register a second tool
-    #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-    struct OtherConfig {
-        host: String,
-        port: u16,
-    }
-
-    impl Default for OtherConfig {
-        fn default() -> Self {
-            Self {
-                host: "localhost".to_string(),
-                port: 8080,
-            }
-        }
-    }
-
-    impl ConfigFile for OtherConfig {
-        fn path(repo_root: &Path) -> PathBuf {
-            repo_root.join("other.toml")
-        }
-    }
-
     reg.register::<OtherConfig>("other", "other.toml");
 
-    // 3. Write configs
-    let mock = MockConfig {
-        name: "lifecycle".to_string(),
-        version: 3,
-        enabled: true,
-    };
-    mock.write(dir.path()).require("value");
+    // 2. Write configs
+    write_lifecycle_configs(dir.path());
 
-    let other = OtherConfig {
-        host: "example.com".to_string(),
-        port: 443,
-    };
-    other.write(dir.path()).require("value");
-
-    // 4. Create store and discover
+    // 3. Create store and discover
     let store = ConfigStore::new(reg);
     let discovered = ConfigStore::discover(dir.path(), store.registry());
     assert_eq!(discovered.len(), 2);
     assert!(discovered.iter().all(|d| d.found));
 
-    // 5. Read typed configs
+    // 4. Read typed configs
     let read_mock: MockConfig = store.get("mock", dir.path()).require("value");
     assert_eq!(read_mock.name, "lifecycle");
 
@@ -316,9 +282,49 @@ fn test_integration_full_lifecycle() {
     assert_eq!(read_other.host, "example.com");
     assert_eq!(read_other.port, 443);
 
-    // 6. Generate managed block
+    // 5. Generate managed block
     let block = store.managed_block(dir.path());
     assert!(block.contains("✅ found"));
     assert!(block.contains("mock"));
     assert!(block.contains("other"));
+}
+
+/// The second lifecycle tool: an `other.toml` with host/port.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+struct OtherConfig {
+    host: String,
+    port: u16,
+}
+
+impl Default for OtherConfig {
+    fn default() -> Self {
+        Self {
+            host: "localhost".to_string(),
+            port: 8080,
+        }
+    }
+}
+
+impl ConfigFile for OtherConfig {
+    fn path(repo_root: &Path) -> PathBuf {
+        repo_root.join("other.toml")
+    }
+}
+
+/// Write both lifecycle configs under `root`.
+fn write_lifecycle_configs(root: &Path) {
+    MockConfig {
+        name: "lifecycle".to_string(),
+        version: 3,
+        enabled: true,
+    }
+    .write(root)
+    .require("write mock config");
+
+    OtherConfig {
+        host: "example.com".to_string(),
+        port: 443,
+    }
+    .write(root)
+    .require("write other config");
 }
