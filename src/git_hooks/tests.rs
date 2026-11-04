@@ -1211,7 +1211,7 @@ mod wiring_tests {
         const SOURCE: &str = include_str!("../git_hooks.rs");
         let production = SOURCE
             .split_once("#[cfg(test)]")
-            .expect("test module marker must exist")
+            .require("test module marker must exist")
             .0;
         for gate in [
             "ah check",

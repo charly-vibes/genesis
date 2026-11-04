@@ -1,7 +1,7 @@
-// pretender: role=test
 //! Unit tests for `managed_block` (extracted from the inline `mod tests` to
 //! keep the app file under the pretender file-lines budget).
 
+// pretender: role=test
 #![allow(unused_imports)]
 
 use super::*;

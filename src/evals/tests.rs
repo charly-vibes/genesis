@@ -100,7 +100,7 @@ fn test_report_replay_fixture_round_trips_through_scenario_report() {
         &std::fs::read_to_string(&golden_path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", golden_path.display())),
     )
-    .expect("non-tier-2 fixture is valid JSON");
+    .require("non-tier-2 fixture is valid JSON");
 
     assert_eq!(fixture["report_version"], 1);
     assert_eq!(fixture["status"], "passed");
@@ -122,9 +122,9 @@ fn test_report_replay_fixture_round_trips_through_scenario_report() {
             exit_code: 0,
             executed: true,
         }])
-        .expect("fixture materializes");
+        .require("fixture materializes");
     let serialized: serde_json::Value =
-        serde_json::to_value(&report).expect("ScenarioReport serializes");
+        serde_json::to_value(&report).require("ScenarioReport serializes");
 
     // Shared fields agree across the two shapes.
     assert_eq!(serialized["name"], fixture["name"]);
@@ -179,7 +179,7 @@ fn test_report_tier2_fixture_vocabulary() {
         &std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display())),
     )
-    .expect("tier-2 fixture is valid JSON");
+    .require("tier-2 fixture is valid JSON");
 
     assert_eq!(fixture["report_version"], 1);
     assert_eq!(fixture["status"], "failed");
@@ -310,7 +310,7 @@ fn scenario_error_hint_followed_end_to_end() {
         },
     ];
 
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
     assert!(report.failures.is_empty());
     // Fixture materialized for checks.
@@ -339,7 +339,7 @@ fn scenario_classifies_hint_blindness() {
             executed: true,
         },
     ];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     assert_eq!(report.failures.len(), 1);
     let (_, outcome) = &report.failures[0];
@@ -376,7 +376,7 @@ fn scenario_hint_followed_with_appended_flag_passes() {
             executed: true,
         },
     ];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 }
 
@@ -405,7 +405,7 @@ fn scenario_different_command_still_hint_blind() {
             executed: true,
         },
     ];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     let (_, outcome) = &report.failures[0];
     match outcome {
@@ -429,7 +429,7 @@ fn scenario_classifies_hallucination() {
         exit_code: 0,
         executed: false,
     }];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     let (_, outcome) = &report.failures[0];
     match outcome {
@@ -462,7 +462,7 @@ fn ok_envelope_failing_recovery_is_tool_fault_not_blindness() {
             executed: true,
         },
     ];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     let (_, outcome) = &report.failures[0];
     match outcome {
@@ -481,7 +481,7 @@ fn empty_replay_yields_tool_faults_for_step_checks() {
             error_envelope_with_hint(0, "my-tool fix"),
         )
         .check("step0-ok-envelope", ok_envelope(0));
-    let report = scenario.run(vec![]).expect("fixture");
+    let report = scenario.run(vec![]).require("fixture");
     assert!(!report.passed);
     assert_eq!(report.failures.len(), 2);
     for (_, outcome) in &report.failures {
@@ -506,7 +506,7 @@ fn scenario_tool_fault_has_no_taxonomy() {
         exit_code: 1,
         executed: true,
     }];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     let (_, outcome) = &report.failures[0];
     match outcome {
@@ -623,7 +623,7 @@ fn test_receipt_check_composes_into_scenario() {
             receipt_records_terminal_outcome(0),
         );
     let replay = receipt_step(envelope_with_receipt(true, Some(TerminalOutcome::Success)));
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 
     // Same scenario without a receipt: only the new check fails.
@@ -634,7 +634,7 @@ fn test_receipt_check_composes_into_scenario() {
             receipt_records_terminal_outcome(0),
         );
     let replay = receipt_step(envelope_with_receipt(true, None));
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     assert_eq!(report.failures.len(), 1);
     assert_eq!(report.failures[0].0, "receipt-records-outcome");

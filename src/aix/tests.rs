@@ -1,7 +1,7 @@
-// pretender: role=test
 //! Unit tests for the `aix` module (extracted from the inline `mod tests`
 //! to keep app files under the pretender file-lines budget).
 
+// pretender: role=test
 use super::generate::*;
 use super::meta::{ModuleEntry, ProjectMeta, estimate_token_cost};
 use super::sections::{LlmSection, authorship_section, commands_section, modules_section};

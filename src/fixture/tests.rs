@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 #[test]
 fn test_with_marker_creates_directory() {
-    let fixture = Fixture::new().with_marker(".wai").build().expect("build");
+    let fixture = Fixture::new().with_marker(".wai").build().require("build");
     fixture.assert_marker(".wai");
 }
 
@@ -21,7 +21,7 @@ fn test_with_marker_dir_creates_nested_directory() {
     let fixture = Fixture::new()
         .with_marker_dir(".beads/hooks")
         .build()
-        .expect("build");
+        .require("build");
     fixture.assert_marker(".beads/hooks");
 }
 
@@ -30,7 +30,7 @@ fn test_with_file_creates_file() {
     let fixture = Fixture::new()
         .with_file("hello.txt", "world")
         .build()
-        .expect("build");
+        .require("build");
     fixture.assert_file_exists("hello.txt");
     fixture.assert_file_contains("hello.txt", "world");
 }
@@ -40,7 +40,7 @@ fn test_with_file_creates_nested_path() {
     let fixture = Fixture::new()
         .with_file("src/main.rs", "fn main() {}")
         .build()
-        .expect("build");
+        .require("build");
     fixture.assert_file_exists("src/main.rs");
     fixture.assert_file_contains("src/main.rs", "fn main()");
 }
@@ -54,7 +54,7 @@ fn test_with_toml_creates_valid_toml() {
     let fixture = Fixture::new()
         .with_toml("config.toml", toml::Value::Table(map))
         .build()
-        .expect("build");
+        .require("build");
 
     fixture.assert_file_exists("config.toml");
     fixture.assert_file_contains("config.toml", "name");
@@ -69,7 +69,7 @@ fn test_multiple_markers_and_files() {
         .with_file("a.txt", "aaa")
         .with_file("b.txt", "bbb")
         .build()
-        .expect("build");
+        .require("build");
 
     fixture.assert_marker(".wai");
     fixture.assert_marker(".dont");
@@ -104,14 +104,14 @@ fn test_with_config_round_trips_through_config_file() {
     let fixture = Fixture::new()
         .with_config(cfg.clone())
         .build()
-        .expect("build");
+        .require("build");
 
     // Written to the path ConfigFile::path() declares...
     fixture.assert_file_exists(".fixture/config.toml");
     fixture.assert_file_contains(".fixture/config.toml", "alpha");
 
     // ...so ConfigFile::read() finds it and round-trips the value.
-    let read = FixtureConfig::read(fixture.root()).expect("config read");
+    let read = FixtureConfig::read(fixture.root()).require("config read");
     assert_eq!(cfg, read);
 }
 
@@ -122,7 +122,7 @@ fn test_with_config_uses_config_file_path_not_type_name() {
     let fixture = Fixture::new()
         .with_config(FixtureConfig::default())
         .build()
-        .expect("build");
+        .require("build");
     let bad = std::any::type_name::<FixtureConfig>();
     assert!(
         !fixture.path(bad).exists(),
@@ -135,14 +135,14 @@ fn test_with_config_uses_config_file_path_not_type_name() {
 
 #[test]
 fn test_assert_no_file_passes_when_missing() {
-    let fixture = Fixture::new().build().expect("build");
+    let fixture = Fixture::new().build().require("build");
     fixture.assert_no_file("nonexistent.txt");
 }
 
 #[test]
 #[should_panic(expected = "expected file to exist")]
 fn test_assert_file_exists_panics_when_missing() {
-    let fixture = Fixture::new().build().expect("build");
+    let fixture = Fixture::new().build().require("build");
     fixture.assert_file_exists("missing.txt");
 }
 
@@ -152,7 +152,7 @@ fn test_assert_no_file_panics_when_exists() {
     let fixture = Fixture::new()
         .with_file("present.txt", "")
         .build()
-        .expect("build");
+        .require("build");
     fixture.assert_no_file("present.txt");
 }
 
@@ -162,7 +162,7 @@ fn test_assert_file_contains_panics_on_mismatch() {
     let fixture = Fixture::new()
         .with_file("data.txt", "hello")
         .build()
-        .expect("build");
+        .require("build");
     fixture.assert_file_contains("data.txt", "world");
 }
 
@@ -177,7 +177,7 @@ fn test_with_git_init_creates_repo() {
     };
     fixture.assert_marker(".git");
     // `git status` must succeed inside the fixture.
-    let status = fixture.run(&["git", "status"]).expect("git status");
+    let status = fixture.run(&["git", "status"]).require("git status");
     assert!(status.success(), "git status failed: {}", status.stderr);
 }
 
@@ -188,7 +188,7 @@ fn test_path_resolution() {
     let fixture = Fixture::new()
         .with_file("sub/dir/file.txt", "content")
         .build()
-        .expect("build");
+        .require("build");
     let resolved = fixture.path("sub/dir/file.txt");
     assert!(resolved.exists());
     assert!(resolved.is_file());
@@ -196,7 +196,7 @@ fn test_path_resolution() {
 
 #[test]
 fn test_root_returns_fixture_root() {
-    let fixture = Fixture::new().build().expect("build");
+    let fixture = Fixture::new().build().require("build");
     assert!(fixture.root().exists());
     assert!(fixture.root().is_dir());
 }
@@ -207,7 +207,7 @@ fn test_root_returns_fixture_root() {
 fn test_drop_cleans_up_temp_dir() {
     let path;
     {
-        let fixture = Fixture::new().with_marker("temp").build().expect("build");
+        let fixture = Fixture::new().with_marker("temp").build().require("build");
         path = fixture.root().to_path_buf();
         assert!(path.exists());
     }
@@ -220,8 +220,8 @@ fn test_drop_cleans_up_temp_dir() {
 #[cfg(unix)]
 #[test]
 fn test_run_echo_command() {
-    let fixture = Fixture::new().build().expect("build");
-    let output = fixture.run(&["echo", "hello world"]).expect("run");
+    let fixture = Fixture::new().build().require("build");
+    let output = fixture.run(&["echo", "hello world"]).require("run");
     assert!(output.success());
     assert!(output.stdout.contains("hello world"));
 }
@@ -229,8 +229,8 @@ fn test_run_echo_command() {
 #[cfg(unix)]
 #[test]
 fn test_run_failure_exit_code() {
-    let fixture = Fixture::new().build().expect("build");
-    let output = fixture.run(&["sh", "-c", "exit 42"]).expect("run");
+    let fixture = Fixture::new().build().require("build");
+    let output = fixture.run(&["sh", "-c", "exit 42"]).require("run");
     assert!(!output.success());
     assert_eq!(output.exit_code, 42);
     assert!(output.signal.is_none());
@@ -239,10 +239,10 @@ fn test_run_failure_exit_code() {
 #[cfg(unix)]
 #[test]
 fn test_run_with_stderr() {
-    let fixture = Fixture::new().build().expect("build");
+    let fixture = Fixture::new().build().require("build");
     let output = fixture
         .run(&["sh", "-c", "echo 'error msg' >&2"])
-        .expect("run");
+        .require("run");
     assert!(output.success());
     assert!(output.stderr.contains("error msg"));
 }
@@ -250,8 +250,8 @@ fn test_run_with_stderr() {
 #[cfg(unix)]
 #[test]
 fn test_run_json_output() {
-    let fixture = Fixture::new().build().expect("build");
-    let output = fixture.run(&["echo", "{\"key\":\"value\"}"]).expect("run");
+    let fixture = Fixture::new().build().require("build");
+    let output = fixture.run(&["echo", "{\"key\":\"value\"}"]).require("run");
     let parsed: Option<serde_json::Value> = output.json();
     assert!(parsed.is_some());
     assert_eq!(parsed.require("value")["key"], "value");
@@ -263,22 +263,22 @@ fn test_run_in_fixture_directory() {
     let fixture = Fixture::new()
         .with_file("test.txt", "fixture content")
         .build()
-        .expect("build");
-    let output = fixture.run(&["cat", "test.txt"]).expect("run");
+        .require("build");
+    let output = fixture.run(&["cat", "test.txt"]).require("run");
     assert!(output.success());
     assert!(output.stdout.contains("fixture content"));
 }
 
 #[test]
 fn test_run_empty_args_returns_err() {
-    let fixture = Fixture::new().build().expect("build");
+    let fixture = Fixture::new().build().require("build");
     let result = fixture.run(&[]);
     assert!(matches!(result, Err(FixtureError::EmptyCommand)));
 }
 
 #[test]
 fn test_run_non_existent_command_returns_err() {
-    let fixture = Fixture::new().build().expect("build");
+    let fixture = Fixture::new().build().require("build");
     let result = fixture.run(&["nonexistent_command_xyz123"]);
     assert!(matches!(result, Err(FixtureError::Spawn { .. })));
 }

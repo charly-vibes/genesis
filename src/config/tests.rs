@@ -11,7 +11,7 @@ use tempfile::TempDir;
 // ── Helpers ───────────────────────────────────────────────────────
 
 fn tmp() -> TempDir {
-    tempfile::tempdir().expect("tempdir")
+    tempfile::tempdir().require("tempdir")
 }
 
 /// A mock config struct for testing.

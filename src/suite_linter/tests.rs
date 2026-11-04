@@ -378,7 +378,7 @@ fn test_format_without_fix_omits_command() {
 // ── EvalsGuidelinesAdoption (add-evals-guidelines) ────────────────
 
 fn write_repo(files: &[(&str, &str)]) -> PathBuf {
-    let dir = tempfile::tempdir().expect("tempdir");
+    let dir = tempfile::tempdir().require("tempdir");
     for (path, content) in files {
         let full = dir.path().join(path);
         std::fs::create_dir_all(full.parent().require("value")).require("value");
@@ -547,7 +547,7 @@ fn test_managed_block_drift_registry_wiring() {
     )])));
     let results = registry
         .run_named("genesis.managed_block_drift", &root)
-        .expect("check registered");
+        .require("check registered");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].severity, Severity::Warning);
 }

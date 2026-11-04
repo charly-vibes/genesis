@@ -107,7 +107,7 @@ fn test_to_envelope_error_output_carries_ok_false() {
 fn test_to_envelope_hint_command_is_runnable() {
     let out: Output<&str> = Output::success("ok").with_next_step("run: specodelic graph");
     let env = out.to_envelope("t/1.0");
-    let hints = env.hints.expect("hints present");
+    let hints = env.hints.require("hints present");
     assert_eq!(hints[0].command, "specodelic graph");
 }
 
