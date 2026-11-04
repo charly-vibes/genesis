@@ -93,7 +93,7 @@ impl GuideBuilder {
 
     /// Build the `Guide`.
     pub fn build(self) -> Guide {
-        let registry = build_registry(&self.name, &self.commands);
+        let registry = build_registry(&self.name, self.commands);
 
         Guide {
             name: self.name,
@@ -122,10 +122,10 @@ pub struct Guide {
 }
 
 /// A registry pre-populated with the guide's commands, if any.
-fn build_registry(name: &str, commands: &[String]) -> CommandRegistry {
+fn build_registry(name: &str, commands: Vec<String>) -> CommandRegistry {
     let mut registry = CommandRegistry::new();
     if !commands.is_empty() {
-        registry.register(name, commands.clone());
+        registry.register(name, commands);
     }
     registry
 }
