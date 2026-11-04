@@ -27,6 +27,10 @@
 //! println!("tools: {} healthy: {}", report.sections.len(), report.summary().is_healthy());
 //! ```
 
+mod bridge;
+
+pub use bridge::DoctorStatusBridge;
+
 use crate::envelope::{Envelope, EnvelopeKind, Warning};
 use serde::Serialize;
 use std::path::Path;
@@ -172,22 +176,16 @@ pub struct MultiToolStatus {
 impl MultiToolStatus {
     /// Compute the aggregate summary across all sections.
     pub fn summary(&self) -> StatusSummary {
-        let mut healthy = 0;
-        let mut warnings = 0;
-        let mut errors = 0;
-        for section in &self.sections {
-            match section.level {
-                StatusLevel::Healthy => healthy += 1,
-                StatusLevel::Warning => warnings += 1,
-                StatusLevel::Error => errors += 1,
-            }
-        }
-        StatusSummary {
+        let mut summary = StatusSummary {
             total: self.sections.len(),
-            healthy,
-            warnings,
-            errors,
+            healthy: 0,
+            warnings: 0,
+            errors: 0,
+        };
+        for section in &self.sections {
+            summary.bump(section.level);
         }
+        summary
     }
 
     /// Whether all sections are healthy.
@@ -247,6 +245,15 @@ pub struct StatusSummary {
 }
 
 impl StatusSummary {
+    /// Tally one section's level into the aggregate counts.
+    fn bump(&mut self, level: StatusLevel) {
+        match level {
+            StatusLevel::Healthy => self.healthy += 1,
+            StatusLevel::Warning => self.warnings += 1,
+            StatusLevel::Error => self.errors += 1,
+        }
+    }
+
     /// Whether all tools are healthy.
     pub fn is_healthy(&self) -> bool {
         self.errors == 0 && self.warnings == 0
@@ -321,21 +328,11 @@ impl StatusBuilder {
     ///
     /// Contributors that return `Err` are included as error sections.
     pub fn build(&self, repo_root: &Path) -> Result<MultiToolStatus, String> {
-        let mut sections = Vec::new();
-
-        for contributor in &self.contributors {
-            let section = match contributor.status(repo_root) {
-                Ok(s) => s,
-                Err(e) => StatusSection {
-                    tool: contributor.name().to_string(),
-                    level: StatusLevel::Error,
-                    summary: format!("unreachable: {}", e),
-                    items: vec![],
-                    suggestions: vec![format!("{} init", contributor.name())],
-                },
-            };
-            sections.push(section);
-        }
+        let sections = self
+            .contributors
+            .iter()
+            .map(|contributor| contributor_section(contributor.as_ref(), repo_root))
+            .collect();
 
         Ok(MultiToolStatus { sections })
     }
@@ -357,93 +354,22 @@ impl Default for StatusBuilder {
     }
 }
 
-// ── Doctor-to-status bridge ──────────────────────────────────────────
 
-/// Wrap a [`crate::doctor::DoctorRunner`] as a [`StatusContributor`].
-///
-/// This lets any tool that already has a `DoctorRunner` automatically
-/// surface its health in the status dashboard — no extra work.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use genesis::status::StatusBuilder;
-/// use genesis::doctor::DoctorRunner;
-/// use genesis::status::DoctorStatusBridge;
-///
-/// let mut builder = StatusBuilder::new();
-///
-/// // Register a tool's doctor as a status contributor
-/// let runner: DoctorRunner = DoctorRunner::new(vec![]);
-/// builder.register(Box::new(DoctorStatusBridge::new("my-tool", runner)));
-/// ```
-pub struct DoctorStatusBridge {
-    name: &'static str,
-    runner: crate::doctor::DoctorRunner,
-}
-
-impl DoctorStatusBridge {
-    /// Create a bridge that wraps a `DoctorRunner` for the given tool.
-    pub fn new(name: &'static str, runner: crate::doctor::DoctorRunner) -> Self {
-        Self { name, runner }
-    }
-}
-
-impl StatusContributor for DoctorStatusBridge {
-    fn name(&self) -> &'static str {
-        self.name
-    }
-
-    fn status(&self, repo_root: &Path) -> Result<StatusSection, String> {
-        let report = self
-            .runner
-            .run(repo_root, false)
-            .map_err(|e| e.to_string())?;
-
-        let mut items = Vec::new();
-        if report.summary.fail > 0 || report.summary.warn > 0 {
-            for check in &report.checks {
-                let level = match check.status {
-                    crate::doctor::CheckStatus::Pass => continue,
-                    crate::doctor::CheckStatus::Warn => StatusLevel::Warning,
-                    crate::doctor::CheckStatus::Fail => StatusLevel::Error,
-                };
-                items.push(StatusItem {
-                    label: check.name.clone(),
-                    value: check.message.clone(),
-                    level,
-                });
-            }
-        }
-
-        let summary = if report.is_healthy() {
-            format!("{} checks, all passed", report.summary.pass)
-        } else {
-            format!(
-                "{} checks, {} pass, {} warn, {} fail",
-                report.checks.len(),
-                report.summary.pass,
-                report.summary.warn,
-                report.summary.fail,
-            )
-        };
-
-        let mut section = StatusSection::with_items(self.name, summary, items);
-
-        // Add fix suggestions from failing checks
-        for check in &report.checks {
-            if let Some(ref fix) = check.fix {
-                section = section.with_suggestion(fix.clone());
-            }
-        }
-
-        Ok(section)
-    }
-}
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "status/tests.rs"]
 mod tests;
+
+/// One contributor's section; failures become error sections.
+fn contributor_section(contributor: &dyn StatusContributor, repo_root: &Path) -> StatusSection {
+    contributor.status(repo_root).unwrap_or_else(|e| StatusSection {
+        tool: contributor.name().to_string(),
+        level: StatusLevel::Error,
+        summary: format!("unreachable: {e}"),
+        items: vec![],
+        suggestions: vec![format!("{} init", contributor.name())],
+    })
+}
+

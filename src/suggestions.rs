@@ -102,23 +102,14 @@ impl Suggestion {
                     original, correct
                 )
             }
-            Suggestion::ContextHint { message, path } => {
-                if let Some(p) = path {
-                    format!("{}: {}", message, p)
-                } else {
-                    message.clone()
-                }
-            }
+            Suggestion::ContextHint { message, path } => match path {
+                Some(p) => format!("{}: {}", message, p),
+                None => message.clone(),
+            },
             Suggestion::Fix {
                 description,
                 command,
-            } => {
-                if let Some(cmd) = command {
-                    format!("{}\n  → Run: {}", description, cmd)
-                } else {
-                    description.clone()
-                }
-            }
+            } => fix_message(description, command.as_deref()),
         }
     }
 
@@ -127,40 +118,10 @@ impl Suggestion {
     /// The hint is used as both the description and the command suggestion.
     pub fn fix(hint: impl Into<String>) -> Self {
         let s: String = hint.into();
-        // genesis-r13: hints are conventionally authored 'run: <cmd>' but
-        // the footer already renders '→ Run: {cmd}' — keeping the prefix
-        // doubles it ('→ Run: run: …'). Strip a leading 'run: '/'Run: ' at
-        // construction so the stored command is runnable bare.
-        if let Some(stripped) = s.strip_prefix("run: ").or_else(|| s.strip_prefix("Run: ")) {
-            let stripped = stripped.to_string();
-            return Suggestion::Fix {
-                command: Some(stripped.clone()),
-                description: if stripped == s { stripped } else { s },
-            };
-        }
-        // genesis-9us: trailing-command hints (specodelic's convention:
-        // 'every reference resolves — run: specodelic lint') — the tail
-        // after the LAST ' run: ' is the runnable command, the prefix is
-        // the guidance. Commands are single lines; a multi-line tail is
-        // prose, not a command.
-        if let Some(pos) = s.rfind(" run: ") {
-            let cmd = &s[pos + " run: ".len()..];
-            // Commands are single lines; a multi-line or empty tail is
-            // prose, not a command.
-            if !cmd.contains('\n') && !cmd.is_empty() {
-                let description = s[..pos]
-                    .trim_end_matches([' ', ',', ';', '—', '-'])
-                    .to_string();
-                return Suggestion::Fix {
-                    command: Some(cmd.to_string()),
-                    description,
-                };
-            }
-        }
-        Suggestion::Fix {
+        parse_fix_hint(&s).unwrap_or_else(|| Suggestion::Fix {
             command: Some(s.clone()),
             description: s,
-        }
+        })
     }
 
     /// Format the suggestion as a \"→ Run: …\" footer string."}]
@@ -253,24 +214,12 @@ impl SuggestionEngine {
     ///
     /// Uses the `CommandRegistry` to find close matches.
     pub fn suggest_typo(&self, unknown: &str, registry: &CommandRegistry) -> Option<Suggestion> {
-        let valid_commands = registry.all();
-        let mut best_match: Option<(&str, f64)> = None;
-
-        for cmd in &valid_commands {
-            let similarity = self.calculate_similarity(unknown, cmd);
-
-            if similarity >= self.similarity_threshold {
-                if let Some((_, current_best)) = best_match {
-                    if similarity > current_best {
-                        best_match = Some((cmd, similarity));
-                    }
-                } else {
-                    best_match = Some((cmd, similarity));
-                }
-            }
-        }
-
-        best_match.map(|(matched_cmd, _)| Suggestion::DidYouMean {
+        let candidates = registry
+            .all()
+            .into_iter()
+            .map(|cmd| (cmd, self.calculate_similarity(unknown, cmd)))
+            .filter(|(_, similarity)| *similarity >= self.similarity_threshold);
+        best_candidate(candidates).map(|(matched_cmd, _)| Suggestion::DidYouMean {
             original: unknown.to_string(),
             suggestion: matched_cmd.to_string(),
         })
@@ -301,6 +250,58 @@ impl SuggestionEngine {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "suggestions/tests.rs"]
 mod tests;
+
+/// Compose the human message for a `Fix` suggestion.
+fn fix_message(description: &str, command: Option<&str>) -> String {
+    match command {
+        Some(cmd) => format!("{}\n  → Run: {}", description, cmd),
+        None => description.to_string(),
+    }
+}
+
+/// Parse a conventional fix hint into a `Suggestion::Fix`.
+///
+/// genesis-r13: hints are conventionally authored 'run: <cmd>' but the footer
+/// already renders '→ Run: {cmd}' — keeping the prefix doubles it
+/// ('→ Run: run: …'). Strip a leading 'run: '/'Run: ' at construction so the
+/// stored command is runnable bare.
+///
+/// genesis-9us: trailing-command hints (specodelic's convention: 'every
+/// reference resolves — run: specodelic lint') — the tail after the LAST
+/// ' run: ' is the runnable command, the prefix is the guidance. Commands
+/// are single lines; a multi-line tail is prose, not a command.
+fn parse_fix_hint(s: &str) -> Option<Suggestion> {
+    if let Some(stripped) = s.strip_prefix("run: ").or_else(|| s.strip_prefix("Run: ")) {
+        let stripped = stripped.to_string();
+        return Some(Suggestion::Fix {
+            command: Some(stripped.clone()),
+            description: if stripped == s { stripped } else { s.to_string() },
+        });
+    }
+    trailing_command_hint(s)
+}
+
+/// Extract a trailing `' run: <cmd>'` hint when the tail is a plausible
+/// single-line command.
+fn trailing_command_hint(s: &str) -> Option<Suggestion> {
+    let pos = s.rfind(" run: ")?;
+    let cmd = &s[pos + " run: ".len()..];
+    // Commands are single lines; a multi-line or empty tail is prose.
+    if cmd.contains('\n') || cmd.is_empty() {
+        return None;
+    }
+    let description = s[..pos]
+        .trim_end_matches([' ', ',', ';', '—', '-'])
+        .to_string();
+    Some(Suggestion::Fix {
+        command: Some(cmd.to_string()),
+        description,
+    })
+}
+
+/// The highest-similarity candidate, first wins on ties.
+fn best_candidate<'a>(candidates: impl Iterator<Item = (&'a str, f64)>) -> Option<(&'a str, f64)> {
+    candidates.max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+}
