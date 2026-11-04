@@ -337,6 +337,7 @@ mod tests {
 
 /// Append `n` sequential test records as JSONL lines to `path`.
 fn append_test_records(path: &std::path::Path, n: usize) {
+    use crate::testutil::TestUnwrap;
     use std::io::Write;
     for i in 0..n {
         let record = ErrorRecord {
