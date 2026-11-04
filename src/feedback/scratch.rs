@@ -333,26 +333,26 @@ mod tests {
             None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
         }
     }
-}
 
-/// Append `n` sequential test records as JSONL lines to `path`.
-fn append_test_records(path: &std::path::Path, n: usize) {
-    use crate::testutil::TestUnwrap;
-    use std::io::Write;
-    for i in 0..n {
-        let record = ErrorRecord {
-            ts: format!("2026-07-28T00:00:0{}Z", i),
-            argv: vec!["test".into(), i.to_string()],
-            exit: i as i32,
-            footer: None,
-            kind: "Test".into(),
-        };
-        let line = serde_json::to_string(&record).require("serialize record");
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .require("open errors file");
-        writeln!(file, "{}", line).require("append record");
+    /// Append `n` sequential test records as JSONL lines to `path`.
+    fn append_test_records(path: &std::path::Path, n: usize) {
+        use crate::testutil::TestUnwrap;
+        use std::io::Write;
+        for i in 0..n {
+            let record = ErrorRecord {
+                ts: format!("2026-07-28T00:00:0{}Z", i),
+                argv: vec!["test".into(), i.to_string()],
+                exit: i as i32,
+                footer: None,
+                kind: "Test".into(),
+            };
+            let line = serde_json::to_string(&record).require("serialize record");
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .require("open errors file");
+            writeln!(file, "{}", line).require("append record");
+        }
     }
 }
