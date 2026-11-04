@@ -5,7 +5,6 @@
 use crate::testutil::TestUnwrap;
 
 use super::*;
-use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 

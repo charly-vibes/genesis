@@ -3,8 +3,6 @@
 /// Error raised while asserting against captured tool output.
 use serde_json::Value;
 
-use super::taxonomy::ErrorTaxonomy;
-
 #[derive(Debug, thiserror::Error)]
 pub enum EvalsError {
     /// Captured stdout is not valid JSON.

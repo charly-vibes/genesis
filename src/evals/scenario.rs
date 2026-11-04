@@ -2,9 +2,6 @@
 
 use std::path::PathBuf;
 
-use serde_json::Value;
-
-use super::outcome::{EnvelopeOutcome, parse_envelope};
 use super::taxonomy::ErrorTaxonomy;
 
 /// One replayed agent turn: a command the agent *claims* to have run and
