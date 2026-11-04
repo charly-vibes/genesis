@@ -113,35 +113,37 @@ pub fn read_manifest(project_root: &Path) -> Option<Manifest> {
 /// Returns an empty vec if the manifest doesn't exist (no error — it's
 /// normal for projects that don't use genesis tools yet).
 pub fn scan(project_root: &Path) -> Vec<DetectedTool> {
-    let manifest = match read_manifest(project_root) {
-        Some(m) => m,
-        None => return Vec::new(),
+    let Some(manifest) = read_manifest(project_root) else {
+        return Vec::new();
     };
+    manifest
+        .tools
+        .iter()
+        .map(|(name, entry)| detect_tool(project_root, name, entry))
+        .collect()
+}
 
-    let mut tools = Vec::new();
-    for (name, entry) in &manifest.tools {
-        let detected = if entry.detector.path.is_empty() {
-            false
-        } else {
-            let marker_path = project_root.join(&entry.detector.path);
-            match entry.detector.detector_type.as_str() {
-                "directory" => marker_path.is_dir(),
-                "file" => marker_path.is_file(),
-                other => {
-                    // Unknown detector type — treat as not detected
-                    log_unknown_detector(other, name);
-                    false
-                }
+/// Probe one manifest entry: does its detector's marker exist on disk?
+fn detect_tool(project_root: &Path, name: &str, entry: &ToolEntry) -> DetectedTool {
+    let detected = if entry.detector.path.is_empty() {
+        false
+    } else {
+        let marker_path = project_root.join(&entry.detector.path);
+        match entry.detector.detector_type.as_str() {
+            "directory" => marker_path.is_dir(),
+            "file" => marker_path.is_file(),
+            other => {
+                // Unknown detector type — treat as not detected
+                log_unknown_detector(other, name);
+                false
             }
-        };
-        tools.push(DetectedTool {
-            name: name.clone(),
-            description: entry.description.clone(),
-            detected,
-        });
+        }
+    };
+    DetectedTool {
+        name: name.to_string(),
+        description: entry.description.clone(),
+        detected,
     }
-
-    tools
 }
 
 /// Register a tool in the genesis manifest.
@@ -158,17 +160,31 @@ pub fn register(
     detector_path: &str,
 ) -> Result<(), String> {
     let manifest_path = project_root.join(MANIFEST_FILENAME);
+    ensure_manifest_dir(&manifest_path)?;
 
-    // Ensure parent directory exists
+    let manifest = upsert_tool(read_manifest(project_root).unwrap_or_default(), name, description, detector_type, detector_path);
+
+    write_manifest(&manifest_path, &manifest)?;
+    Ok(())
+}
+
+/// Create the manifest's parent directory (`.genesis/`) on demand.
+fn ensure_manifest_dir(manifest_path: &Path) -> Result<(), String> {
     if let Some(parent) = manifest_path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("failed to create .genesis/ directory: {e}"))?;
     }
+    Ok(())
+}
 
-    // Read existing manifest or start fresh
-    let mut manifest = read_manifest(project_root).unwrap_or_default();
-
-    // Add/update the tool entry
+/// Insert or replace `name` in the manifest's tool table.
+fn upsert_tool(
+    mut manifest: Manifest,
+    name: &str,
+    description: &str,
+    detector_type: &str,
+    detector_path: &str,
+) -> Manifest {
     manifest.tools.insert(
         name.to_string(),
         ToolEntry {
@@ -179,13 +195,15 @@ pub fn register(
             },
         },
     );
+    manifest
+}
 
-    // Write back
-    let content = toml::to_string_pretty(&manifest)
+/// Serialize the manifest to TOML and write it to `manifest_path`.
+fn write_manifest(manifest_path: &Path, manifest: &Manifest) -> Result<(), String> {
+    let content = toml::to_string_pretty(manifest)
         .map_err(|e| format!("failed to serialize manifest: {e}"))?;
-    std::fs::write(&manifest_path, &content)
+    std::fs::write(manifest_path, &content)
         .map_err(|e| format!("failed to write manifest: {e}"))?;
-
     Ok(())
 }
 

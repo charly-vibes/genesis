@@ -50,20 +50,8 @@ pub fn gather_context(
     let os_arch = format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH);
     let shell = std::env::var("SHELL").ok();
     let gh_version = get_gh_version();
-    let git_remote = get_git_remote(cwd);
-    let git_branch = get_git_branch(cwd);
-    let git_dirty = get_git_dirty(cwd);
-    let repo_state = detect_repo_state(cwd);
-
-    // Build a repro hash from tool + command + exit_code
-    let repro_input = format!(
-        "{}:{}:{}:{:?}",
-        tool_name,
-        tool_version,
-        command.as_deref().unwrap_or(""),
-        exit_code
-    );
-    let repro_hash = compute_hash(&repro_input);
+    let git = probe_git(cwd);
+    let repro_hash = repro_hash(tool_name, tool_version, &command, exit_code);
 
     ContextBundle {
         tool_name: tool_name.to_string(),
@@ -74,12 +62,47 @@ pub fn gather_context(
         os_arch,
         shell,
         gh_version,
-        git_remote,
-        git_branch,
-        git_dirty,
-        repo_state,
+        git_remote: git.remote,
+        git_branch: git.branch,
+        git_dirty: git.dirty,
+        repo_state: git.state,
         repro_hash,
     }
+}
+
+/// Git context probed from `cwd` in one pass.
+struct GitProbe {
+    remote: Option<String>,
+    branch: Option<String>,
+    dirty: Option<bool>,
+    state: Vec<String>,
+}
+
+/// Probe the git repository state at `cwd`.
+fn probe_git(cwd: &Path) -> GitProbe {
+    GitProbe {
+        remote: get_git_remote(cwd),
+        branch: get_git_branch(cwd),
+        dirty: get_git_dirty(cwd),
+        state: detect_repo_state(cwd),
+    }
+}
+
+/// Build a repro hash from tool + command + exit_code.
+fn repro_hash(
+    tool_name: &str,
+    tool_version: &str,
+    command: &Option<String>,
+    exit_code: Option<i32>,
+) -> u64 {
+    let repro_input = format!(
+        "{}:{}:{}:{:?}",
+        tool_name,
+        tool_version,
+        command.as_deref().unwrap_or(""),
+        exit_code
+    );
+    compute_hash(&repro_input)
 }
 
 /// Compute a simple hash for dedup purposes.
@@ -91,42 +114,46 @@ fn compute_hash(input: &str) -> u64 {
 
 /// Serialize the context bundle to a markdown section.
 pub fn format_context_bundle(bundle: &ContextBundle) -> String {
-    let mut out = String::new();
-    out.push_str("## Environment\n\n");
-    out.push_str(&format!(
-        "- tool: {} {}\n",
-        bundle.tool_name, bundle.tool_version
-    ));
-    if let Some(ref cmd) = bundle.command {
-        out.push_str(&format!("- command: `{}`\n", cmd));
-    }
-    if let Some(code) = bundle.exit_code {
-        out.push_str(&format!("- exit_code: {}\n", code));
-    }
-    if let Some(ref footer) = bundle.suggestion_footer {
-        out.push_str(&format!("- suggestion: {}\n", footer));
-    }
+    let mut out = String::from("## Environment\n\n");
+    out.push_str(&format!("- tool: {} {}\n", bundle.tool_name, bundle.tool_version));
+    out.push_str(&optional_fields(bundle));
     out.push_str(&format!("- os/arch: {}\n", bundle.os_arch));
-    if let Some(ref shell) = bundle.shell {
-        out.push_str(&format!("- shell: {}\n", shell));
-    }
-    if let Some(ref ver) = bundle.gh_version {
-        out.push_str(&format!("- gh_version: {}\n", ver));
-    }
-    if let Some(ref remote) = bundle.git_remote {
-        out.push_str(&format!("- git_remote: {}\n", remote));
-    }
-    if let Some(ref branch) = bundle.git_branch {
-        out.push_str(&format!("- git_branch: {}\n", branch));
-    }
-    if let Some(dirty) = bundle.git_dirty {
-        out.push_str(&format!("- git_dirty: {}\n", dirty));
-    }
     if !bundle.repo_state.is_empty() {
         out.push_str(&format!("- repo_state: {}\n", bundle.repo_state.join(" ")));
     }
     out.push_str(&format!("- repro_hash: `{:x}`\n", bundle.repro_hash));
     out
+}
+
+/// The optional environment fields, one `- key: value` line each.
+fn optional_fields(bundle: &ContextBundle) -> String {
+    let optional = [
+        bundle.command.as_ref().map(|c| format!("- command: `{c}`\n")),
+        bundle.exit_code.map(|c| format!("- exit_code: {c}\n")),
+        bundle
+            .suggestion_footer
+            .as_ref()
+            .map(|f| format!("- suggestion: {f}\n")),
+        bundle.shell.as_ref().map(|s| format!("- shell: {s}\n")),
+        bundle
+            .gh_version
+            .as_ref()
+            .map(|v| format!("- gh_version: {v}\n")),
+        bundle
+            .git_remote
+            .as_ref()
+            .map(|r| format!("- git_remote: {r}\n")),
+        bundle
+            .git_branch
+            .as_ref()
+            .map(|b| format!("- git_branch: {b}\n")),
+        bundle.git_dirty.map(|d| format!("- git_dirty: {d}\n")),
+    ];
+    optional
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .concat()
 }
 
 /// Get the gh version string.
@@ -219,22 +246,19 @@ fn get_git_dirty(cwd: &Path) -> Option<bool> {
 
 /// Detect which suite tools are present in the repo.
 fn detect_repo_state(cwd: &Path) -> Vec<String> {
-    let mut signals = Vec::new();
-    for (marker, name) in &[
+    [
         (".wai", "wai"),
         (".beads", "beads"),
         ("openspec", "openspec"),
         (".dont", "dont"),
         (".espectacular", "espectacular"),
-    ] {
-        if cwd.join(marker).exists() {
-            signals.push(name.to_string());
-        }
-    }
-    signals
+    ]
+    .into_iter()
+    .filter(|(marker, _)| cwd.join(marker).exists())
+    .map(|(_, name)| name.to_string())
+    .collect()
 }
 
-#[cfg(test)]
 #[cfg(test)]
 #[path = "context/tests.rs"]
 mod tests;

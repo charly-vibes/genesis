@@ -194,40 +194,9 @@ impl BlockInjector {
             )
         })?;
 
-        let block_text = match &self.provenance_generator {
-            Some(generator) => format!(
-                "{}{}\n{}\n{}",
-                block.start_marker,
-                content,
-                provenance_footer(generator, env!("CARGO_PKG_VERSION"), &block.name, content),
-                block.end_marker
-            ),
-            None => format!("{}{}{}", block.start_marker, content, block.end_marker),
-        };
-
+        let block_text = self.render_block(block, content);
         if path.exists() {
-            let existing = std::fs::read_to_string(path)?;
-
-            if let (Some(start), Some(end)) = (
-                existing.find(&block.start_marker),
-                existing.find(&block.end_marker),
-            ) {
-                // Block exists — update in-place
-                let end_pos = end + block.end_marker.len();
-                let mut new_content = String::with_capacity(existing.len() + 512);
-                new_content.push_str(&existing[..start]);
-                new_content.push_str(&block_text);
-                new_content.push_str(&existing[end_pos..]);
-                std::fs::write(path, new_content)?;
-                Ok(InjectResult::Updated)
-            } else {
-                // No block — prepend
-                let mut new_content = block_text;
-                new_content.push_str("\n\n");
-                new_content.push_str(&existing);
-                std::fs::write(path, new_content)?;
-                Ok(InjectResult::Prepended)
-            }
+            self.inject_into_existing(path, block, &block_text)
         } else {
             // New file
             std::fs::write(path, &block_text)?;
@@ -265,9 +234,61 @@ impl BlockInjector {
         }
         Some(content[start..end].to_string())
     }
+/// Compose the managed-block text, with provenance when configured.
+fn render_block(&self, block: &BlockDef, content: &str) -> String {
+    match &self.provenance_generator {
+        Some(generator) => format!(
+            "{}{}\n{}\n{}",
+            block.start_marker,
+            content,
+            provenance_footer(generator, env!("CARGO_PKG_VERSION"), &block.name, content),
+            block.end_marker
+        ),
+        None => format!("{}{}{}", block.start_marker, content, block.end_marker),
+    }
 }
 
+/// Update an existing file: splice the block in place, or prepend it.
+fn inject_into_existing(
+    &self,
+    path: &Path,
+    block: &BlockDef,
+    block_text: &str,
+) -> Result<InjectResult, std::io::Error> {
+    let existing = std::fs::read_to_string(path)?;
+    let (start, end) = (
+        existing.find(&block.start_marker),
+        existing.find(&block.end_marker),
+    );
+    if let (Some(start), Some(end)) = (start, end) {
+        // Block exists — update in-place
+        let end_pos = end + block.end_marker.len();
+        let new_content = splice_block(&existing, start, end_pos, block_text);
+        std::fs::write(path, new_content)?;
+        Ok(InjectResult::Updated)
+    } else {
+        // No block — prepend
+        prepend_block(path, &existing, block_text)?;
+        Ok(InjectResult::Prepended)
+    }
+}
+}
 #[cfg(test)]
 #[cfg(test)]
 #[path = "managed_block/tests.rs"]
 mod tests;
+
+/// Prepend `block_text` ahead of `existing` content, writing to `path`.
+fn prepend_block(path: &Path, existing: &str, block_text: &str) -> std::io::Result<()> {
+    let new_content = format!("{block_text}\n\n{existing}");
+    std::fs::write(path, new_content)
+}
+
+/// Replace `existing[start..end_pos]` with `block_text`.
+fn splice_block(existing: &str, start: usize, end_pos: usize, block_text: &str) -> String {
+    let mut new_content = String::with_capacity(existing.len() + 512);
+    new_content.push_str(&existing[..start]);
+    new_content.push_str(block_text);
+    new_content.push_str(&existing[end_pos..]);
+    new_content
+}

@@ -46,39 +46,47 @@ pub fn redact(input: &str, home_dir: Option<&Path>, git_remote: Option<&str>) ->
 /// - `git@github.com:owner/repo.git` → `github.com/owner/repo`
 /// - `https://github.com/owner/repo` → `github.com/owner/repo`
 pub fn reduce_git_remote_url(url: &str) -> String {
-    // Strip protocol prefix (https://, http://, ssh://, git://, ftp://)
-    let without_proto = if let Some(pos) = url.find("://") {
-        &url[pos + 3..]
-    } else {
-        url
-    };
+    let without_auth = strip_protocol_and_auth(url);
+    let without_query = strip_query_string(without_auth);
+    let normalized = normalize_scp_syntax(without_query);
+    strip_git_suffix(&normalized)
+}
 
-    // Strip user:pass@ (including PAT tokens)
-    let without_auth = if let Some(at_pos) = without_proto.rfind('@') {
-        &without_proto[at_pos + 1..]
-    } else {
-        without_proto
+/// Strip protocol prefix (https://, http://, ssh://, git://, ftp://) and
+/// user:pass@ credentials (including PAT tokens).
+fn strip_protocol_and_auth(url: &str) -> &str {
+    let without_proto = match url.find("://") {
+        Some(pos) => &url[pos + 3..],
+        None => url,
     };
+    match without_proto.rfind('@') {
+        Some(at_pos) => &without_proto[at_pos + 1..],
+        None => without_proto,
+    }
+}
 
-    // Strip query string
-    let without_query = if let Some(q_pos) = without_auth.find('?') {
-        &without_auth[..q_pos]
-    } else {
-        without_auth
-    };
+/// Strip a trailing query string.
+fn strip_query_string(s: &str) -> &str {
+    match s.find('?') {
+        Some(q_pos) => &s[..q_pos],
+        None => s,
+    }
+}
 
-    // Handle git@github.com:owner/repo.git format
-    let normalized = if without_query.contains(':') && !without_query.contains("://") {
-        without_query.replace(':', "/")
+/// Rewrite `git@github.com:owner/repo` scp-style syntax to `owner/repo`.
+fn normalize_scp_syntax(s: &str) -> String {
+    if s.contains(':') && !s.contains("://") {
+        s.replace(':', "/")
     } else {
-        without_query.to_string()
-    };
+        s.to_string()
+    }
+}
 
-    // Strip trailing .git
-    if normalized.ends_with(".git") {
-        normalized[..normalized.len() - 4].to_string()
-    } else {
-        normalized
+/// Strip a trailing `.git` suffix.
+fn strip_git_suffix(s: &str) -> String {
+    match s.strip_suffix(".git") {
+        Some(stripped) => stripped.to_string(),
+        None => s.to_string(),
     }
 }
 
@@ -95,36 +103,42 @@ fn reduce_git_remote(text: &str, remote: &str) -> String {
 /// - `--token abc123` → `--token [redacted]`
 /// - `"secret": "abc123"` → `"secret": "[redacted]"`
 fn redact_secret_values(input: &str) -> String {
-    let secret_keywords = [
-        "token", "secret", "password", "apikey", "api_key", "pat", "bearer",
-    ];
+    const SECRET_KEYWORDS: [&str; 7] =
+        ["token", "secret", "password", "apikey", "api_key", "pat", "bearer"];
 
     let mut result = input.to_string();
-
-    for keyword in &secret_keywords {
-        // Match: keyword=<value> or keyword <value> or "keyword": "<value>"
-        let patterns = [
-            // key=value (shell-like)
-            format!(r"(?i)({})(=)(\S+)", regex::escape(keyword)),
-            // key value (space-separated)
-            format!(r"(?i)({})(\s+)(\S+)", regex::escape(keyword)),
-            // "key": "value" (JSON-like)
-            format!(r#"(?i)("{}":\s*")([^"]+)(")"#, regex::escape(keyword)),
-        ];
-
-        for pattern in &patterns {
-            let re = regex::Regex::new(pattern).unwrap();
-            result = re
-                .replace_all(&result, |caps: &regex::Captures| {
-                    let prefix = &caps[1];
-                    let separator = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-                    format!("{}{}[redacted]", prefix, separator)
-                })
-                .to_string();
+    for keyword in SECRET_KEYWORDS {
+        for pattern in secret_patterns(keyword) {
+            result = apply_redaction(&result, &pattern);
         }
     }
-
     result
+}
+
+/// Patterns matching a secret next to `keyword`:
+/// `keyword=<value>`, `keyword <value>`, and `"keyword": "<value>"`.
+fn secret_patterns(keyword: &str) -> [String; 3] {
+    let kw = regex::escape(keyword);
+    [
+        // key=value (shell-like)
+        format!(r"(?i)({})(=)(\S+)", kw),
+        // key value (space-separated)
+        format!(r"(?i)({})(\s+)(\S+)", kw),
+        // "key": "value" (JSON-like)
+        format!(r#"(?i)("{}":\s*")([^"]+)(")"#, kw),
+    ]
+}
+
+/// Replace every match of `pattern` with its captured key prefix plus
+/// `[redacted]`.
+fn apply_redaction(input: &str, pattern: &str) -> String {
+    let re = regex::Regex::new(pattern).expect("static redaction pattern compiles");
+    re.replace_all(input, |caps: &regex::Captures| {
+        let prefix = &caps[1];
+        let separator = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+        format!("{prefix}{separator}[redacted]")
+    })
+    .to_string()
 }
 
 /// Redact environment variable values (`FOO=secret` → `FOO=[redacted]`).
