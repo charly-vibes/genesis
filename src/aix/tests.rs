@@ -138,7 +138,6 @@ fn test_generate_llms_txt_includes_modules() {
     assert!(output.contains("`aix` — AIX artifact generation"));
 }
 
-#[test]
 /// Omitted-content guards: absent links, absent modules, and an empty
 /// tagline each leave their section/markup out of `llms.txt`.
 #[test]

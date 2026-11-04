@@ -58,6 +58,10 @@ pub struct UpdateInfo {
 /// One-line, actionable update notice.
 ///
 /// Example: `mytool 1.2.3 available — you have 1.2.2 (cargo install mytool)`
+mod cache;
+
+use cache::{CacheEntry, backoff_entry, read_cache, unix_now, write_cache};
+
 pub fn notice(info: &UpdateInfo) -> String {
     format!(
         "{} {} available — you have {} (cargo install {})",
@@ -133,20 +137,9 @@ pub fn check_with(
     }
     let cache_file = cache_dir.join(format!("{crate_name}.json"));
 
-    // 1. Fresh cache short-circuits: zero HTTP, zero latency. A future
-    //    checked_at (clock skew) counts as stale, never maximally fresh.
-    if let Some(cached) = read_cache(&cache_file) {
-        let now = unix_now();
-        if now >= cached.checked_at && now - cached.checked_at < cached.ttl_secs {
-            return cached.latest.and_then(|latest| {
-                is_newer(&latest, current_version).then(|| UpdateInfo {
-                    crate_name: crate_name.to_string(),
-                    latest,
-                    current: current_version.to_string(),
-                    published_at: cached.published_at,
-                })
-            });
-        }
+    // 1. Fresh cache short-circuits: zero HTTP, zero latency.
+    if let Some(hit) = fresh_cache_hit(&cache_file, crate_name, current_version) {
+        return hit;
     }
 
     // 2. Fetch from the API. Backoff writes go to the same cache file this
@@ -155,38 +148,58 @@ pub fn check_with(
 
     // 3. Persist and map. Comparison happens at read time (latest is cached
     //    even when equal to current, so "up to date" also honors the TTL).
-    match outcome.latest {
-        Some(latest) => {
-            write_cache(
-                &cache_file,
-                CacheEntry {
-                    checked_at: unix_now(),
-                    latest: Some(latest.clone()),
-                    published_at: outcome.published_at.clone(),
-                    ttl_secs: DEFAULT_TTL_SECS,
-                },
-            );
-            is_newer(&latest, current_version).then(|| UpdateInfo {
-                crate_name: crate_name.to_string(),
-                latest,
-                current: current_version.to_string(),
-                published_at: outcome.published_at,
-            })
-        }
-        None => {
-            // No usable stable version (all yanked/prerelease): cache the miss.
-            write_cache(
-                &cache_file,
-                CacheEntry {
-                    checked_at: unix_now(),
-                    latest: None,
-                    published_at: None,
-                    ttl_secs: DEFAULT_TTL_SECS,
-                },
-            );
-            None
-        }
+    persist_outcome(&cache_file, crate_name, current_version, &outcome)
+}
+
+/// A fresh-cache hit mapped to an update, if the cached latest is newer.
+/// A future `checked_at` (clock skew) counts as stale, never maximally fresh.
+fn fresh_cache_hit(
+    cache_file: &std::path::Path,
+    crate_name: &str,
+    current_version: &str,
+) -> Option<Option<UpdateInfo>> {
+    let cached = read_cache(cache_file)?;
+    let now = unix_now();
+    let fresh = now >= cached.checked_at && now - cached.checked_at < cached.ttl_secs;
+    if !fresh {
+        return None;
     }
+    Some(cached.latest.and_then(|latest| {
+        is_newer(&latest, current_version).then(|| UpdateInfo {
+            crate_name: crate_name.to_string(),
+            latest,
+            current: current_version.to_string(),
+            published_at: cached.published_at,
+        })
+    }))
+}
+
+/// Persist the fetch outcome under the default TTL, mapping it to an update
+/// when the fetched latest is newer than the installed version.
+fn persist_outcome(
+    cache_file: &std::path::Path,
+    crate_name: &str,
+    current_version: &str,
+    outcome: &FetchOutcome,
+) -> Option<UpdateInfo> {
+    let (latest, published_at) = (outcome.latest.clone(), outcome.published_at.clone());
+    write_cache(
+        cache_file,
+        CacheEntry {
+            checked_at: unix_now(),
+            latest: latest.clone(),
+            published_at,
+            ttl_secs: DEFAULT_TTL_SECS,
+        },
+    );
+    latest.and_then(|latest| {
+        is_newer(&latest, current_version).then(|| UpdateInfo {
+            crate_name: crate_name.to_string(),
+            latest,
+            current: current_version.to_string(),
+            published_at: outcome.published_at.clone(),
+        })
+    })
 }
 
 struct FetchOutcome {
@@ -203,47 +216,8 @@ fn fetch_latest(
     crate_name: &str,
     backoff_cache_file: &std::path::Path,
 ) -> Option<FetchOutcome> {
-    let agent: ureq::Agent = ureq::AgentBuilder::new()
-        .timeout_connect(CONNECT_TIMEOUT)
-        .timeout(TOTAL_TIMEOUT)
-        .user_agent(USER_AGENT)
-        .build();
     let url = format!("{api_base}/{crate_name}");
-
-    let body = match agent.get(&url).call() {
-        Ok(resp) => match resp.into_string() {
-            Ok(b) => b,
-            Err(_) => {
-                debug_emit("unreadable response body");
-                return None;
-            }
-        },
-        Err(ureq::Error::Status(code, _)) => {
-            let ttl_secs = if code == 403 || code == 429 {
-                // Rate-limited: double the default TTL.
-                DEFAULT_TTL_SECS * 2
-            } else {
-                // 404 (wrong crate name!), 5xx, …: short backoff.
-                ERROR_BACKOFF_SECS
-            };
-            debug_emit(&format!("HTTP {code} for {url}"));
-            write_cache(
-                backoff_cache_file,
-                backoff_entry(backoff_cache_file, ttl_secs),
-            );
-            return None;
-        }
-        Err(err) => {
-            // Transport error (offline, timeout, refused): short backoff.
-            debug_emit(&format!("transport error: {err}"));
-            write_cache(
-                backoff_cache_file,
-                backoff_entry(backoff_cache_file, ERROR_BACKOFF_SECS),
-            );
-            return None;
-        }
-    };
-
+    let body = http_get_body(&url, backoff_cache_file)?;
     let parsed: CratesIoResponse = match serde_json::from_str(&body) {
         Ok(p) => p,
         Err(err) => {
@@ -251,9 +225,15 @@ fn fetch_latest(
             return None;
         }
     };
-    // crates.io returns versions newest-first, so the first stable entry IS
-    // the latest — never compare created_at strings (ties would resolve to
-    // the oldest version). genesis-4mq CORR-001.
+    select_latest_stable(parsed)
+}
+
+/// Pick the first non-yanked stable version (newest-first ordering).
+///
+/// crates.io returns versions newest-first, so the first stable entry IS the
+/// latest — never compare created_at strings (ties would resolve to the
+/// oldest version). genesis-4mq CORR-001.
+fn select_latest_stable(parsed: CratesIoResponse) -> Option<FetchOutcome> {
     let latest = parsed
         .versions
         .iter()
@@ -267,6 +247,56 @@ fn fetch_latest(
         latest: Some(latest.num.clone()),
         published_at: Some(latest.created_at.clone()),
     })
+}
+
+/// GET `url` and return the body as a string; on HTTP-status or transport
+/// errors, record the appropriate backoff entry in `backoff_cache_file` and
+/// return `None` (terminal).
+fn http_get_body(url: &str, backoff_cache_file: &std::path::Path) -> Option<String> {
+    let agent: ureq::Agent = ureq::AgentBuilder::new()
+        .timeout_connect(CONNECT_TIMEOUT)
+        .timeout(TOTAL_TIMEOUT)
+        .user_agent(USER_AGENT)
+        .build();
+
+    match agent.get(url).call() {
+        Ok(resp) => match resp.into_string() {
+            Ok(body) => Some(body),
+            Err(_) => {
+                debug_emit("unreadable response body");
+                None
+            }
+        },
+        Err(ureq::Error::Status(code, _)) => {
+            backoff_for_status(url, code, backoff_cache_file);
+            None
+        }
+        Err(err) => {
+            // Transport error (offline, timeout, refused): short backoff.
+            debug_emit(&format!("transport error: {err}"));
+            write_cache(
+                backoff_cache_file,
+                backoff_entry(backoff_cache_file, ERROR_BACKOFF_SECS),
+            );
+            None
+        }
+    }
+}
+
+/// Record the backoff entry appropriate for an HTTP status: rate limits
+/// (403/429) double the default TTL; everything else takes the short backoff.
+fn backoff_for_status(url: &str, code: u16, backoff_cache_file: &std::path::Path) {
+    let ttl_secs = if code == 403 || code == 429 {
+        DEFAULT_TTL_SECS * 2
+    } else {
+        // 404 (wrong crate name!), 5xx, …: short backoff.
+        ERROR_BACKOFF_SECS
+    };
+    debug_emit(&format!("HTTP {code} for {url}"));
+    write_cache(
+        backoff_cache_file,
+        backoff_entry(backoff_cache_file, ttl_secs),
+    );
 }
 
 /// A version is "stable" if it does not carry a semver pre-release identifier.
@@ -283,19 +313,6 @@ fn is_stable(version: &str) -> bool {
 struct CratesIoResponse {
     #[serde(default)]
     versions: Vec<CratesIoVersion>,
-}
-
-/// Backoff cache entry for a failed fetch. A previously known-good
-/// `latest`/`published_at` is preserved (genesis-4mq CORR-003) so a failed
-/// fetch never downgrades cached knowledge to "no update".
-fn backoff_entry(backoff_cache_file: &std::path::Path, ttl_secs: u64) -> CacheEntry {
-    let prior = read_cache(backoff_cache_file);
-    CacheEntry {
-        checked_at: unix_now(),
-        latest: prior.as_ref().and_then(|e| e.latest.clone()),
-        published_at: prior.as_ref().and_then(|e| e.published_at.clone()),
-        ttl_secs,
-    }
 }
 
 /// A crate name is safe to interpolate into URLs and cache filenames:
@@ -361,47 +378,4 @@ struct CratesIoVersion {
     yanked: bool,
     #[serde(default)]
     created_at: String,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct CacheEntry {
-    checked_at: u64,
-    latest: Option<String>,
-    published_at: Option<String>,
-    ttl_secs: u64,
-}
-
-fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
-fn read_cache(path: &std::path::Path) -> Option<CacheEntry> {
-    let contents = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&contents).ok()
-}
-
-/// Best-effort atomic cache write (temp file + rename). All failures —
-/// missing dir, read-only fs, path is a file — are swallowed by contract.
-fn write_cache(path: &std::path::Path, entry: CacheEntry) {
-    let Some(dir) = path.parent() else { return };
-    if std::fs::create_dir_all(dir).is_err() {
-        return;
-    }
-    let Ok(json) = serde_json::to_string(&entry) else {
-        return;
-    };
-    let Ok(tmp) = tempfile::Builder::new()
-        .prefix(".genesis-update-check-")
-        .tempfile_in(dir)
-    else {
-        return;
-    };
-    if std::fs::write(tmp.path(), json).is_err() {
-        return;
-    }
-    // rename replaces the target on all platforms tempfile supports.
-    let _ = tmp.persist(path);
 }
