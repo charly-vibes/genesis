@@ -86,33 +86,36 @@ pub fn maybe_print_version_json_from(
     args: &[String],
     out: &mut impl Write,
 ) -> bool {
-    let has_version = args.iter().any(|a| a == "--version" || a == "-V");
-
-    if !has_version {
+    let wants_version = args.iter().any(|a| a == "--version" || a == "-V");
+    if !wants_version {
         return false;
     }
 
-    let has_json = args.iter().any(|a| a == "--json" || a == "-j");
-
-    if has_json {
-        use crate::envelope::{Envelope, EnvelopeKind};
-        let envelope = Envelope::success(
-            version,
-            EnvelopeKind::Version,
-            serde_json::json!({
-                "name": name,
-                "version": version
-            }),
-            vec![],
-            vec![],
-        );
-        writeln!(out, "{}", serde_json::to_string(&envelope).unwrap())
-            .expect("write version envelope");
+    let wants_json = args.iter().any(|a| a == "--json" || a == "-j");
+    if wants_json {
+        print_version_envelope(name, version, out);
         true
     } else {
         // Plain --version: let clap handle it
         false
     }
+}
+
+/// Emit the version envelope as one JSON line on `out`.
+fn print_version_envelope(name: &str, version: &str, out: &mut impl Write) {
+    use crate::envelope::{Envelope, EnvelopeKind};
+    let envelope = Envelope::success(
+        version,
+        EnvelopeKind::Version,
+        serde_json::json!({
+            "name": name,
+            "version": version
+        }),
+        vec![],
+        vec![],
+    );
+    let json = serde_json::to_string(&envelope).expect("serialize version envelope");
+    writeln!(out, "{json}").expect("write version envelope");
 }
 
 #[cfg(test)]

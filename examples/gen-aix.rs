@@ -8,22 +8,25 @@
 //!   cargo run --example gen-aix
 
 use genesis::aix::{
-    ModuleEntry, ProjectMeta, authorship_section, commands_section, generate_llm_txt,
+    LlmSection, ModuleEntry, ProjectMeta, authorship_section, commands_section, generate_llm_txt,
     generate_llms_txt, genesis_adoption_section, links_section, modules_section, write_llm_txt,
     write_llms_txt,
 };
 
-fn main() {
-    let meta = ProjectMeta::new(
+fn project_meta() -> ProjectMeta {
+    ProjectMeta::new(
         "genesis-vibes",
         "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure.",
     )
     .with_repository("https://github.com/charly-vibes/genesis")
     .with_documentation("https://charly-vibes.github.io/genesis/")
-    .with_crates_io("https://crates.io/crates/genesis-vibes");
+    .with_crates_io("https://crates.io/crates/genesis-vibes")
+}
 
-    // Single source of truth for module metadata — used for both llms.txt and llm.txt
-    let modules = vec![
+/// Single source of truth for module metadata — used for both llms.txt and
+/// llm.txt.
+fn module_entries() -> Vec<ModuleEntry> {
+    vec![
         ModuleEntry::new("envelope", "structured CLI output envelope"),
         ModuleEntry::new("suggestions", "self-healing error suggestions"),
         ModuleEntry::new("managed_block", "managed block injector"),
@@ -56,10 +59,12 @@ fn main() {
             "git_hooks",
             "shared git hook primitives: install/uninstall with ownership markers, owner/framework detection, lefthook wiring",
         ),
-    ];
+    ]
+}
 
-    // Key types for adoption section — derived from same module data
-    let key_types: Vec<(&str, &str)> = vec![
+/// Key types for the adoption section — derived from the same module data.
+fn key_types() -> Vec<(&'static str, &'static str)> {
+    vec![
         ("envelope", "Envelope, EnvelopeKind, ErrorResult"),
         ("suggestions", "Suggestion enum, SuggestionEngine"),
         ("managed_block", "<!-- …:START -->/<!-- …:END --> injector"),
@@ -92,28 +97,32 @@ fn main() {
             "git_hooks",
             "install(), uninstall(), owner(), framework(), resolve_hooks_dir(), lefthook::ensure_wired(), lefthook::is_wired()",
         ),
-    ];
+    ]
+}
 
-    // Generate llms.txt
-    let llms_content = generate_llms_txt(&meta, &modules);
-    let llms_path = std::path::Path::new("llms.txt");
-    let stored_llms = std::fs::read_to_string(llms_path).unwrap_or_default();
+/// Regenerate `llms.txt` unless the stored artifact already matches.
+fn regenerate_llms_txt(meta: &ProjectMeta, modules: &[ModuleEntry]) {
+    let content = generate_llms_txt(meta, modules);
+    let path = std::path::Path::new("llms.txt");
+    let stored = std::fs::read_to_string(path).unwrap_or_default();
 
-    if llms_content != stored_llms {
-        write_llms_txt(llms_path, &meta, &modules).expect("write llms.txt");
+    if content != stored {
+        write_llms_txt(path, meta, modules).expect("write llms.txt");
         println!("✓ llms.txt regenerated");
     } else {
         println!("✓ llms.txt unchanged");
     }
+}
 
-    // Generate llm.txt
-    let sections = vec![
-        modules_section(&modules),
+/// The llm.txt section list for the genesis suite.
+fn llm_sections(modules: &[ModuleEntry]) -> Vec<LlmSection> {
+    vec![
+        modules_section(modules),
         commands_section(&[(
             "(use via genesis)",
             "All modules are library APIs, not CLI subcommands",
         )]),
-        genesis_adoption_section(&key_types),
+        genesis_adoption_section(&key_types()),
         links_section(
             "Links",
             &[
@@ -123,18 +132,28 @@ fn main() {
             ],
         ),
         authorship_section(Some("https://charly-vibes.github.io/charly-vibes/")),
-    ];
+    ]
+}
 
-    let llm_description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes suite.";
-    let llm_content = generate_llm_txt("genesis-vibes", llm_description, &sections);
-    let llm_path = std::path::Path::new("llm.txt");
-    let stored_llm = std::fs::read_to_string(llm_path).unwrap_or_default();
+/// Regenerate `llm.txt` unless the stored artifact already matches.
+fn regenerate_llm_txt(modules: &[ModuleEntry]) {
+    let description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes suite.";
+    let sections = llm_sections(modules);
+    let content = generate_llm_txt("genesis-vibes", description, &sections);
+    let path = std::path::Path::new("llm.txt");
+    let stored = std::fs::read_to_string(path).unwrap_or_default();
 
-    if llm_content != stored_llm {
-        write_llm_txt(llm_path, "genesis-vibes", llm_description, &sections)
-            .expect("write llm.txt");
+    if content != stored {
+        write_llm_txt(path, "genesis-vibes", description, &sections).expect("write llm.txt");
         println!("✓ llm.txt regenerated");
     } else {
         println!("✓ llm.txt unchanged");
     }
+}
+
+fn main() {
+    let meta = project_meta();
+    let modules = module_entries();
+    regenerate_llms_txt(&meta, &modules);
+    regenerate_llm_txt(&modules);
 }
