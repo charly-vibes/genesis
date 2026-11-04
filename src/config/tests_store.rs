@@ -276,17 +276,26 @@ fn test_integration_full_lifecycle() {
 
     // 4. Read typed configs
     let read_mock: MockConfig = store.get("mock", dir.path()).require("value");
-    assert_eq!(read_mock.name, "lifecycle");
-
     let read_other: OtherConfig = store.get("other", dir.path()).require("value");
-    assert_eq!(read_other.host, "example.com");
-    assert_eq!(read_other.port, 443);
+    assert_round_trip(&read_mock, "lifecycle", &read_other, "example.com");
 
     // 5. Generate managed block
     let block = store.managed_block(dir.path());
     assert!(block.contains("✅ found"));
     assert!(block.contains("mock"));
     assert!(block.contains("other"));
+}
+
+/// Both lifecycle round-trips: names must survive the write/read cycle.
+fn assert_round_trip(
+    mock: &MockConfig,
+    expected_mock_name: &str,
+    other: &OtherConfig,
+    expected_host: &str,
+) {
+    assert_eq!(mock.name, expected_mock_name);
+    assert_eq!(other.host, expected_host);
+    assert_eq!(other.port, 443);
 }
 
 /// The second lifecycle tool: an `other.toml` with host/port.
