@@ -28,20 +28,9 @@ fn norm(text: &str) -> String {
     stripped.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn evals_howto() -> String {
-    norm(&doc("docs/src/how-to/evals.md"))
-}
-
-fn evals_ci() -> String {
-    norm(&doc("docs/src/how-to/evals-ci.md"))
-}
-
-fn eval_report() -> String {
-    norm(&doc("docs/src/reference/eval-report.md"))
-}
-
-fn weak_readers() -> String {
-    norm(&doc("docs/src/explanation/why-weak-readers.md"))
+/// Normalized text of a normative page, by repo-relative path.
+fn norm_doc(rel: &str) -> String {
+    norm(&doc(rel))
 }
 
 // -- Tier ladder -----------------------------------------------------------
@@ -50,7 +39,7 @@ fn weak_readers() -> String {
 /// tier cadences, contrived failures bound prevalence claims.
 #[test]
 fn tier_ladder_normative_content_is_published() {
-    let ladder = evals_howto();
+    let ladder = norm_doc("docs/src/how-to/evals.md");
     assert!(
         ladder.contains("tier 0 — static") || ladder.contains("0 — static"),
         "tier-0 row missing from the ladder table"
@@ -72,7 +61,7 @@ fn tier_ladder_normative_content_is_published() {
         "prevalence-bounding rule missing"
     );
     // CI page carries the cadence wiring (tier 0 every push, tier 1 nightly).
-    let ci = evals_ci();
+    let ci = norm_doc("docs/src/how-to/evals-ci.md");
     assert!(
         ci.contains("every push") && ci.contains("nightly"),
         "tier cadences missing from evals-ci.md"
@@ -84,7 +73,7 @@ fn tier_ladder_normative_content_is_published() {
 /// Requirement: Battery maintenance — never-failing checks are reviewed.
 #[test]
 fn battery_maintenance_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(
         howto.contains("permanently green battery") && howto.contains("never"),
         "permanently-green rule missing"
@@ -97,6 +86,13 @@ fn battery_maintenance_normative_content_is_published() {
         howto.contains("before the next tier-2 rotation cycle"),
         "review-before-next-rotation rule missing"
     );
+    // The deployed spec is the other normative home — the never-failing
+    // rule must be stated there too.
+    let spec = norm(&doc("openspec/specs/evals-guidelines/spec.md"));
+    assert!(
+        spec.contains("permanently green"),
+        "permanently-green rule missing from the deployed spec"
+    );
 }
 
 // -- Process-boundary scoring -------------------------------------------------
@@ -105,7 +101,7 @@ fn battery_maintenance_normative_content_is_published() {
 /// target; hallucination remains detectable.
 #[test]
 fn process_boundary_scoring_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(
         howto.contains("Assert only on signals that crossed the process boundary")
             || howto.contains("assert only on signals that crossed the process boundary"),
@@ -129,7 +125,7 @@ fn process_boundary_scoring_normative_content_is_published() {
 /// default, runaway command terminated).
 #[test]
 fn provisioning_and_sandbox_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(
         howto.contains("isolated `HOME`") || howto.contains("isolated HOME"),
         "isolated-HOME rule missing"
@@ -146,6 +142,12 @@ fn provisioning_and_sandbox_normative_content_is_published() {
         howto.contains("provisioned before the agent's first turn"),
         "tool-binary-provisioned-before-first-turn rule missing"
     );
+    // Confinement requirements live under a dedicated sandbox heading in
+    // the raw (non-normalized) page.
+    assert!(
+        doc("docs/src/how-to/evals.md").contains("Sandbox"),
+        "sandbox section heading missing from evals.md"
+    );
 }
 
 // -- Distractor registration / One fault per check / Empty-trajectory guard ---
@@ -155,7 +157,7 @@ fn provisioning_and_sandbox_normative_content_is_published() {
 /// cannot pass by doing nothing), Scenario provenance.
 #[test]
 fn check_discipline_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(
         howto.contains("not task material"),
         "distractors-are-not-task-material rule missing"
@@ -172,6 +174,13 @@ fn check_discipline_normative_content_is_published() {
         howto.contains("corpus entry, an error-analysis note, or a ticket"),
         "provenance rule missing"
     );
+    // The deployed spec carries the "One fault per check" requirement;
+    // its normative wording there is "exactly one agent-fault taxonomy code".
+    let spec = norm(&doc("openspec/specs/evals-guidelines/spec.md"));
+    assert!(
+        spec.contains("exactly one agent-fault taxonomy code"),
+        "one-fault-per-check rule missing from the deployed spec"
+    );
 }
 
 // -- Live action protocol ------------------------------------------------------
@@ -181,7 +190,7 @@ fn check_discipline_normative_content_is_published() {
 /// parseable actions execute once, bounds, check logic never exposed.
 #[test]
 fn live_action_protocol_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(howto.contains("re-ask once"), "one-re-ask rule missing");
     assert!(
         howto.contains("consumes a turn"),
@@ -217,7 +226,7 @@ fn live_action_protocol_normative_content_is_published() {
 /// silent model substitution.
 #[test]
 fn free_tier_attribution_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(
         howto.contains("verbatim") && howto.contains(":free"),
         "verbatim-id rule missing"
@@ -234,13 +243,13 @@ fn free_tier_attribution_normative_content_is_published() {
         howto.contains("never a silent substitution"),
         "no-silent-substitution rule missing"
     );
-    let readers = weak_readers();
+    let readers = norm_doc("docs/src/explanation/why-weak-readers.md");
     assert!(
         readers.contains("scheduling priority") && readers.contains("failover"),
         "ordering-not-failover rule missing from why-weak-readers.md"
     );
     // CI page: 429 semantics live there too.
-    let ci = evals_ci();
+    let ci = norm_doc("docs/src/how-to/evals-ci.md");
     assert!(ci.contains("retry **once**") || ci.contains("retry once"));
     assert!(ci.contains("rate_limited"));
 }
@@ -252,7 +261,7 @@ fn free_tier_attribution_normative_content_is_published() {
 /// version. Verified against the reference page AND the normative fixtures.
 #[test]
 fn report_contract_normative_content_is_published() {
-    let contract = eval_report();
+    let contract = norm_doc("docs/src/reference/eval-report.md");
     assert!(contract.contains("report_version"), "version field missing");
     assert!(
         contract.contains("Omitted — never null") || contract.contains("omit, never null"),
@@ -312,7 +321,7 @@ fn report_fixtures_are_loadable_and_versioned() {
 /// small registries can still route.
 #[test]
 fn fault_routing_normative_content_is_published() {
-    let howto = evals_howto();
+    let howto = norm_doc("docs/src/how-to/evals.md");
     assert!(
         howto.contains("become tickets in your tool's repo"),
         "tool-fault-becomes-ticket rule missing"

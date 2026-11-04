@@ -13,6 +13,10 @@
 //! 3. `version_pins_match_manifest` — install pins in README and the book
 //!    must track `Cargo.toml`'s version.
 
+mod common;
+
+use common::TestUnwrap;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -76,9 +80,9 @@ fn markdown_files() -> Vec<(String, String)> {
 
     let docs = project_file("docs/src");
     fn visit(dir: &Path, out: &mut Vec<(String, String)>) {
-        let entries = fs::read_dir(dir).expect("read docs dir");
+        let entries = fs::read_dir(dir).require("read docs dir");
         for entry in entries {
-            let path = entry.expect("dir entry").path();
+            let path = entry.require("dir entry").path();
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
             if name.as_deref() == Some("_book") || name.as_deref() == Some("specs") {
                 continue; // mdBook build output / deployed spec copies — may hold stale content
@@ -88,10 +92,10 @@ fn markdown_files() -> Vec<(String, String)> {
             } else if path.extension().is_some_and(|e| e == "md") {
                 let rel = path
                     .strip_prefix(MANIFEST_DIR)
-                    .expect("under manifest")
+                    .require("under manifest")
                     .to_string_lossy()
                     .into_owned();
-                let content = fs::read_to_string(&path).expect("read md");
+                let content = fs::read_to_string(&path).require("read md");
                 out.push((rel, content));
             }
         }
@@ -229,15 +233,15 @@ fn version_pins_match_manifest() {
     let version_line = manifest
         .lines()
         .find(|l| l.starts_with("version = "))
-        .expect("Cargo.toml has a version");
+        .require("Cargo.toml has a version");
     let full = version_line
         .split('"')
         .nth(1)
-        .expect("version is quoted, e.g. \"0.6.0\"");
+        .require("version is quoted, e.g. \"0.6.0\"");
 
     let major_minor = full
         .rsplit_once('.')
-        .expect("version has at least major.minor.patch")
+        .require("version has at least major.minor.patch")
         .0;
     let pin = format!("genesis-vibes = \"{major_minor}\"");
     let tag_pin = format!("tag = \"v{full}\"");

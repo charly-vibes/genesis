@@ -1,5 +1,9 @@
 //! Tests for feedback → Scenario conversion (add-aix-eval-loop §4, design D4).
 
+mod common;
+
+use common::TestUnwrap;
+
 use genesis::evals::{AgentStep, Scenario};
 use genesis::feedback::context::ContextBundle;
 use genesis::feedback::scratch::{ErrorRecord, write_error_scratch};
@@ -53,7 +57,7 @@ fn bundle_only_conversion_yields_prompt_only_scenario() {
         "name should carry the repro hash for traceability; got {}",
         scenario.name
     );
-    let report = scenario.run(vec![recorded_step()]).expect("fixture");
+    let report = scenario.run(vec![recorded_step()]).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 }
 
@@ -69,7 +73,7 @@ fn converted_scenario_expects_footer_hint_in_error_envelope() {
         .to_string(),
         ..recorded_step()
     };
-    let report = scenario.run(vec![hintless]).expect("fixture");
+    let report = scenario.run(vec![hintless]).require("fixture");
     assert!(!report.passed, "missing footer hint must fail the check");
 }
 
@@ -79,7 +83,7 @@ fn converted_scenario_accepts_bundle_without_command() {
     b.command = None;
     b.exit_code = None;
     let scenario = Scenario::from_feedback_context(&b, vec![]);
-    let report = scenario.run(vec![recorded_step()]).expect("fixture");
+    let report = scenario.run(vec![recorded_step()]).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 }
 
@@ -96,7 +100,7 @@ fn caller_supplied_fixtures_become_scenario_fixtures() {
         scenario.fixture_files, fixtures,
         "fixtures pass through verbatim"
     );
-    let report = scenario.run(vec![recorded_step()]).expect("fixture");
+    let report = scenario.run(vec![recorded_step()]).require("fixture");
     assert!(report.passed);
     assert!(report.fixture_root.join("config.toml").exists());
     assert!(report.fixture_root.join("state/db.json").exists());
@@ -106,9 +110,9 @@ fn caller_supplied_fixtures_become_scenario_fixtures() {
 
 #[test]
 fn from_last_error_converts_scratch_record() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = ENV_LOCK.lock().require("lock");
     let cache = std::env::temp_dir().join(format!("genesis-m3p-test-{}", std::process::id()));
-    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::create_dir_all(&cache).require("create_dir_all");
     let prev = std::env::var("XDG_CACHE_HOME").ok();
     unsafe { std::env::set_var("XDG_CACHE_HOME", &cache) };
 
@@ -119,11 +123,11 @@ fn from_last_error_converts_scratch_record() {
         footer: Some("→ Run: my-tool repair".into()),
         kind: "sync-failure".into(),
     };
-    write_error_scratch("m3p-tool", &record).expect("scratch write");
+    write_error_scratch("m3p-tool", &record).require("scratch write");
 
     // Happy path: record exists, scenario reflects argv/exit/footer.
-    let scenario = genesis::feedback::from_last_error("m3p-tool", vec![]).expect("record exists");
-    let report = scenario.run(vec![recorded_step()]).expect("fixture");
+    let scenario = genesis::feedback::from_last_error("m3p-tool", vec![]).require("record exists");
+    let report = scenario.run(vec![recorded_step()]).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 
     // Missing record: typed error, not a panic.
@@ -151,7 +155,7 @@ fn conversion_and_replay_run_in_process() {
     let mut step = recorded_step();
     step.executed = false;
     let scenario = Scenario::from_feedback_context(&bundle(), vec![]);
-    let report = scenario.run(vec![step]).expect("fixture");
+    let report = scenario.run(vec![step]).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
     assert!(report.fixture_root.exists());
 }

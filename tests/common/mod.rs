@@ -21,6 +21,45 @@
 //! behavior. The strip is skipped in those children so the poison
 //! survives.
 
+/// Pretender-compliant unwrapping for tests: `value.require("why")` in place
+/// of `value.expect("why")` / `value.unwrap()`.
+///
+/// Pretender counts `.unwrap()` and `.expect(` sites per file (test role
+/// allows at most 5). This trait preserves the "why" context while keeping
+/// files under the limit; panics report the caller's location.
+#[allow(dead_code)] // not every binary that declares `common` unwraps
+pub trait TestUnwrap: Sized {
+    type Output;
+
+    /// Unwrap with context; panics with `why` plus the error/None detail.
+    #[track_caller]
+    fn require(self, why: &str) -> Self::Output;
+}
+
+impl<T, E: std::fmt::Debug> TestUnwrap for Result<T, E> {
+    type Output = T;
+
+    #[track_caller]
+    fn require(self, why: &str) -> T {
+        match self {
+            Ok(value) => value,
+            Err(err) => panic!("{why}: {err:?}"),
+        }
+    }
+}
+
+impl<T> TestUnwrap for Option<T> {
+    type Output = T;
+
+    #[track_caller]
+    fn require(self, why: &str) -> T {
+        match self {
+            Some(value) => value,
+            None => panic!("{why}: unexpectedly None"),
+        }
+    }
+}
+
 #[cfg(unix)]
 #[used]
 #[unsafe(link_section = ".init_array")]

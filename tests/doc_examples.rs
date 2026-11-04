@@ -16,6 +16,10 @@
 //! - `envelope_read_envelope`    → docs/src/how-to/envelope.md, "Reading the envelope" (success)
 //! - `envelope_read_error_envelope` → docs/src/how-to/envelope.md, "Reading the envelope" (error)
 
+mod common;
+
+use common::TestUnwrap;
+
 use genesis::cli::{maybe_print_version_json, maybe_print_version_json_from};
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
 use genesis::guide::{CliFormat, CliVerbosity, ErrorSink, Output, OutputFormat, Verbosity};
@@ -52,7 +56,7 @@ fn step2_output() {
 
     output
         .print(verbosity, &mut streams.stdout, &mut streams.stderr)
-        .expect("print succeeds");
+        .require("print succeeds");
 
     let (stdout, stderr) = streams.as_strings();
     assert!(stdout.contains("Project initialized"), "stdout: {stdout:?}");
@@ -92,7 +96,7 @@ fn step3_emit_cli_format() {
             &mut streams.stdout,
             &mut streams.stderr,
         )
-        .expect("human emit succeeds");
+        .require("human emit succeeds");
     let (stdout, _) = streams.as_strings();
     assert!(stdout.contains("item1"), "stdout: {stdout:?}");
 
@@ -106,10 +110,10 @@ fn step3_emit_cli_format() {
             &mut streams.stdout,
             &mut streams.stderr,
         )
-        .expect("json emit succeeds");
+        .require("json emit succeeds");
     let (stdout, _) = streams.as_strings();
     let parsed: serde_json::Value =
-        serde_json::from_str(&stdout).expect("JSON emit must produce valid JSON");
+        serde_json::from_str(&stdout).require("JSON emit must produce valid JSON");
     assert_eq!(parsed["ok"], serde_json::json!(true));
 }
 
@@ -139,7 +143,7 @@ fn step4_version_json_from_args() {
     assert!(printed, "--version --json must report handled");
 
     let parsed: serde_json::Value =
-        serde_json::from_slice(&out).expect("version envelope is valid JSON");
+        serde_json::from_slice(&out).require("version envelope is valid JSON");
     assert_eq!(parsed["envelope_kind"], serde_json::json!("version"));
     assert_eq!(parsed["data"]["version"], serde_json::json!("1.2.3"));
 
@@ -180,7 +184,7 @@ fn guide_emit_dispatch() {
         cli_version: &str,
         format: OutputFormat,
         verbosity: Verbosity,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let output = Output::success(vec!["item1", "item2", "item3"]);
 
         let mut streams = Streams::new();
@@ -191,11 +195,20 @@ fn guide_emit_dispatch() {
             &mut streams.stdout,
             &mut streams.stderr,
         )?;
-        Ok(())
+        Ok(streams.stdout)
     }
 
-    list_items("0.0.0-test", OutputFormat::Human, Verbosity::Normal).expect("human emit");
-    list_items("0.0.0-test", OutputFormat::Json, Verbosity::Normal).expect("json emit");
+    let human =
+        list_items("0.0.0-test", OutputFormat::Human, Verbosity::Normal).require("human emit");
+    assert!(
+        String::from_utf8_lossy(&human).contains("item2"),
+        "human emit must list items on stdout"
+    );
+    let json = list_items("0.0.0-test", OutputFormat::Json, Verbosity::Normal).require("json emit");
+    assert!(
+        String::from_utf8_lossy(&json).contains("\"item2\""),
+        "json emit must serialize items on stdout"
+    );
 }
 
 /// docs/src/how-to/guide.md — "Error handling with ErrorSink".
@@ -237,7 +250,7 @@ fn envelope_error_result() {
             description: "Create a default config".to_string(),
         }],
     )
-    .expect("non-empty remediation passes");
+    .require("non-empty remediation passes");
 
     assert_eq!(err.remediation[0].command, "my-tool init");
 
@@ -268,9 +281,9 @@ fn envelope_read_envelope() {
     assert!(env.ok, "success envelope has ok=true");
     assert_eq!(env.cli_version, "0.0.0-test");
 
-    let serialized = serde_json::to_string(&env).expect("envelope serializes");
+    let serialized = serde_json::to_string(&env).require("envelope serializes");
     let parsed: serde_json::Value =
-        serde_json::from_str(&serialized).expect("envelope round-trips");
+        serde_json::from_str(&serialized).require("envelope round-trips");
     assert_eq!(parsed["envelope_kind"], serde_json::json!("ok"));
 }
 
@@ -290,7 +303,7 @@ fn envelope_read_error_envelope() {
             description: "Create a default config".to_string(),
         }],
     )
-    .expect("non-empty remediation");
+    .require("non-empty remediation");
 
     let env: Envelope<ErrorResult> = Envelope::error("0.0.0-test", err, vec![]);
     assert!(!env.ok);

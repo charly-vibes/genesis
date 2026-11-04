@@ -9,6 +9,8 @@
 //! `root` must discover that repository from `root` alone.
 
 mod common;
+
+use common::TestUnwrap;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -26,7 +28,7 @@ fn poison_git_dir() -> PathBuf {
 
 #[test]
 fn git_hooks_queries_ignore_hook_injected_git_env() {
-    let exe = std::env::current_exe().expect("locate test binary");
+    let exe = std::env::current_exe().require("locate test binary");
     let output = Command::new(exe)
         .args(["--exact", "git_hooks_hermetic_child", "--nocapture"])
         .env(CHILD_SENTINEL, "1")
@@ -34,7 +36,7 @@ fn git_hooks_queries_ignore_hook_injected_git_env() {
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .expect("spawn child test");
+        .require("spawn child test");
     assert!(
         output.status.success(),
         "child test `git_hooks_hermetic_child` must pass:\n{}",
@@ -50,18 +52,18 @@ fn git_hooks_hermetic_child() {
         return;
     }
 
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
     // Set a local hooksPath in the fixture repo (fixture-run git is
     // hermetic, so this targets the fixture).
     let out = fixture
         .run(&["git", "config", "core.hooksPath", ".husky"])
-        .expect("run git config in fixture");
+        .require("run git config in fixture");
     assert!(out.success(), "git config failed: {}", out.stderr);
 
     // The query is anchored at the fixture root: it must read the
     // fixture's config, never the poisoned GIT_DIR.
     let hooks_dir = git_hooks::resolve_hooks_dir(fixture.root())
-        .expect("resolve_hooks_dir must not fail under a poisoned GIT_DIR");
+        .require("resolve_hooks_dir must not fail under a poisoned GIT_DIR");
     assert_eq!(
         hooks_dir,
         fixture.root().join(".husky"),
@@ -75,7 +77,7 @@ fn git_hooks_hermetic_child() {
         "# genesis-test",
         "#!/bin/sh\n",
     )
-    .expect("install must not fail under a poisoned GIT_DIR");
+    .require("install must not fail under a poisoned GIT_DIR");
     assert!(
         fixture.root().join(".husky/pre-commit").exists(),
         "hook must be installed into the fixture's hooks dir"

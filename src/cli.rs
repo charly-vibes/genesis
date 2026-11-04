@@ -125,26 +125,30 @@ mod tests {
     #[command(name = "test-tool")]
     struct TestCli;
 
+    /// Generate completions for `shell` and assert the generation succeeds
+    /// (output goes to stdout).
+    fn completions_ok(shell: clap_complete::Shell) {
+        let mut cmd = TestCli::command();
+        let result = generate_completions(&mut cmd, shell);
+        assert!(
+            result.is_ok(),
+            "completion generation for {shell:?} must succeed: {result:?}"
+        );
+    }
+
     #[test]
     fn test_generate_completions_bash() {
-        let mut cmd = TestCli::command();
-        // Just verify it doesn't panic — output goes to stdout
-        let result = generate_completions(&mut cmd, clap_complete::Shell::Bash);
-        assert!(result.is_ok());
+        completions_ok(clap_complete::Shell::Bash);
     }
 
     #[test]
     fn test_generate_completions_zsh() {
-        let mut cmd = TestCli::command();
-        let result = generate_completions(&mut cmd, clap_complete::Shell::Zsh);
-        assert!(result.is_ok());
+        completions_ok(clap_complete::Shell::Zsh);
     }
 
     #[test]
     fn test_generate_completions_fish() {
-        let mut cmd = TestCli::command();
-        let result = generate_completions(&mut cmd, clap_complete::Shell::Fish);
-        assert!(result.is_ok());
+        completions_ok(clap_complete::Shell::Fish);
     }
 
     #[test]

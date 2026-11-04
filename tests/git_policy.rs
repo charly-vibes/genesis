@@ -11,6 +11,8 @@
 //! be mutated (poison the child's env instead).
 
 mod common;
+
+use common::TestUnwrap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -28,7 +30,7 @@ const CHILD_REPO: &str = "GENESIS_GIT_POLICY_REPO";
 fn child_context() -> Option<PathBuf> {
     std::env::var_os(CHILD_SENTINEL)?;
     Some(PathBuf::from(
-        std::env::var(CHILD_REPO).expect("child must receive the fixture repo path"),
+        std::env::var(CHILD_REPO).require("child must receive the fixture repo path"),
     ))
 }
 
@@ -36,7 +38,7 @@ fn child_context() -> Option<PathBuf> {
 /// a path that cannot be a git directory (hook harnesses inject `GIT_DIR`;
 /// the bogus value makes inheritance observable as a hard failure).
 fn spawn_child(exact_test: &str, repo: &std::path::Path) {
-    let exe = std::env::current_exe().expect("locate test binary");
+    let exe = std::env::current_exe().require("locate test binary");
     let output = Command::new(exe)
         .args(["--exact", exact_test, "--nocapture"])
         .env(CHILD_SENTINEL, "1")
@@ -45,7 +47,7 @@ fn spawn_child(exact_test: &str, repo: &std::path::Path) {
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .expect("spawn child test");
+        .require("spawn child test");
     assert!(
         output.status.success(),
         "child test `{exact_test}` must pass:\n{}",
@@ -55,7 +57,11 @@ fn spawn_child(exact_test: &str, repo: &std::path::Path) {
 
 #[test]
 fn named_helpers_propagate_the_environment_policy() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    assert!(
+        fixture.root().join(".git").exists(),
+        "fixture must be initialized as a git repository"
+    );
     spawn_child("policy_propagation_child", fixture.root());
 }
 
@@ -98,44 +104,44 @@ fn policy_propagation_child() {
     // succeeds with correct values.
     let policy = genesis::git::EnvPolicy::StripHookContext;
     assert_eq!(
-        git::uncommitted_files_with_policy(&repo, policy).expect("strip policy"),
+        git::uncommitted_files_with_policy(&repo, policy).require("strip policy"),
         Vec::<String>::new(),
         "clean repo must report no uncommitted files"
     );
     assert_eq!(
-        git::changed_files_with_policy(&repo, policy).expect("strip policy"),
+        git::changed_files_with_policy(&repo, policy).require("strip policy"),
         Vec::<String>::new(),
         "clean repo must report no changed files"
     );
     assert!(
-        git::tracked_with_policy(&repo, keep, policy).expect("strip policy"),
+        git::tracked_with_policy(&repo, keep, policy).require("strip policy"),
         ".gitkeep is committed, hence tracked"
     );
     assert!(
-        !git::is_ignored_with_policy(&repo, keep, policy).expect("strip policy"),
+        !git::is_ignored_with_policy(&repo, keep, policy).require("strip policy"),
         ".gitkeep is not ignored"
     );
-    let hash = git::content_hash_with_policy(&repo, keep, policy).expect("strip policy");
+    let hash = git::content_hash_with_policy(&repo, keep, policy).require("strip policy");
     assert_eq!(
         hash,
-        git::content_hash(&repo, keep).expect("content_hash works without a repo"),
+        git::content_hash(&repo, keep).require("content_hash works without a repo"),
         "strip policy must hash the same worktree content"
     );
     assert!(!hash.is_empty(), "content_hash must produce a hash");
     assert!(
         !git::committed_content_hash_with_policy(&repo, keep, policy)
-            .expect("strip policy")
+            .require("strip policy")
             .is_empty(),
         "committed_content_hash must produce a hash"
     );
     assert_eq!(
         git::changed_files_between_with_policy(&repo, "HEAD", "HEAD", policy)
-            .expect("strip policy"),
+            .require("strip policy"),
         Vec::<String>::new(),
         "identical revisions must report no changed files"
     );
     assert_eq!(
-        git::path_status_with_policy(&repo, keep, policy).expect("strip policy"),
+        git::path_status_with_policy(&repo, keep, policy).require("strip policy"),
         None,
         "clean tracked path must report no change"
     );

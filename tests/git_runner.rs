@@ -11,6 +11,8 @@
 //! mutated (poison the child's env via `.env()` instead).
 
 mod common;
+
+use common::TestUnwrap;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -28,7 +30,7 @@ const CHILD_REPO: &str = "GENESIS_GIT_TEST_REPO";
 fn child_context() -> Option<PathBuf> {
     std::env::var_os(CHILD_SENTINEL)?;
     Some(PathBuf::from(
-        std::env::var(CHILD_REPO).expect("child must receive the fixture repo path"),
+        std::env::var(CHILD_REPO).require("child must receive the fixture repo path"),
     ))
 }
 
@@ -39,8 +41,8 @@ fn child_context() -> Option<PathBuf> {
 /// index file — so each variable's inheritance has an observable effect.
 fn spawn_child(exact_test: &str, repo: &std::path::Path, corrupt_index: &std::path::Path) {
     let fake_worktree = std::env::temp_dir().join("genesis-git-runner-fake-worktree");
-    std::fs::create_dir_all(&fake_worktree).expect("create fake worktree dir");
-    let exe = std::env::current_exe().expect("locate test binary");
+    std::fs::create_dir_all(&fake_worktree).require("create fake worktree dir");
+    let exe = std::env::current_exe().require("locate test binary");
     let output = Command::new(exe)
         .args(["--exact", exact_test, "--nocapture"])
         .env(CHILD_SENTINEL, "1")
@@ -52,7 +54,7 @@ fn spawn_child(exact_test: &str, repo: &std::path::Path, corrupt_index: &std::pa
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .expect("spawn child test");
+        .require("spawn child test");
     assert!(
         output.status.success(),
         "child test `{exact_test}` must pass:\n{}",
@@ -62,9 +64,13 @@ fn spawn_child(exact_test: &str, repo: &std::path::Path, corrupt_index: &std::pa
 
 #[test]
 fn runner_default_policy_inherits_git_dir() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
     let corrupt = fixture.root().join("corrupt-index");
-    std::fs::write(&corrupt, b"not a real index").expect("write corrupt index");
+    std::fs::write(&corrupt, b"not a real index").require("write corrupt index");
+    assert!(
+        fixture.root().join(".git").exists(),
+        "fixture must be initialized as a git repository"
+    );
     spawn_child("runner_inherit_child", fixture.root(), &corrupt);
 }
 
@@ -76,11 +82,11 @@ fn runner_inherit_child() {
     let Some(repo) = child_context() else {
         return;
     };
-    let git_dir = std::env::var("GIT_DIR").expect("GIT_DIR poisoned in child");
+    let git_dir = std::env::var("GIT_DIR").require("GIT_DIR poisoned in child");
 
     // GIT_DIR: rev-parse --git-dir must echo the poisoned value.
     let out = git::run(&repo, EnvPolicy::Inherit, &["rev-parse", "--git-dir"])
-        .expect("inherit policy must pass GIT_DIR through");
+        .require("inherit policy must pass GIT_DIR through");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
         git_dir,
@@ -88,9 +94,9 @@ fn runner_inherit_child() {
     );
 
     // GIT_WORK_TREE: toplevel must be the poisoned fake worktree.
-    let fake = std::env::var("GIT_WORK_TREE").expect("GIT_WORK_TREE poisoned in child");
+    let fake = std::env::var("GIT_WORK_TREE").require("GIT_WORK_TREE poisoned in child");
     let out = git::run(&repo, EnvPolicy::Inherit, &["rev-parse", "--show-toplevel"])
-        .expect("rev-parse --show-toplevel with GIT_DIR+GIT_WORK_TREE");
+        .require("rev-parse --show-toplevel with GIT_DIR+GIT_WORK_TREE");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
         fake,
@@ -113,9 +119,13 @@ fn runner_inherit_child() {
 
 #[test]
 fn runner_strip_hook_context_removes_git_env() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
     let corrupt = fixture.root().join("corrupt-index");
-    std::fs::write(&corrupt, b"not a real index").expect("write corrupt index");
+    std::fs::write(&corrupt, b"not a real index").require("write corrupt index");
+    assert!(
+        fixture.root().join(".git").exists(),
+        "fixture must be initialized as a git repository"
+    );
     spawn_child("runner_strip_child", fixture.root(), &corrupt);
 }
 
@@ -135,11 +145,11 @@ fn runner_strip_child() {
         EnvPolicy::StripHookContext,
         &["rev-parse", "--git-dir"],
     )
-    .expect("strip policy must still run git in the repo");
+    .require("strip policy must still run git in the repo");
     let printed = String::from_utf8_lossy(&out.stdout).trim().to_string();
     assert_ne!(
         printed,
-        std::env::var("GIT_DIR").expect("GIT_DIR poisoned in child"),
+        std::env::var("GIT_DIR").require("GIT_DIR poisoned in child"),
         "GIT_DIR must not reach git under StripHookContext"
     );
 
@@ -149,7 +159,7 @@ fn runner_strip_child() {
         EnvPolicy::StripHookContext,
         &["rev-parse", "--show-toplevel"],
     )
-    .expect("toplevel after stripping");
+    .require("toplevel after stripping");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
         repo.to_string_lossy(),
@@ -163,12 +173,12 @@ fn runner_strip_child() {
         EnvPolicy::StripHookContext,
         &["diff", "--cached", "--name-only"],
     )
-    .expect("corrupt GIT_INDEX_FILE must be ignored under StripHookContext");
+    .require("corrupt GIT_INDEX_FILE must be ignored under StripHookContext");
 }
 
 #[test]
 fn runner_failure_yields_typed_git_error() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
     let err = git::run(
         fixture.root(),
         EnvPolicy::Inherit,
@@ -193,8 +203,8 @@ fn runner_spawn_failure_yields_spawn_error() {
     // Parent: run the child with an empty PATH so `git` cannot be found.
     // Spawning with an empty PATH only affects the child process, never
     // this one (parallel test threads).
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    let exe = std::env::current_exe().expect("locate test binary");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    let exe = std::env::current_exe().require("locate test binary");
     let output = Command::new(exe)
         .args(["--exact", "runner_spawn_failure_child", "--nocapture"])
         .env(CHILD_SENTINEL, "1")
@@ -203,7 +213,7 @@ fn runner_spawn_failure_yields_spawn_error() {
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .expect("spawn child test");
+        .require("spawn child test");
     assert!(
         output.status.success(),
         "child test with empty PATH must pass:\n{}",

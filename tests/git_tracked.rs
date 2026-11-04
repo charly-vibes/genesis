@@ -7,6 +7,8 @@
 //! mapping of `check-ignore -q` exit codes 0/1/≥128.
 
 mod common;
+
+use common::TestUnwrap;
 use std::process::Command;
 
 use genesis::fixture::Fixture;
@@ -17,39 +19,40 @@ const CHILD_SENTINEL: &str = "GENESIS_GIT_TEST_CHILD";
 
 #[test]
 fn tracked_lists_files_known_to_git() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    std::fs::write(fixture.path("committed.txt"), "content").expect("write file");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    std::fs::write(fixture.path("committed.txt"), "content").require("write file");
     for args in [
         &(["git", "add", "committed.txt"])[..],
         &(["git", "commit", "-m", "seed"])[..],
     ] {
-        let out = fixture.run(args).expect("run git");
+        let out = fixture.run(args).require("run git");
         assert!(out.success(), "{args:?} failed: {}", out.stderr);
     }
-    std::fs::write(fixture.path("committed.txt"), "modified").expect("modify tracked file");
-    std::fs::write(fixture.path("never-added.txt"), "content").expect("write untracked file");
+    std::fs::write(fixture.path("committed.txt"), "modified").require("modify tracked file");
+    std::fs::write(fixture.path("never-added.txt"), "content").require("write untracked file");
 
     assert!(
-        git::tracked(fixture.root(), &fixture.path("committed.txt")).expect("tracked"),
+        git::tracked(fixture.root(), &fixture.path("committed.txt")).require("tracked"),
         "a committed path must report tracked"
     );
     assert!(
-        !git::tracked(fixture.root(), &fixture.path("never-added.txt")).expect("tracked"),
+        !git::tracked(fixture.root(), &fixture.path("never-added.txt")).require("tracked"),
         "a never-added path must report untracked"
     );
     // Tracked-ness is independent of worktree modifications: the modified
     // file above is still tracked.
-    assert!(git::tracked(fixture.root(), &fixture.path("committed.txt")).expect("tracked"));
+    assert!(git::tracked(fixture.root(), &fixture.path("committed.txt")).require("tracked"));
 }
 
 #[test]
 fn content_hash_is_deterministic() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    std::fs::write(fixture.path("blob.txt"), "deterministic content\n").expect("write file");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    std::fs::write(fixture.path("blob.txt"), "deterministic content\n").require("write file");
 
-    let first = git::content_hash(fixture.root(), &fixture.path("blob.txt")).expect("content_hash");
+    let first =
+        git::content_hash(fixture.root(), &fixture.path("blob.txt")).require("content_hash");
     let second =
-        git::content_hash(fixture.root(), &fixture.path("blob.txt")).expect("content_hash");
+        git::content_hash(fixture.root(), &fixture.path("blob.txt")).require("content_hash");
     assert_eq!(
         first, second,
         "content_hash must be deterministic per content"
@@ -58,7 +61,7 @@ fn content_hash_is_deterministic() {
     // And it must equal git's own hash-object output for that file.
     let out = fixture
         .run(&["git", "hash-object", "blob.txt"])
-        .expect("run git hash-object");
+        .require("run git hash-object");
     assert!(out.success(), "git hash-object failed: {}", out.stderr);
     assert_eq!(
         first,
@@ -69,19 +72,19 @@ fn content_hash_is_deterministic() {
 
 #[test]
 fn committed_content_hash_matches_head_blob() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    std::fs::write(fixture.path("blob.txt"), "committed content\n").expect("write file");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    std::fs::write(fixture.path("blob.txt"), "committed content\n").require("write file");
     for args in [
         &(["git", "add", "blob.txt"])[..],
         &(["git", "commit", "-m", "seed"])[..],
     ] {
-        let out = fixture.run(args).expect("run git");
+        let out = fixture.run(args).require("run git");
         assert!(out.success(), "{args:?} failed: {}", out.stderr);
     }
 
     let committed =
-        git::committed_content_hash(fixture.root(), &fixture.path("blob.txt")).expect("hash");
-    let worktree = git::content_hash(fixture.root(), &fixture.path("blob.txt")).expect("hash");
+        git::committed_content_hash(fixture.root(), &fixture.path("blob.txt")).require("hash");
+    let worktree = git::content_hash(fixture.root(), &fixture.path("blob.txt")).require("hash");
     assert_eq!(
         committed, worktree,
         "committed hash must resolve HEAD:<path> and match the worktree blob"
@@ -91,15 +94,15 @@ fn committed_content_hash_matches_head_blob() {
 
 #[test]
 fn is_ignored_not_ignored_distinct_from_error() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    std::fs::write(fixture.path(".gitignore"), "ignored.txt\n").expect("write gitignore");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    std::fs::write(fixture.path(".gitignore"), "ignored.txt\n").require("write gitignore");
 
     assert!(
-        git::is_ignored(fixture.root(), &fixture.path("ignored.txt")).expect("ignored"),
+        git::is_ignored(fixture.root(), &fixture.path("ignored.txt")).require("ignored"),
         "exit 0 must map to ignored"
     );
     assert!(
-        !git::is_ignored(fixture.root(), &fixture.path("other.txt")).expect("not ignored"),
+        !git::is_ignored(fixture.root(), &fixture.path("other.txt")).require("not ignored"),
         "exit 1 must map to not-ignored, not an error"
     );
 }
@@ -108,7 +111,7 @@ fn is_ignored_not_ignored_distinct_from_error() {
 fn is_ignored_git_failure_is_error() {
     // Outside any repository, `check-ignore` exits 128 ("not a git
     // repository") — that must be an error, never "not ignored".
-    let outside = Fixture::new().build().expect("fixture without git");
+    let outside = Fixture::new().build().require("fixture without git");
     let err = git::is_ignored(outside.root(), &outside.path("whatever.txt"))
         .expect_err("check-ignore outside a repo must error");
     match err {
@@ -122,8 +125,8 @@ fn is_ignored_spawn_failure_is_error() {
     // Parent: run the child with an empty PATH so git cannot spawn —
     // spawn failure must be an error, not "not ignored" (env mutated only
     // in the child process; parallel test threads).
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    let exe = std::env::current_exe().expect("locate test binary");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    let exe = std::env::current_exe().require("locate test binary");
     let output = Command::new(exe)
         .args(["--exact", "is_ignored_spawn_failure_child", "--nocapture"])
         .env(CHILD_SENTINEL, "1")
@@ -132,7 +135,7 @@ fn is_ignored_spawn_failure_is_error() {
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .expect("spawn child test");
+        .require("spawn child test");
     assert!(
         output.status.success(),
         "child test with empty PATH must pass:\n{}",
@@ -147,7 +150,7 @@ fn is_ignored_spawn_failure_child() {
         return;
     }
     let repo =
-        std::path::PathBuf::from(std::env::var("GENESIS_GIT_TEST_REPO").expect("child repo path"));
+        std::path::PathBuf::from(std::env::var("GENESIS_GIT_TEST_REPO").require("child repo path"));
     let err =
         git::is_ignored(&repo, &repo.join("whatever.txt")).expect_err("spawn failure must error");
     assert!(

@@ -25,10 +25,15 @@ struct Cli {
 
 /// The genesis-internal doc-comment prose must not leak into a downstream
 /// `--help` screen (regression for genesis-hjy).
+/// Render the full long-help snapshot for the flattened args structs.
+fn help_snapshot() -> String {
+    let mut cmd = Cli::command();
+    cmd.render_long_help().to_string()
+}
+
 #[test]
 fn flattened_structs_do_not_leak_doc_prose() {
-    let mut cmd = Cli::command();
-    let help = cmd.render_long_help().to_string();
+    let help = help_snapshot();
 
     // The first-line summary of both doc comments (clap would use it as
     // about/long_about if the structs had no explicit override).
@@ -42,10 +47,10 @@ fn flattened_structs_do_not_leak_doc_prose() {
 /// the code fence marker itself must never appear.
 #[test]
 fn flattened_structs_do_not_leak_rust_example() {
-    let mut cmd = Cli::command();
-    let help = cmd.render_long_help().to_string();
+    let help = help_snapshot();
+    let leaked_fragments = ["```rust", "use genesis::guide::CliFormat", "Cli::parse()"];
 
-    for leaked in ["```rust", "use genesis::guide::CliFormat", "Cli::parse()"] {
+    for leaked in leaked_fragments {
         assert!(
             !help.contains(leaked),
             "doc-comment example fragment {leaked:?} leaked into --help:\n{help}"

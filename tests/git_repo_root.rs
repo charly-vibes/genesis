@@ -9,6 +9,8 @@
 //! must never be mutated (poison the child's env via `.env()` instead).
 
 mod common;
+
+use common::TestUnwrap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -26,7 +28,7 @@ const CHILD_REPO: &str = "GENESIS_GIT_TEST_REPO";
 fn child_repo() -> Option<PathBuf> {
     std::env::var_os(CHILD_SENTINEL)?;
     Some(PathBuf::from(
-        std::env::var(CHILD_REPO).expect("child must receive the fixture repo path"),
+        std::env::var(CHILD_REPO).require("child must receive the fixture repo path"),
     ))
 }
 
@@ -35,12 +37,18 @@ fn repo_root_resolves_worktree_git_file() {
     let main = Fixture::new()
         .with_git_init()
         .build()
-        .expect("main fixture");
-    let parent = Fixture::new().build().expect("worktree parent fixture");
+        .require("main fixture");
+    let parent = Fixture::new().build().require("worktree parent fixture");
     let wt = parent.root().join("linked");
     let out = main
-        .run(&["git", "worktree", "add", wt.to_str().unwrap(), "HEAD"])
-        .expect("run git worktree add");
+        .run(&[
+            "git",
+            "worktree",
+            "add",
+            wt.to_str().require("to_str"),
+            "HEAD",
+        ])
+        .require("run git worktree add");
     assert!(out.success(), "git worktree add failed: {}", out.stderr);
     assert!(
         wt.join(".git").is_file(),
@@ -48,15 +56,15 @@ fn repo_root_resolves_worktree_git_file() {
     );
 
     assert_eq!(
-        git::repo_root_from(&wt).expect("worktree root"),
+        git::repo_root_from(&wt).require("worktree root"),
         wt,
         "a `.git` FILE must count as a repository root"
     );
 
     let nested = wt.join("a/b");
-    std::fs::create_dir_all(&nested).expect("create nested dir");
+    std::fs::create_dir_all(&nested).require("create nested dir");
     assert_eq!(
-        git::repo_root_from(&nested).expect("nested worktree root"),
+        git::repo_root_from(&nested).require("nested worktree root"),
         wt,
         "nested subdirectory inside a worktree must resolve to the worktree root"
     );
@@ -64,11 +72,11 @@ fn repo_root_resolves_worktree_git_file() {
 
 #[test]
 fn repo_root_resolves_nested_subdirectory() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
     let nested = fixture.root().join("a/b");
-    std::fs::create_dir_all(&nested).expect("create nested dir");
+    std::fs::create_dir_all(&nested).require("create nested dir");
     assert_eq!(
-        git::repo_root_from(&nested).expect("nested root"),
+        git::repo_root_from(&nested).require("nested root"),
         fixture.root(),
         "two levels below the root must still resolve to the repository root"
     );
@@ -76,10 +84,10 @@ fn repo_root_resolves_nested_subdirectory() {
 
 #[test]
 fn repo_root_succeeds_inside_git_dir() {
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
     let inside = fixture.root().join(".git");
     assert_eq!(
-        git::repo_root_from(&inside).expect("inside .git"),
+        git::repo_root_from(&inside).require("inside .git"),
         fixture.root(),
         "starting the walk inside a `.git` directory must succeed"
     );
@@ -87,7 +95,7 @@ fn repo_root_succeeds_inside_git_dir() {
 
 #[test]
 fn repo_root_not_in_repo_is_typed_error() {
-    let fixture = Fixture::new().build().expect("fixture without git");
+    let fixture = Fixture::new().build().require("fixture without git");
     let err = git::repo_root_from(fixture.root()).expect_err("tempdir is not a repo");
     match err {
         git::GitError::NotInRepo { start } => {
@@ -106,8 +114,8 @@ fn repo_root_walk_ignores_git_dir_env() {
     // path. The child asserts the walk still succeeds — proving root
     // detection is independent of GIT_DIR without mutating this process's
     // own env (racy across parallel test threads).
-    let fixture = Fixture::new().with_git_init().build().expect("fixture");
-    let exe = std::env::current_exe().expect("locate test binary");
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    let exe = std::env::current_exe().require("locate test binary");
     let output = Command::new(exe)
         .args(["--exact", "repo_root_child_poisoned_git_dir", "--nocapture"])
         .env(CHILD_SENTINEL, "1")
@@ -116,7 +124,7 @@ fn repo_root_walk_ignores_git_dir_env() {
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .expect("spawn child test");
+        .require("spawn child test");
     assert!(
         output.status.success(),
         "child test with poisoned GIT_DIR must pass:\n{}",
@@ -132,13 +140,13 @@ fn repo_root_child_poisoned_git_dir() {
         return;
     };
     assert_eq!(
-        git::repo_root_from(&repo).expect("walk must ignore GIT_DIR"),
+        git::repo_root_from(&repo).require("walk must ignore GIT_DIR"),
         repo,
         "walk must resolve the real root even with GIT_DIR poisoned"
     );
     let inner = repo.join(".git");
     assert_eq!(
-        git::repo_root_from(&inner).expect("inside .git with poisoned GIT_DIR"),
+        git::repo_root_from(&inner).require("inside .git with poisoned GIT_DIR"),
         repo,
         "walk from inside .git must also ignore GIT_DIR"
     );

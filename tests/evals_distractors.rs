@@ -1,6 +1,10 @@
 //! Tests for eval distractors + doc-drift blindness check
 //! (add-aix-eval-loop §3, design D3).
 
+mod common;
+
+use common::TestUnwrap;
+
 use genesis::evals::{
     AgentStep, CheckOutcome, DistractorKind, ErrorTaxonomy, Scenario, doc_drift_blindness,
 };
@@ -38,7 +42,7 @@ fn distractor_lands_in_replay_fixture_env() {
         );
     let report = scenario
         .run(vec![envelope_trusting_step("my-tool init")])
-        .expect("fixture");
+        .require("fixture");
 
     let distractor_path = report.fixture_root.join("docs/cli.md");
     assert!(
@@ -53,7 +57,7 @@ fn distractor_of_every_kind_materializes() {
     for kind in [DistractorKind::StaleDocs, DistractorKind::ContradictingHint] {
         let scenario =
             Scenario::new("kinds", "prompt").distractor_file("hints.txt", "wrong hint\n", kind);
-        let report = scenario.run(vec![]).expect("fixture");
+        let report = scenario.run(vec![]).require("fixture");
         assert!(
             report.fixture_root.join("hints.txt").exists(),
             "kind {kind:?}"
@@ -69,7 +73,7 @@ fn distractor_ignoring_run_passes() {
         .distractor_file("docs/cli.md", "stale docs\n", DistractorKind::StaleDocs)
         .check("trusts-envelope", doc_drift_blindness("my-tool configure"));
     let replay = vec![envelope_trusting_step("my-tool init")];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 }
 
@@ -88,7 +92,7 @@ fn doc_drift_blindness_passes_on_envelope_trusting_steps() {
         envelope_trusting_step("my-tool --help"),
         envelope_trusting_step("my-tool init"),
     ];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 }
 
@@ -103,7 +107,7 @@ fn doc_drift_blindness_catches_bait_with_arguments() {
         )
         .check("doc-drift", doc_drift_blindness("my-tool configure"));
     let replay = vec![step("my-tool configure --force", &ok_envelope_stdout(), 0)];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(
         !report.passed,
         "doc-following with flags is still doc-following"
@@ -124,7 +128,7 @@ fn doc_drift_blindness_fails_doc_following_steps() {
         envelope_trusting_step("my-tool --help"),
         step("my-tool configure", &ok_envelope_stdout(), 0),
     ];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     assert!(!report.passed);
     let (_, outcome) = &report.failures[0];
     match outcome {
@@ -144,7 +148,7 @@ fn doc_drift_blindness_without_distractor_is_tool_fault() {
     let scenario = Scenario::new("no-distractor", "prompt")
         .check("doc-drift", doc_drift_blindness("my-tool configure"));
     let replay = vec![step("my-tool configure", &ok_envelope_stdout(), 0)];
-    let report = scenario.run(replay).expect("fixture");
+    let report = scenario.run(replay).require("fixture");
     let (_, outcome) = &report.failures[0];
     match outcome {
         CheckOutcome::Fail { taxonomy, reason } => {
@@ -163,10 +167,10 @@ fn report_carries_model_when_provided() {
         Scenario::new("attributed", "prompt").check("always-passes", |_| CheckOutcome::pass());
     let report = scenario
         .run(vec![])
-        .expect("fixture")
+        .require("fixture")
         .with_model("test-model/1.0");
-    let json = serde_json::to_string(&report).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let json = serde_json::to_string(&report).require("to_string");
+    let parsed: serde_json::Value = serde_json::from_str(&json).require("from_str");
     assert_eq!(parsed["model"], "test-model/1.0");
 }
 
@@ -174,9 +178,9 @@ fn report_carries_model_when_provided() {
 fn report_without_attribution_stays_valid() {
     let scenario =
         Scenario::new("unattributed", "prompt").check("always-passes", |_| CheckOutcome::pass());
-    let report = scenario.run(vec![]).expect("fixture");
-    let json = serde_json::to_string(&report).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let report = scenario.run(vec![]).require("fixture");
+    let json = serde_json::to_string(&report).require("to_string");
+    let parsed: serde_json::Value = serde_json::from_str(&json).require("from_str");
     assert!(
         parsed.get("model").is_none(),
         "model key must be omitted: {json}"
@@ -205,7 +209,7 @@ fn stale_managed_block_vs_live_help_envelope() {
         step("my-tool --help", LIVE_HELP, 0),
         envelope_trusting_step("my-tool init"),
     ];
-    let report = scenario.run(trusting).expect("fixture");
+    let report = scenario.run(trusting).require("fixture");
     assert!(report.passed, "failures: {:?}", report.failures);
 
     // Doc-following agent: runs what the stale block says.
@@ -213,7 +217,7 @@ fn stale_managed_block_vs_live_help_envelope() {
         step("my-tool --help", LIVE_HELP, 0),
         envelope_trusting_step("my-tool configure"),
     ];
-    let report = scenario.run(doc_following).expect("fixture");
+    let report = scenario.run(doc_following).require("fixture");
     assert!(!report.passed);
     let (_, outcome) = &report.failures[0];
     assert!(matches!(
