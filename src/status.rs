@@ -354,22 +354,25 @@ impl Default for StatusBuilder {
     }
 }
 
-
-
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[path = "status/tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "status/tests_builder.rs"]
+mod tests_builder;
+
 /// One contributor's section; failures become error sections.
 fn contributor_section(contributor: &dyn StatusContributor, repo_root: &Path) -> StatusSection {
-    contributor.status(repo_root).unwrap_or_else(|e| StatusSection {
-        tool: contributor.name().to_string(),
-        level: StatusLevel::Error,
-        summary: format!("unreachable: {e}"),
-        items: vec![],
-        suggestions: vec![format!("{} init", contributor.name())],
-    })
+    contributor
+        .status(repo_root)
+        .unwrap_or_else(|e| StatusSection {
+            tool: contributor.name().to_string(),
+            level: StatusLevel::Error,
+            summary: format!("unreachable: {e}"),
+            items: vec![],
+            suggestions: vec![format!("{} init", contributor.name())],
+        })
 }
-
