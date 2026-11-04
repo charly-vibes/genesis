@@ -1,0 +1,167 @@
+//! `ErrorSink`: the error path (tool name, suggestion footer, feedback
+//! fallback, best-effort scratch recording).
+
+use std::io::Write;
+
+use super::verbosity::Verbosity;
+use crate::feedback::scratch as scratch_mod;
+use crate::suggestions::Suggestion;
+
+// ---------------------------------------------------------------------------
+// ErrorSink
+// ---------------------------------------------------------------------------
+
+/// Configuration for self-healing error handling.
+///
+/// Wires together error printing, scratch persistence, and optional
+/// feedback fallback.
+#[derive(Debug, Clone)]
+pub struct ErrorSink {
+    /// The tool name (used for scratch directory and feedback subcommand).
+    pub tool_name: String,
+    /// Persist the last error to the error scratch.
+    pub scratch: bool,
+    /// Print the error with a Suggestion::Fix footer.
+    pub suggest: bool,
+    /// Include the full ContextBundle in the error output.
+    pub context: bool,
+    /// Name of the feedback subcommand, if the tool has one.
+    /// If None, no feedback suggestion is printed.
+    pub feedback_subcommand: Option<String>,
+    /// The current verbosity level.
+    pub verbosity: Verbosity,
+}
+
+impl ErrorSink {
+    /// Create a new error sink with sensible defaults.
+    pub fn new(tool_name: impl Into<String>) -> Self {
+        Self {
+            tool_name: tool_name.into(),
+            scratch: true,
+            suggest: true,
+            context: false,
+            feedback_subcommand: Some("feedback".into()),
+            verbosity: Verbosity::Normal,
+        }
+    }
+
+    /// Handle an error — print it, optionally write to scratch, and
+    /// optionally suggest a feedback command.
+    pub fn handle(&self, err: &dyn std::error::Error, stderr: &mut impl Write) {
+        self.handle_message(&err.to_string(), None, stderr);
+    }
+
+    /// Handle an error with an explicit suggestion footer override.
+    pub fn handle_with_footer(
+        &self,
+        err: &dyn std::error::Error,
+        suggestion: &Suggestion,
+        stderr: &mut impl Write,
+    ) {
+        self.handle_message(&err.to_string(), Some(suggestion), stderr);
+    }
+
+    /// Core error handler implementation.
+    fn handle_message(
+        &self,
+        message: &str,
+        suggestion: Option<&Suggestion>,
+        stderr: &mut impl Write,
+    ) {
+        // Always print the error.
+        let _ = writeln!(stderr, "{}: {}", self.tool_name, message);
+
+        self.print_footer(suggestion, stderr);
+
+        // Optionally print feedback fallback (only when no suggestion at all).
+        if self.feedback_subcommand.is_some() && suggestion.is_none() && !self.suggest {
+            let _ = writeln!(
+                stderr,
+                "Feedback: {} {} bug --from-last-error",
+                self.tool_name,
+                self.feedback_subcommand.as_deref().unwrap_or("feedback"),
+            );
+        }
+
+        self.record_scratch(suggestion);
+    }
+
+    /// Print the suggestion footer or the generic doctor footer.
+    fn print_footer(&self, suggestion: Option<&Suggestion>, stderr: &mut impl Write) {
+        if let Some(s) = suggestion {
+            if let Some(footer) = s.footer() {
+                let _ = writeln!(stderr, "{}", footer);
+            }
+        } else if self.suggest {
+            // No explicit suggestion — print generic footer.
+            let _ = writeln!(stderr, "-> Run: {} doctor", self.tool_name);
+        }
+    }
+
+    /// Write an error record to the scratch file when scratch is enabled.
+    fn record_scratch(&self, suggestion: Option<&Suggestion>) {
+        if !self.scratch {
+            return;
+        }
+        let record = scratch_mod::ErrorRecord {
+            ts: chrono_now(),
+            argv: vec![self.tool_name.clone()],
+            exit: 1,
+            footer: suggestion.and_then(|s| s.footer()),
+            kind: "error".into(),
+        };
+        scratch_mod::write_scratch_best_effort(&self.tool_name, &record);
+    }
+}
+
+/// Get an ISO 8601 timestamp without pulling in chrono.
+fn chrono_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dur = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = dur.as_secs();
+    let time_secs = secs % 86400;
+    let hours = time_secs / 3600;
+    let minutes = (time_secs % 3600) / 60;
+    let seconds = time_secs % 60;
+
+    let (y, m, d) = civil_date(secs / 86400);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y, m, d, hours, minutes, seconds
+    )
+}
+
+/// `(year, month, day)` from whole days since 1970-01-01 (exact for
+/// post-2000 dates; simple algorithm, no external dependency).
+fn civil_date(days: u64) -> (i64, u32, u32) {
+    let mut y = 1970i64;
+    let mut remaining = days as i64;
+    loop {
+        let days_in_year = if is_leap(y) { 366 } else { 365 };
+        if remaining < days_in_year {
+            break;
+        }
+        remaining -= days_in_year;
+        y += 1;
+    }
+    let month_days = if is_leap(y) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut m = 1u32;
+    for &md in &month_days {
+        if remaining < md {
+            break;
+        }
+        remaining -= md;
+        m += 1;
+    }
+    (y, m, (remaining + 1) as u32)
+}
+
+fn is_leap(year: i64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}

@@ -6,6 +6,7 @@ use crate::testutil::TestUnwrap;
 
 use super::*;
 use crate::envelope::EnvelopeKind;
+use crate::suggestions::Suggestion;
 
 // -- Verbosity ---------------------------------------------------------
 
