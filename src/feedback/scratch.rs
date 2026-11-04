@@ -142,14 +142,22 @@ fn timestamp() -> String {
         .unwrap_or_default();
     let secs = now.as_secs();
     // Format as ISO 8601 date-time (UTC)
-    let days = secs / 86400;
     let time_secs = secs % 86400;
     let hours = time_secs / 3600;
     let minutes = (time_secs % 3600) / 60;
     let seconds = time_secs % 60;
 
-    // Compute year/month/day from days since epoch
-    // Simple algorithm for dates after 2000
+    let (y, m, d) = civil_from_days_since_epoch(secs / 86400);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y, m, d, hours, minutes, seconds
+    )
+}
+
+/// Compute `(year, month, day)` from whole days since 1970-01-01.
+/// Simple algorithm, exact for dates after 2000.
+#[cfg(test)]
+fn civil_from_days_since_epoch(days: u64) -> (i64, usize, u8) {
     let mut y = 1970i64;
     let mut remaining = days as i64;
     loop {
@@ -160,28 +168,26 @@ fn timestamp() -> String {
         remaining -= days_in_year;
         y += 1;
     }
-    let month_days = if is_leap(y) {
+    let m = month_for_remaining(remaining as u64, is_leap(y));
+    let d = (remaining + 1) as u8;
+    (y, m, d)
+}
+
+/// 1-based month number given days remaining within the year.
+#[cfg(test)]
+fn month_for_remaining(mut remaining: u64, leap: bool) -> usize {
+    let month_days = if leap {
         [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     } else {
         [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     };
-    let mut m = 0usize;
     for (i, &md) in month_days.iter().enumerate() {
-        if remaining < md as i64 {
-            m = i + 1;
-            break;
+        if remaining < md as u64 {
+            return i + 1;
         }
-        remaining -= md as i64;
+        remaining -= md as u64;
     }
-    if m == 0 {
-        m = 12;
-    }
-    let d = (remaining + 1) as u8;
-
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y, m, d, hours, minutes, seconds
-    )
+    12
 }
 
 #[cfg(test)]
@@ -192,6 +198,7 @@ fn is_leap(year: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testutil::TestUnwrap;
 
     #[test]
     fn test_error_record_serializes() {
@@ -202,7 +209,7 @@ mod tests {
             footer: Some("→ Run: genesis doctor".into()),
             kind: "Fix".into(),
         };
-        let json = serde_json::to_string(&record).unwrap();
+        let json = serde_json::to_string(&record).require("value");
         assert!(json.contains("2026-07-28T00:00:00Z"));
         assert!(json.contains("genesis"));
         assert!(json.contains("genesis doctor"));
@@ -218,7 +225,7 @@ mod tests {
             footer: None,
             kind: "Ok".into(),
         };
-        let json = serde_json::to_string(&record).unwrap();
+        let json = serde_json::to_string(&record).require("value");
         assert!(!json.contains("footer"));
     }
 
@@ -241,7 +248,7 @@ mod tests {
         write_scratch_best_effort(&tool, &record);
         let last = read_last_error(&tool);
         assert!(last.is_some());
-        assert_eq!(last.unwrap().exit, 1);
+        assert_eq!(last.require("value").exit, 1);
 
         // Cleanup
         let _ = std::fs::remove_file(scratch_path(&tool));
@@ -257,27 +264,11 @@ mod tests {
 
     #[test]
     fn test_read_all_errors() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::tempdir().require("tempdir");
         let path = dir.path().join("errors.jsonl");
+        append_test_records(&path, 3);
 
-        for i in 0..3 {
-            let record = ErrorRecord {
-                ts: format!("2026-07-28T00:00:0{}Z", i),
-                argv: vec!["test".into(), format!("{}", i)],
-                exit: i,
-                footer: None,
-                kind: "Test".into(),
-            };
-            let line = serde_json::to_string(&record).unwrap();
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .unwrap();
-            writeln!(file, "{}", line).unwrap();
-        }
-
-        let content = std::fs::read_to_string(&path).unwrap();
+        let content = std::fs::read_to_string(&path).require("value");
         let all: Vec<ErrorRecord> = content
             .lines()
             .filter_map(|line| serde_json::from_str(line).ok())
@@ -290,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_cap_scratch_file() {
-        let dir = tempfile::tempdir().expect("tempdir");
+        let dir = tempfile::tempdir().require("tempdir");
         let path = dir.path().join("errors.jsonl");
 
         // Write MAX_ENTRIES + 10 lines
@@ -302,19 +293,19 @@ mod tests {
                 footer: None,
                 kind: "Test".into(),
             };
-            let line = serde_json::to_string(&record).unwrap();
+            let line = serde_json::to_string(&record).require("value");
             let mut file = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&path)
-                .unwrap();
-            writeln!(file, "{}", line).unwrap();
+                .require("value");
+            writeln!(file, "{}", line).require("value");
         }
 
         // Cap
-        cap_scratch_file(&path).unwrap();
+        cap_scratch_file(&path).require("value");
 
-        let content = std::fs::read_to_string(&path).unwrap();
+        let content = std::fs::read_to_string(&path).require("value");
         let lines: Vec<&str> = content.lines().collect();
         assert_eq!(lines.len(), MAX_ENTRIES);
         // dir is cleaned up on drop
@@ -341,5 +332,26 @@ mod tests {
             Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
             None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
         }
+    }
+}
+
+/// Append `n` sequential test records as JSONL lines to `path`.
+fn append_test_records(path: &std::path::Path, n: usize) {
+    use std::io::Write;
+    for i in 0..n {
+        let record = ErrorRecord {
+            ts: format!("2026-07-28T00:00:0{}Z", i),
+            argv: vec!["test".into(), i.to_string()],
+            exit: i as i32,
+            footer: None,
+            kind: "Test".into(),
+        };
+        let line = serde_json::to_string(&record).require("serialize record");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .require("open errors file");
+        writeln!(file, "{}", line).require("append record");
     }
 }
