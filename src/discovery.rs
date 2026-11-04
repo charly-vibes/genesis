@@ -162,7 +162,13 @@ pub fn register(
     let manifest_path = project_root.join(MANIFEST_FILENAME);
     ensure_manifest_dir(&manifest_path)?;
 
-    let manifest = upsert_tool(read_manifest(project_root).unwrap_or_default(), name, description, detector_type, detector_path);
+    let manifest = upsert_tool(
+        read_manifest(project_root).unwrap_or_default(),
+        name,
+        description,
+        detector_type,
+        detector_path,
+    );
 
     write_manifest(&manifest_path, &manifest)?;
     Ok(())
@@ -260,7 +266,6 @@ fn log_unknown_detector(detector_type: &str, tool_name: &str) {
     );
 }
 
-#[cfg(test)]
 #[cfg(test)]
 #[path = "discovery/tests.rs"]
 mod tests;

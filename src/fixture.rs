@@ -19,10 +19,9 @@
 //! assert!(fixture.path("hello.txt").exists());
 //! ```
 
+use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-use serde::de::DeserializeOwned;
 
 /// Errors that can occur while building a fixture or running a command in one.
 #[derive(Debug, thiserror::Error)]
@@ -174,38 +173,6 @@ impl Fixture {
     }
 }
 
-/// The result of running a command in a fixture.
-#[derive(Debug, Clone)]
-pub struct CommandOutput {
-    /// Standard output.
-    pub stdout: String,
-    /// Standard error.
-    pub stderr: String,
-    /// Exit code (or -1 if the process was terminated by a signal).
-    pub exit_code: i32,
-    /// On Unix, the terminating signal if the process was killed by one;
-    /// `None` otherwise (including on non-Unix platforms).
-    pub signal: Option<i32>,
-}
-
-/// Remove the hook-context variables git exports to hook processes
-/// (`GIT_DIR`, `GIT_INDEX_FILE`, `GIT_WORK_TREE`) from a fixture command.
-///
-/// Rationale: when the test suite runs inside a git hook (the pre-commit
-/// testaruda selection runs the whole suite), the surrounding `git
-/// commit` exports `GIT_DIR` — and a fixture that inherits it would run
-/// its `git init`/`add`/`commit` against the *real* repository instead
-/// of the fixture's own (observed: a hook-time cargo test landed a bogus
-/// `initial` commit on a development branch). Fixtures are self-contained
-/// sandboxes; their git operations must discover the fixture repo from
-/// the command's working directory alone.
-fn hermetic_git(cmd: &mut Command) -> &mut Command {
-    for var in ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"] {
-        cmd.env_remove(var);
-    }
-    cmd
-}
-
 impl CommandOutput {
     /// Parse stdout as JSON.
     pub fn json<T: DeserializeOwned>(&self) -> Option<T> {
@@ -218,17 +185,21 @@ impl CommandOutput {
     }
 }
 
-/// Extract the terminating signal from an [`ExitStatus`], if any.
-#[cfg(unix)]
-fn signal_of(status: &std::process::ExitStatus) -> Option<i32> {
-    use std::os::unix::process::ExitStatusExt;
-    status.signal()
-}
-
 #[cfg(not(unix))]
 fn signal_of(_status: &std::process::ExitStatus) -> Option<i32> {
     None
 }
+
+mod command;
+mod entries;
+mod git_init;
+
+pub use command::CommandOutput;
+use command::{hermetic_git, signal_of};
+use entries::{
+    ConfigEntry, FileEntry, TomlEntry, create_markers, write_plain_files, write_toml_files,
+};
+use git_init::git_init_repo;
 
 impl Default for Fixture {
     fn default() -> Self {
@@ -239,36 +210,6 @@ impl Default for Fixture {
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
-/// A file entry in the builder.
-#[derive(Debug)]
-struct FileEntry {
-    path: String,
-    content: String,
-}
-
-/// A TOML file entry in the builder.
-#[derive(Debug)]
-struct TomlEntry {
-    path: String,
-    value: toml::Value,
-}
-
-/// A deferred config write captured at `with_config` time.
-///
-/// Stored as a closure so the typed config is written to `ConfigFile::path()`
-/// at `build()` time, once the fixture root exists.
-type ConfigWriter = Box<dyn FnOnce(&Path) -> Result<(), FixtureError>>;
-
-struct ConfigEntry {
-    write: ConfigWriter,
-}
-
-impl std::fmt::Debug for ConfigEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConfigEntry").finish_non_exhaustive()
     }
 }
 
@@ -372,48 +313,9 @@ impl FixtureBuilder {
             })?
             .keep();
 
-        // Create markers
-        for marker in &self.markers {
-            let path = root.join(marker);
-            std::fs::create_dir_all(&path).map_err(|e| FixtureError::Io {
-                path: path.clone(),
-                message: format!("create marker '{}': {}", marker, e),
-            })?;
-        }
-
-        // Write files
-        for entry in &self.files {
-            let path = root.join(&entry.path);
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| FixtureError::Io {
-                    path: parent.to_path_buf(),
-                    message: format!("create parent for '{}': {}", entry.path, e),
-                })?;
-            }
-            std::fs::write(&path, &entry.content).map_err(|e| FixtureError::Io {
-                path: path.clone(),
-                message: format!("write file '{}': {}", entry.path, e),
-            })?;
-        }
-
-        // Write TOML files
-        for entry in &self.tomls {
-            let path = root.join(&entry.path);
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| FixtureError::Io {
-                    path: parent.to_path_buf(),
-                    message: format!("create parent for '{}': {}", entry.path, e),
-                })?;
-            }
-            let content = toml::to_string_pretty(&entry.value).map_err(|e| FixtureError::Io {
-                path: path.clone(),
-                message: format!("serialize TOML for '{}': {}", entry.path, e),
-            })?;
-            std::fs::write(&path, &content).map_err(|e| FixtureError::Io {
-                path: path.clone(),
-                message: format!("write TOML file '{}': {}", entry.path, e),
-            })?;
-        }
+        create_markers(&root, &self.markers)?;
+        write_plain_files(&root, &self.files)?;
+        write_toml_files(&root, &self.tomls)?;
 
         // Write config files (deferred from with_config)
         for entry in self.configs {
@@ -427,74 +329,6 @@ impl FixtureBuilder {
 
         Ok(Fixture { root })
     }
-}
-
-/// Run `git init` plus an initial commit in `root`.
-fn git_init_repo(root: &Path) -> Result<(), FixtureError> {
-    let run = |stage: &'static str, args: &[&str]| -> Result<std::process::Output, FixtureError> {
-        hermetic_git(&mut Command::new("git"))
-            .args(args)
-            .current_dir(root)
-            .output()
-            .map_err(|e| FixtureError::Git { stage, source: e })
-    };
-
-    let init = run("init", &["init"])?;
-    if !init.status.success() {
-        return Err(FixtureError::Git {
-            stage: "init",
-            source: std::io::Error::other(format!(
-                "git init exited {}: {}",
-                init.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&init.stderr)
-            )),
-        });
-    }
-
-    // Seed a .gitkeep so the initial commit always has content.
-    std::fs::write(root.join(".gitkeep"), "").map_err(|e| FixtureError::Git {
-        stage: "seed",
-        source: e,
-    })?;
-
-    // Configure a deterministic identity (ignore failures: not fatal).
-    let _ = run("config", &["config", "user.email", "test@test.com"]);
-    let _ = run("config", &["config", "user.name", "Test"]);
-
-    let add = run("add", &["add", "-A"])?;
-    if !add.status.success() {
-        return Err(FixtureError::Git {
-            stage: "add",
-            source: std::io::Error::other(format!(
-                "git add exited {}: {}",
-                add.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&add.stderr)
-            )),
-        });
-    }
-
-    let commit = hermetic_git(&mut Command::new("git"))
-        .args(["commit", "-m", "initial"])
-        .current_dir(root)
-        .env("GIT_AUTHOR_DATE", "2020-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_DATE", "2020-01-01T00:00:00Z")
-        .output()
-        .map_err(|e| FixtureError::Git {
-            stage: "commit",
-            source: e,
-        })?;
-    if !commit.status.success() {
-        return Err(FixtureError::Git {
-            stage: "commit",
-            source: std::io::Error::other(format!(
-                "git commit exited {}: {}",
-                commit.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&commit.stderr)
-            )),
-        });
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

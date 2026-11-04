@@ -330,6 +330,5 @@ impl Envelope<ErrorResult> {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "envelope/tests.rs"]
 mod tests;

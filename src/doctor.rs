@@ -579,6 +579,5 @@ pub fn lint_to_doctor<C: crate::suite_linter::LintCheck + 'static>(
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "doctor/tests.rs"]
 mod tests;

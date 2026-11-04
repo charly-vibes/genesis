@@ -625,6 +625,5 @@ pub struct DiscoveredConfig {
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "config/tests.rs"]
 mod tests;

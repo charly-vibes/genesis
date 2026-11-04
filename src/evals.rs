@@ -702,6 +702,5 @@ pub fn doc_drift_blindness(bait: impl Into<String>) -> impl Fn(&ScenarioResult) 
 }
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "evals/tests.rs"]
 mod tests;

@@ -114,7 +114,9 @@ fn porcelain_path(raw: &str, bytes: &[u8]) -> Option<String> {
     let is_rename_or_copy =
         bytes[0] == b'R' || bytes[0] == b'C' || bytes[1] == b'R' || bytes[1] == b'C';
     let path_part = if is_rename_or_copy {
-        raw.rsplit_once(" -> ").map(|(_old, new)| new).unwrap_or(raw)
+        raw.rsplit_once(" -> ")
+            .map(|(_old, new)| new)
+            .unwrap_or(raw)
     } else {
         raw
     };

@@ -14,6 +14,10 @@ use serde::{Deserialize, Serialize};
 fn test_with_marker_creates_directory() {
     let fixture = Fixture::new().with_marker(".wai").build().require("build");
     fixture.assert_marker(".wai");
+    assert!(
+        fixture.root().join(".wai").is_dir(),
+        "marker must be created as a directory"
+    );
 }
 
 #[test]
@@ -23,6 +27,10 @@ fn test_with_marker_dir_creates_nested_directory() {
         .build()
         .require("build");
     fixture.assert_marker(".beads/hooks");
+    assert!(
+        fixture.root().join(".beads/hooks").is_dir(),
+        "nested marker must be created as a directory"
+    );
 }
 
 #[test]
