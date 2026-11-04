@@ -1023,6 +1023,9 @@ impl ErrorSink {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "guide/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "guide/tests_guide.rs"]
+mod tests_guide;
