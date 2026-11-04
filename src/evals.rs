@@ -17,15 +17,16 @@
 //! Managed-block audit utilities and AIX-ablation provisioning are
 //! follow-up slices (see genesis-zxv).
 
-use serde_json::Value;
-use std::path::PathBuf;
-
 // ---------------------------------------------------------------------------
 // Error taxonomy
 
 #[cfg(test)]
 #[path = "evals/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "evals/tests_receipt.rs"]
+mod tests_receipt;
 
 mod checks;
 mod outcome;

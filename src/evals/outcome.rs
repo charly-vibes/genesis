@@ -2,7 +2,6 @@
 
 /// Error raised while asserting against captured tool output.
 use serde_json::Value;
-use thiserror::Error;
 
 use super::taxonomy::ErrorTaxonomy;
 
