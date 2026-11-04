@@ -41,6 +41,11 @@ fn test_with_file_creates_file() {
         .require("build");
     fixture.assert_file_exists("hello.txt");
     fixture.assert_file_contains("hello.txt", "world");
+    assert_eq!(
+        std::fs::read_to_string(fixture.root().join("hello.txt")).require("read hello.txt"),
+        "world",
+        "with_file must write the exact content"
+    );
 }
 
 #[test]
@@ -51,6 +56,10 @@ fn test_with_file_creates_nested_path() {
         .require("build");
     fixture.assert_file_exists("src/main.rs");
     fixture.assert_file_contains("src/main.rs", "fn main()");
+    assert!(
+        fixture.root().join("src/main.rs").is_file(),
+        "with_file must create parent directories"
+    );
 }
 
 #[test]
@@ -67,6 +76,10 @@ fn test_with_toml_creates_valid_toml() {
     fixture.assert_file_exists("config.toml");
     fixture.assert_file_contains("config.toml", "name");
     fixture.assert_file_contains("config.toml", "true");
+    let raw = std::fs::read_to_string(fixture.root().join("config.toml")).require("read toml");
+    let parsed: toml::Value = toml::from_str(&raw).require("parse generated toml");
+    assert_eq!(parsed["name"].as_str(), Some("test"), "with_toml must round-trip values");
+    assert_eq!(parsed["enabled"].as_bool(), Some(true), "with_toml must round-trip bools");
 }
 
 #[test]
@@ -83,6 +96,15 @@ fn test_multiple_markers_and_files() {
     fixture.assert_marker(".dont");
     fixture.assert_file_exists("a.txt");
     fixture.assert_file_exists("b.txt");
+    assert!(
+        fixture.root().join(".wai").is_dir() && fixture.root().join(".dont").is_dir(),
+        "both markers must exist"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root().join("a.txt")).require("read a.txt"),
+        "aaa",
+        "multiple with_file entries must all be written"
+    );
 }
 
 // -- with_config (round-trip via ConfigFile) ---------------------------
@@ -144,6 +166,10 @@ fn test_with_config_uses_config_file_path_not_type_name() {
 #[test]
 fn test_assert_no_file_passes_when_missing() {
     let fixture = Fixture::new().build().require("build");
+    assert!(
+        !fixture.root().join("nonexistent.txt").exists(),
+        "precondition: file must be absent"
+    );
     fixture.assert_no_file("nonexistent.txt");
 }
 
@@ -151,6 +177,10 @@ fn test_assert_no_file_passes_when_missing() {
 #[should_panic(expected = "expected file to exist")]
 fn test_assert_file_exists_panics_when_missing() {
     let fixture = Fixture::new().build().require("build");
+    assert!(
+        !fixture.root().join("missing.txt").exists(),
+        "precondition: file must be absent"
+    );
     fixture.assert_file_exists("missing.txt");
 }
 
@@ -161,6 +191,10 @@ fn test_assert_no_file_panics_when_exists() {
         .with_file("present.txt", "")
         .build()
         .require("build");
+    assert!(
+        fixture.root().join("present.txt").exists(),
+        "precondition: file must exist"
+    );
     fixture.assert_no_file("present.txt");
 }
 
@@ -171,6 +205,11 @@ fn test_assert_file_contains_panics_on_mismatch() {
         .with_file("data.txt", "hello")
         .build()
         .require("build");
+    assert_eq!(
+        std::fs::read_to_string(fixture.root().join("data.txt")).require("read data.txt"),
+        "hello",
+        "precondition: file must hold the mismatching content"
+    );
     fixture.assert_file_contains("data.txt", "world");
 }
 
