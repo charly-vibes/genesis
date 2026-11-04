@@ -10,8 +10,6 @@
 
 use std::path::Path;
 
-use crate::managed_block::{BlockDef, content_sha8};
-
 // ── Types ─────────────────────────────────────────────────────────────
 
 /// Severity of a lint result.
@@ -144,23 +142,7 @@ impl LintCheck for EvalsGuidelinesAdoption {
             )]);
         }
 
-        // Eval docs: any `evals*.md` under docs/, any depth.
-        let mut eval_docs: Vec<std::path::PathBuf> = Vec::new();
-        let mut stack = vec![docs.clone()];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                    && name.starts_with("evals")
-                    && name.ends_with(".md")
-                {
-                    eval_docs.push(path);
-                }
-            }
-        }
+        let eval_docs = collect_eval_docs(&docs)?;
 
         if eval_docs.is_empty() {
             return Ok(vec![LintResult::new(
@@ -172,178 +154,39 @@ impl LintCheck for EvalsGuidelinesAdoption {
 
         let mut findings = Vec::new();
         for doc in eval_docs {
-            let content = std::fs::read_to_string(&doc)
-                .map_err(|e| format!("cannot read {}: {e}", doc.display()))?;
-            let references = EVALS_GUIDELINE_MARKERS.iter().any(|m| content.contains(m));
-            if !references {
-                let rel = doc.strip_prefix(repo_root).unwrap_or(&doc).display();
-                findings.push(LintResult::with_fix(
-                    format!(
-                        "{rel} does not reference the suite-wide evals-guidelines pages \
-                         (report contract / tier ladder) — cross-tool results are not \
-                         comparable without the shared conventions"
-                    ),
-                    Severity::Advisory,
-                    "see genesis docs: how-to/evals.md, how-to/evals-ci.md, \
-                     reference/eval-report.md",
-                ));
+            if let Some(finding) = check_eval_doc(repo_root, &doc) {
+                findings.push(finding);
             }
         }
         Ok(findings)
     }
 }
 
-// ── ManagedBlockDrift check ───────────────────────────────────────
-
-/// One managed block to check for drift: its definition, where it lives,
-/// the regenerated expected content, and the command that fixes it.
-pub struct DriftTarget {
-    /// Block definition (name + markers).
-    pub block: BlockDef,
-    /// File path holding the block, relative to the repo root.
-    pub path: std::path::PathBuf,
-    /// Expected (footer-free) block content, as the generator would emit it.
-    pub expected: String,
-    /// Caller-supplied fix command — only the owning tool knows its sync
-    /// command, so drift findings carry it verbatim.
-    pub fix: String,
-}
-
-impl DriftTarget {
-    /// Create a new drift target.
-    pub fn new(
-        block: BlockDef,
-        path: impl Into<std::path::PathBuf>,
-        expected: impl Into<String>,
-        fix: impl Into<String>,
-    ) -> Self {
-        Self {
-            block,
-            path: path.into(),
-            expected: expected.into(),
-            fix: fix.into(),
-        }
+/// Advisory finding when `doc` does not reference any guideline marker.
+fn check_eval_doc(repo_root: &Path, doc: &std::path::Path) -> Option<LintResult> {
+    let content = std::fs::read_to_string(doc)
+        .map_err(|e| format!("cannot read {}: {e}", doc.display()))
+        .ok()?;
+    let references = EVALS_GUIDELINE_MARKERS.iter().any(|m| content.contains(m));
+    if references {
+        return None;
     }
+    let rel = doc.strip_prefix(repo_root).unwrap_or(doc).display();
+    Some(LintResult::with_fix(
+        format!(
+            "{rel} does not reference the suite-wide evals-guidelines pages \
+             (report contract / tier ladder) — cross-tool results are not \
+             comparable without the shared conventions"
+        ),
+        Severity::Advisory,
+        "see genesis docs: how-to/evals.md, how-to/evals-ci.md, \
+         reference/eval-report.md",
+    ))
 }
 
-/// Drift check for managed blocks (`add-artifact-provenance` §3).
-///
-/// For each registered [`DriftTarget`], compares the block on disk against
-/// the regenerated expected content — via the provenance footer's content
-/// hash where a footer exists (fast path), and via full-text comparison for
-/// older footer-less blocks. Drift is a Warning (not breakage); a registered
-/// block missing from its file is Advisory.
-pub struct ManagedBlockDrift {
-    targets: Vec<DriftTarget>,
-}
+mod drift;
 
-impl ManagedBlockDrift {
-    /// Create a drift check for the given targets.
-    pub fn new(targets: Vec<DriftTarget>) -> Self {
-        Self { targets }
-    }
-}
-
-/// Split the provenance footer off block-internal content.
-///
-/// Returns the footer-free body and, when the last line is a provenance
-/// footer, its `sha=` value. Matches the inject format
-/// `{content}\n{footer}\n` — the separating newline is dropped too, so the
-/// body hashes byte-identically to the generator's content.
-fn split_provenance_footer(inner: &str) -> (&str, Option<&str>) {
-    let trimmed = inner.trim_end_matches('\n');
-    let last_line = match trimmed.rfind('\n') {
-        Some(idx) => &trimmed[idx + 1..],
-        None if !trimmed.is_empty() => trimmed,
-        None => return (inner, None),
-    };
-    match parse_footer_sha(last_line) {
-        Some(sha) => {
-            let cut = trimmed.len() - last_line.len();
-            (&trimmed[..cut.saturating_sub(1)], Some(sha))
-        }
-        None => (inner, None),
-    }
-}
-
-/// Extract `sha=<value>` from a provenance footer line, if it is one.
-fn parse_footer_sha(line: &str) -> Option<&str> {
-    let rest = line
-        .strip_prefix("<!-- provenance: ")?
-        .strip_suffix(" -->")?;
-    let idx = rest.find("sha=")?;
-    let sha = &rest[idx + 4..];
-    Some(sha.split_whitespace().next().unwrap_or(sha))
-}
-
-impl LintCheck for ManagedBlockDrift {
-    fn name(&self) -> &'static str {
-        "genesis.managed_block_drift"
-    }
-
-    fn description(&self) -> &'static str {
-        "managed blocks match their regenerated generator content"
-    }
-
-    fn run(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
-        let mut findings = Vec::new();
-        for target in &self.targets {
-            let content = match std::fs::read_to_string(repo_root.join(&target.path)) {
-                Ok(c) => c,
-                Err(_) => {
-                    findings.push(LintResult::with_fix(
-                        format!(
-                            "managed block '{}' file not found: {}",
-                            target.block.name,
-                            target.path.display()
-                        ),
-                        Severity::Advisory,
-                        &target.fix,
-                    ));
-                    continue;
-                }
-            };
-            let inner = match content
-                .find(&target.block.start_marker)
-                .zip(content.find(&target.block.end_marker))
-                .filter(|(start, end)| start < end)
-            {
-                Some((start, end)) => &content[start + target.block.start_marker.len()..end],
-                None => {
-                    findings.push(LintResult::with_fix(
-                        format!(
-                            "managed block '{}' absent from {}",
-                            target.block.name,
-                            target.path.display()
-                        ),
-                        Severity::Advisory,
-                        &target.fix,
-                    ));
-                    continue;
-                }
-            };
-            let (body, footer_sha) = split_provenance_footer(inner);
-            let drifted = match footer_sha {
-                // Fast path: footer hash over the footer-free body.
-                Some(sha) => sha != content_sha8(body),
-                // Fallback: footer-less (older) blocks — full-text compare.
-                None => body.trim() != target.expected.trim(),
-            };
-            if drifted {
-                findings.push(LintResult::with_fix(
-                    format!(
-                        "managed block '{}' in {} has drifted from generator output",
-                        target.block.name,
-                        target.path.display()
-                    ),
-                    Severity::Warning,
-                    &target.fix,
-                ));
-            }
-        }
-        Ok(findings)
-    }
-}
+pub use drift::{DriftTarget, ManagedBlockDrift};
 
 // ── LinterRegistry ────────────────────────────────────────────────────
 
@@ -450,3 +293,30 @@ impl LinterRegistry {
 #[cfg(test)]
 #[path = "suite_linter/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "suite_linter/tests_drift.rs"]
+mod tests_drift;
+
+/// Collect `evals*.md` files under `docs/`, any depth.
+fn collect_eval_docs(
+    docs: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
+    let mut eval_docs: Vec<std::path::PathBuf> = Vec::new();
+    let mut stack = vec![docs.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.starts_with("evals")
+                && name.ends_with(".md")
+            {
+                eval_docs.push(path);
+            }
+        }
+    }
+    Ok(eval_docs)
+}
