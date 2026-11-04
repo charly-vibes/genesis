@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use super::{StatusItem, StatusLevel, StatusSection, StatusContributor};
+use super::{StatusContributor, StatusItem, StatusLevel, StatusSection};
 
 /// Wrap a [`crate::doctor::DoctorRunner`] as a [`StatusContributor`].
 ///

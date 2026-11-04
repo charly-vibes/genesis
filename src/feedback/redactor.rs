@@ -103,8 +103,9 @@ fn reduce_git_remote(text: &str, remote: &str) -> String {
 /// - `--token abc123` → `--token [redacted]`
 /// - `"secret": "abc123"` → `"secret": "[redacted]"`
 fn redact_secret_values(input: &str) -> String {
-    const SECRET_KEYWORDS: [&str; 7] =
-        ["token", "secret", "password", "apikey", "api_key", "pat", "bearer"];
+    const SECRET_KEYWORDS: [&str; 7] = [
+        "token", "secret", "password", "apikey", "api_key", "pat", "bearer",
+    ];
 
     let mut result = input.to_string();
     for keyword in SECRET_KEYWORDS {

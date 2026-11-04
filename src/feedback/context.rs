@@ -115,7 +115,10 @@ fn compute_hash(input: &str) -> u64 {
 /// Serialize the context bundle to a markdown section.
 pub fn format_context_bundle(bundle: &ContextBundle) -> String {
     let mut out = String::from("## Environment\n\n");
-    out.push_str(&format!("- tool: {} {}\n", bundle.tool_name, bundle.tool_version));
+    out.push_str(&format!(
+        "- tool: {} {}\n",
+        bundle.tool_name, bundle.tool_version
+    ));
     out.push_str(&optional_fields(bundle));
     out.push_str(&format!("- os/arch: {}\n", bundle.os_arch));
     if !bundle.repo_state.is_empty() {
@@ -128,7 +131,10 @@ pub fn format_context_bundle(bundle: &ContextBundle) -> String {
 /// The optional environment fields, one `- key: value` line each.
 fn optional_fields(bundle: &ContextBundle) -> String {
     let optional = [
-        bundle.command.as_ref().map(|c| format!("- command: `{c}`\n")),
+        bundle
+            .command
+            .as_ref()
+            .map(|c| format!("- command: `{c}`\n")),
         bundle.exit_code.map(|c| format!("- exit_code: {c}\n")),
         bundle
             .suggestion_footer
@@ -149,11 +155,7 @@ fn optional_fields(bundle: &ContextBundle) -> String {
             .map(|b| format!("- git_branch: {b}\n")),
         bundle.git_dirty.map(|d| format!("- git_dirty: {d}\n")),
     ];
-    optional
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .concat()
+    optional.into_iter().flatten().collect::<Vec<_>>().concat()
 }
 
 /// Get the gh version string.

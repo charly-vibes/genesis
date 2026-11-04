@@ -78,8 +78,16 @@ fn test_with_toml_creates_valid_toml() {
     fixture.assert_file_contains("config.toml", "true");
     let raw = std::fs::read_to_string(fixture.root().join("config.toml")).require("read toml");
     let parsed: toml::Value = toml::from_str(&raw).require("parse generated toml");
-    assert_eq!(parsed["name"].as_str(), Some("test"), "with_toml must round-trip values");
-    assert_eq!(parsed["enabled"].as_bool(), Some(true), "with_toml must round-trip bools");
+    assert_eq!(
+        parsed["name"].as_str(),
+        Some("test"),
+        "with_toml must round-trip values"
+    );
+    assert_eq!(
+        parsed["enabled"].as_bool(),
+        Some(true),
+        "with_toml must round-trip bools"
+    );
 }
 
 #[test]

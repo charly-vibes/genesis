@@ -277,7 +277,11 @@ fn parse_fix_hint(s: &str) -> Option<Suggestion> {
         let stripped = stripped.to_string();
         return Some(Suggestion::Fix {
             command: Some(stripped.clone()),
-            description: if stripped == s { stripped } else { s.to_string() },
+            description: if stripped == s {
+                stripped
+            } else {
+                s.to_string()
+            },
         });
     }
     trailing_command_hint(s)

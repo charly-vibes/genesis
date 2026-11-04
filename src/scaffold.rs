@@ -194,6 +194,5 @@ impl Scaffold {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "scaffold/tests.rs"]
 mod tests;

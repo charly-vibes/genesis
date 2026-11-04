@@ -116,4 +116,3 @@ fn test_guide_error_sink_is_configured() {
     let sink = guide.error_sink();
     assert_eq!(sink.tool_name, "my-tool");
 }
-

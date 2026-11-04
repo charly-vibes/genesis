@@ -448,6 +448,5 @@ impl LinterRegistry {
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "suite_linter/tests.rs"]
 mod tests;

@@ -234,46 +234,45 @@ impl BlockInjector {
         }
         Some(content[start..end].to_string())
     }
-/// Compose the managed-block text, with provenance when configured.
-fn render_block(&self, block: &BlockDef, content: &str) -> String {
-    match &self.provenance_generator {
-        Some(generator) => format!(
-            "{}{}\n{}\n{}",
-            block.start_marker,
-            content,
-            provenance_footer(generator, env!("CARGO_PKG_VERSION"), &block.name, content),
-            block.end_marker
-        ),
-        None => format!("{}{}{}", block.start_marker, content, block.end_marker),
+    /// Compose the managed-block text, with provenance when configured.
+    fn render_block(&self, block: &BlockDef, content: &str) -> String {
+        match &self.provenance_generator {
+            Some(generator) => format!(
+                "{}{}\n{}\n{}",
+                block.start_marker,
+                content,
+                provenance_footer(generator, env!("CARGO_PKG_VERSION"), &block.name, content),
+                block.end_marker
+            ),
+            None => format!("{}{}{}", block.start_marker, content, block.end_marker),
+        }
     }
-}
 
-/// Update an existing file: splice the block in place, or prepend it.
-fn inject_into_existing(
-    &self,
-    path: &Path,
-    block: &BlockDef,
-    block_text: &str,
-) -> Result<InjectResult, std::io::Error> {
-    let existing = std::fs::read_to_string(path)?;
-    let (start, end) = (
-        existing.find(&block.start_marker),
-        existing.find(&block.end_marker),
-    );
-    if let (Some(start), Some(end)) = (start, end) {
-        // Block exists — update in-place
-        let end_pos = end + block.end_marker.len();
-        let new_content = splice_block(&existing, start, end_pos, block_text);
-        std::fs::write(path, new_content)?;
-        Ok(InjectResult::Updated)
-    } else {
-        // No block — prepend
-        prepend_block(path, &existing, block_text)?;
-        Ok(InjectResult::Prepended)
+    /// Update an existing file: splice the block in place, or prepend it.
+    fn inject_into_existing(
+        &self,
+        path: &Path,
+        block: &BlockDef,
+        block_text: &str,
+    ) -> Result<InjectResult, std::io::Error> {
+        let existing = std::fs::read_to_string(path)?;
+        let (start, end) = (
+            existing.find(&block.start_marker),
+            existing.find(&block.end_marker),
+        );
+        if let (Some(start), Some(end)) = (start, end) {
+            // Block exists — update in-place
+            let end_pos = end + block.end_marker.len();
+            let new_content = splice_block(&existing, start, end_pos, block_text);
+            std::fs::write(path, new_content)?;
+            Ok(InjectResult::Updated)
+        } else {
+            // No block — prepend
+            prepend_block(path, &existing, block_text)?;
+            Ok(InjectResult::Prepended)
+        }
     }
 }
-}
-#[cfg(test)]
 #[cfg(test)]
 #[path = "managed_block/tests.rs"]
 mod tests;

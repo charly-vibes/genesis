@@ -1093,6 +1093,5 @@ fn uninstall_with_env(
 }
 
 #[cfg(test)]
-#[cfg(test)]
 #[path = "git_hooks/tests.rs"]
 mod tests;
