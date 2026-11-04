@@ -39,3 +39,6 @@ pub mod suggestions;
 pub mod suite_linter;
 #[cfg(feature = "update-check")]
 pub mod update_check;
+
+#[cfg(test)]
+pub(crate) mod testutil;
