@@ -79,43 +79,47 @@ pub fn create_issue(opts: &CreateIssueOptions) -> Result<GhResult, String> {
         ));
     }
 
-    // Try to create the issue
-    match try_create_issue(&gh_path, opts) {
-        Ok(result) => Ok(result),
-        Err(err) => {
-            // Check for specific error patterns
-            if err.contains("label") || err.contains("label") {
-                // Labels don't exist — retry without labels
-                let mut retry_opts = opts.clone();
-                retry_opts.labels.clear();
-                match try_create_issue(&gh_path, &retry_opts) {
-                    Ok(result) => Ok(result),
-                    Err(_) => {
-                        let url = build_prefilled_url(opts);
-                        Err(format!(
-                            "labels not found upstream; retried without labels. Open: {}",
-                            url
-                        ))
-                    }
-                }
-            } else if err.contains("network") || err.contains("connect") || err.contains("timeout")
-            {
-                // Network issue — write to local file
-                let path = write_local_report(opts);
-                Ok(GhResult::LocalFile(path))
-            } else if err.contains("403") || err.contains("404") || err.contains("not accessible") {
-                // Permission error — fall back to web URL
-                let url = build_prefilled_url(opts);
-                Err(format!(
-                    "you may lack issue-create rights on the target repo. Open: {}",
-                    url
-                ))
-            } else {
-                let url = build_prefilled_url(opts);
-                Err(format!("gh error: {}. Open: {}", err, url))
-            }
-        }
+    // Try to create the issue, with typed fallbacks for known failure modes
+    try_create_issue(&gh_path, opts).map_err(|err| map_gh_error(opts, &err))
+}
+
+/// Map a raw `gh` failure to a user-facing message with a fallback path:
+/// missing labels → retry without them; network issues → local report file;
+/// permission errors → prefilled web URL.
+fn map_gh_error(opts: &CreateIssueOptions, err: &str) -> String {
+    if err.contains("label") {
+        return retry_without_labels(opts);
     }
+    if err.contains("network") || err.contains("connect") || err.contains("timeout") {
+        // Network issue — write to local file
+        let path = write_local_report(opts);
+        return format!(
+            "network issue; report saved locally at {}. Open later: {}",
+            path.display(),
+            build_prefilled_url(opts)
+        );
+    }
+    if err.contains("403") || err.contains("404") || err.contains("not accessible") {
+        // Permission error — fall back to web URL
+        return format!(
+            "you may lack issue-create rights on the target repo. Open: {}",
+            build_prefilled_url(opts)
+        );
+    }
+    format!("gh error: {}. Open: {}", err, build_prefilled_url(opts))
+}
+
+/// Retry issue creation without labels (labels may not exist upstream).
+fn retry_without_labels(opts: &CreateIssueOptions) -> String {
+    let mut retry_opts = opts.clone();
+    retry_opts.labels.clear();
+    if try_create_issue(&find_gh().unwrap_or_default(), &retry_opts).is_ok() {
+        return "created without labels".to_string();
+    }
+    format!(
+        "labels not found upstream; retried without labels. Open: {}",
+        build_prefilled_url(opts)
+    )
 }
 
 /// Build the `gh issue create` command.
@@ -146,50 +150,48 @@ fn format_gh_args(opts: &CreateIssueOptions) -> String {
 
 /// Try to create an issue with `gh`, returning the result or an error string.
 fn try_create_issue(gh_path: &str, opts: &CreateIssueOptions) -> Result<GhResult, String> {
+    let output = run_gh(gh_path, opts)?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    parse_created_issue(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Run `gh issue create` with the body piped on stdin.
+fn run_gh(gh_path: &str, opts: &CreateIssueOptions) -> Result<std::process::Output, String> {
     let mut cmd = Command::new(gh_path);
     cmd.args(["issue", "create", "--repo", &opts.repo]);
     cmd.args(["--title", &opts.title]);
     cmd.arg("--body-file");
     cmd.arg("-");
-
     for label in &opts.labels {
         cmd.args(["--label", label]);
     }
-
-    // Pipe body on stdin
     let mut child = cmd
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("failed to spawn gh: {}", e))?;
-
     use std::io::Write;
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(opts.body.as_bytes());
     }
-
-    let output = child
+    child
         .wait_with_output()
-        .map_err(|e| format!("failed to wait for gh: {}", e))?;
+        .map_err(|e| format!("failed to wait for gh: {}", e))
+}
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        // Parse URL and number from output
-        // gh output: https://github.com/owner/repo/issues/123
-        let number = stdout
-            .rsplit('/')
-            .next()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(0);
-        Ok(GhResult::Created {
-            url: stdout,
-            number,
-        })
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(stderr)
-    }
+/// Parse the issue URL and number from `gh` stdout
+/// (`https://github.com/owner/repo/issues/123`).
+fn parse_created_issue(stdout: &str) -> Result<GhResult, String> {
+    let url = stdout.trim().to_string();
+    let number = url
+        .rsplit('/')
+        .next()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    Ok(GhResult::Created { url, number })
 }
 
 /// Find the `gh` binary on PATH.
@@ -235,18 +237,7 @@ fn build_prefilled_url(opts: &CreateIssueOptions) -> String {
 
 /// Write the issue body to a local report file.
 fn write_local_report(opts: &CreateIssueOptions) -> PathBuf {
-    let tool_name = "genesis";
-    let reports_dir = if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
-        PathBuf::from(cache).join(tool_name).join("reports")
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home)
-            .join(".cache")
-            .join(tool_name)
-            .join("reports")
-    } else {
-        std::env::temp_dir().join(tool_name).join("reports")
-    };
-
+    let reports_dir = reports_dir();
     let _ = std::fs::create_dir_all(&reports_dir);
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -364,4 +355,20 @@ mod tests {
         assert!(cmd.contains("--label"));
         assert!(cmd.contains("--body-file -"));
     }
+}
+
+/// Directory for local fallback reports: `$XDG_CACHE_HOME/genesis/reports`,
+/// falling back to `~/.cache` and then the temp dir.
+fn reports_dir() -> PathBuf {
+    const TOOL: &str = "genesis";
+    if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
+        return PathBuf::from(cache).join(TOOL).join("reports");
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home)
+            .join(".cache")
+            .join(TOOL)
+            .join("reports");
+    }
+    std::env::temp_dir().join(TOOL).join("reports")
 }

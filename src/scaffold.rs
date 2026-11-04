@@ -155,7 +155,7 @@ fn scaffold_files(builder: &Scaffold) -> std::io::Result<(Vec<PathBuf>, Vec<Path
         .map(|(rel_path, _)| builder.project_root.join(rel_path))
         .collect();
     let pre_existing: Vec<bool> = paths.iter().map(|p| p.exists()).collect();
-    for ((path, existed_before), (rel_path, content)) in
+    for ((path, existed_before), (_rel_path, content)) in
         paths.iter().zip(&pre_existing).zip(&builder.files)
     {
         if !existed_before {
