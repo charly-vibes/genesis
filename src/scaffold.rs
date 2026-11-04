@@ -117,80 +117,108 @@ impl Scaffold {
     /// Creates directories first, then writes files, then updates `.gitignore`.
     /// Files are only created if they don't already exist (no overwrites).
     pub fn build(self) -> std::io::Result<ScaffoldResult> {
-        let mut created = Vec::new();
-        let mut existed = Vec::new();
-
-        // 1. Create directories
-        for dir in &self.dirs {
-            let abs_path = self.project_root.join(dir);
-            if abs_path.exists() {
-                existed.push(abs_path);
-            } else {
-                std::fs::create_dir_all(&abs_path)?;
-                created.push(abs_path);
-            }
-        }
-
-        // 2. Write files (no overwrite)
-        for (rel_path, content) in &self.files {
-            let abs_path = self.project_root.join(rel_path);
-            if abs_path.exists() {
-                existed.push(abs_path);
-            } else {
-                if let Some(parent) = abs_path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(&abs_path, content)?;
-                created.push(abs_path);
-            }
-        }
-
-        // 3. Update .gitignore
-        if !self.gitignore_entries.is_empty() {
-            let gitignore_path = self.project_root.join(".gitignore");
-            let gitignore_existed = gitignore_path.exists();
-
-            // Ensure parent directory exists
-            if let Some(parent) = gitignore_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            let existing = if gitignore_existed {
-                let mut prior = std::fs::read_to_string(&gitignore_path)?;
-                if !prior.ends_with('\n') {
-                    prior.push('\n');
-                }
-                prior
-            } else {
-                String::new()
-            };
-
-            let new_entries: Vec<String> = self
-                .gitignore_entries
-                .iter()
-                .map(|entry| format!("{}\n", entry))
-                .filter(|line| !existing.contains(line.as_str()) && !existing.contains(line.trim()))
-                .collect();
-
-            if !new_entries.is_empty() {
-                let content = format!("{existing}{}", new_entries.concat());
-                std::fs::write(&gitignore_path, content)?;
-                if gitignore_existed {
-                    existed.push(gitignore_path);
-                } else {
-                    created.push(gitignore_path);
-                }
-            } else if gitignore_existed {
-                existed.push(gitignore_path);
-            } else {
-                // gitignore was created but had no new entries
-                // Keep it though — the file is now present
-                created.push(gitignore_path);
-            }
-        }
+        let (mut created, mut existed) = scaffold_dirs(&self)?;
+        let (more_created, more_existed) = scaffold_files(&self)?;
+        created.extend(more_created);
+        existed.extend(more_existed);
+        let (gitignore_created, gitignore_existed) = update_gitignore(&self)?;
+        created.extend(gitignore_created);
+        existed.extend(gitignore_existed);
 
         Ok(ScaffoldResult { created, existed })
     }
+}
+
+/// Create the builder's directories; existing ones count as "existed".
+fn scaffold_dirs(builder: &Scaffold) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let mut created = Vec::new();
+    let mut existed = Vec::new();
+    for dir in &builder.dirs {
+        let abs_path = builder.project_root.join(dir);
+        if abs_path.exists() {
+            existed.push(abs_path);
+        } else {
+            std::fs::create_dir_all(&abs_path)?;
+            created.push(abs_path);
+        }
+    }
+    Ok((created, existed))
+}
+
+/// Write the builder's files (no overwrite); existing ones count as "existed".
+fn scaffold_files(builder: &Scaffold) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let mut created = Vec::new();
+    let mut existed = Vec::new();
+    for (rel_path, content) in &builder.files {
+        let abs_path = builder.project_root.join(rel_path);
+        if abs_path.exists() {
+            existed.push(abs_path);
+        } else {
+            write_new_file(&abs_path, content)?;
+            created.push(abs_path);
+        }
+    }
+    Ok((created, existed))
+}
+
+/// Write `content` to `abs_path`, creating parent directories on demand.
+fn write_new_file(abs_path: &Path, content: &str) -> std::io::Result<()> {
+    if let Some(parent) = abs_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(abs_path, content)
+}
+
+/// Merge the builder's `.gitignore` entries into the project's `.gitignore`.
+///
+/// Returns `(created, existed)` paths according to whether the file was
+/// newly created, rewritten, or left untouched.
+fn update_gitignore(builder: &Scaffold) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let mut created = Vec::new();
+    let mut existed = Vec::new();
+    if builder.gitignore_entries.is_empty() {
+        return Ok((created, existed));
+    }
+    let gitignore_path = builder.project_root.join(".gitignore");
+    let gitignore_existed = gitignore_path.exists();
+    if let Some(parent) = gitignore_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let existing = if gitignore_existed {
+        let mut prior = std::fs::read_to_string(&gitignore_path)?;
+        if !prior.ends_with('\n') {
+            prior.push('\n');
+        }
+        prior
+    } else {
+        String::new()
+    };
+
+    let new_entries: Vec<String> = builder
+        .gitignore_entries
+        .iter()
+        .map(|entry| format!("{}\n", entry))
+        .filter(|line| !existing.contains(line.as_str()) && !existing.contains(line.trim()))
+        .collect();
+
+    if new_entries.is_empty() {
+        if gitignore_existed {
+            existed.push(gitignore_path);
+        } else {
+            // gitignore was created but had no new entries — keep it.
+            created.push(gitignore_path);
+        }
+    } else {
+        let content = format!("{existing}{}", new_entries.concat());
+        std::fs::write(&gitignore_path, content)?;
+        if gitignore_existed {
+            existed.push(gitignore_path);
+        } else {
+            created.push(gitignore_path);
+        }
+    }
+    Ok((created, existed))
 }
 
 #[cfg(test)]
