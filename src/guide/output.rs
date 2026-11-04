@@ -100,7 +100,7 @@ impl<T: Debug> Output<T> {
     fn print_secondary(
         &self,
         current_verbosity: Verbosity,
-        stdout: &mut impl Write,
+        _stdout: &mut impl Write,
         stderr: &mut impl Write,
     ) -> std::io::Result<()> {
         if current_verbosity >= Verbosity::Verbose {
