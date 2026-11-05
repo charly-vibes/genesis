@@ -25,6 +25,10 @@
 mod tests;
 
 #[cfg(test)]
+#[path = "evals/tests_e2e.rs"]
+mod tests_e2e;
+
+#[cfg(test)]
 #[path = "evals/tests_receipt.rs"]
 mod tests_receipt;
 

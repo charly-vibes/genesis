@@ -64,14 +64,7 @@ impl ConfigFile for ValidatedConfig {
         if self.name.is_empty() {
             results.push(ConfigValidation::error("name", "name must not be empty"));
         }
-        if self.timeout == 0 {
-            results.push(ConfigValidation::error("timeout", "timeout must be > 0"));
-        } else if self.timeout > 300 {
-            results.push(ConfigValidation::warning(
-                "timeout",
-                "timeout > 300s may cause issues",
-            ));
-        }
+        results.extend(timeout_validation(self.timeout));
         Ok(results)
     }
 }
@@ -345,4 +338,16 @@ fn test_registry_iter() {
     assert_eq!(entries.len(), 2);
     assert!(entries.contains(&("mock", ".mock/config.toml")));
     assert!(entries.contains(&("app", "app.toml")));
+}
+
+/// Fixture-only validation for the `timeout` field.
+fn timeout_validation(timeout: u64) -> Option<ConfigValidation> {
+    match timeout {
+        0 => Some(ConfigValidation::error("timeout", "timeout must be > 0")),
+        t if t > 300 => Some(ConfigValidation::warning(
+            "timeout",
+            "timeout > 300s may cause issues",
+        )),
+        _ => None,
+    }
 }

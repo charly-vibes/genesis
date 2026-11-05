@@ -15,19 +15,8 @@ use crate::testutil::TestUnwrap;
 /// docs/reference/eval-report.md.
 #[test]
 fn test_report_replay_fixture_round_trips_through_scenario_report() {
-    let golden_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/golden/eval_report_replay.json");
-    let fixture: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(&golden_path)
-            .unwrap_or_else(|e| panic!("cannot read {}: {e}", golden_path.display())),
-    )
-    .require("non-tier-2 fixture is valid JSON");
-
-    assert_eq!(fixture["report_version"], 1);
-    assert_eq!(fixture["status"], "passed");
-    // Non-tier-2 rows omit tier-2 fields entirely (never null).
-    assert!(fixture.get("model").is_none());
-    assert!(fixture.get("repetition").is_none());
+    let fixture = load_golden_fixture("eval_report_replay.json");
+    assert_fixture_shape(&fixture);
 
     // Rebuild the replay-tier report the fixture describes and serialize it.
     let scenario = Scenario::new(
@@ -56,6 +45,26 @@ fn test_report_replay_fixture_round_trips_through_scenario_report() {
     assert_eq!(serialized.get("model"), None);
 }
 
+/// Load one golden report fixture from `tests/golden`.
+fn load_golden_fixture(name: &str) -> serde_json::Value {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/golden")
+        .join(name);
+    serde_json::from_str(
+        &std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display())),
+    )
+    .unwrap_or_else(|e| panic!("{name} is not valid JSON: {e}"))
+}
+
+/// The replay-tier fixture shape: version 1, passed, tier-2 fields absent
+/// (never null).
+fn assert_fixture_shape(fixture: &serde_json::Value) {
+    assert_eq!(fixture["report_version"], 1);
+    assert_eq!(fixture["status"], "passed");
+    assert!(fixture.get("model").is_none());
+    assert!(fixture.get("repetition").is_none());
+}
 /// No field in either normative report fixture may serialize as `null` —
 /// optional fields are omitted, never null (evals-guidelines).
 #[test]

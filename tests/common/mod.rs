@@ -67,17 +67,14 @@ static STRIP_HOOK_GIT_ENV: extern "C" fn() = strip_hook_git_env;
 
 #[cfg(unix)]
 extern "C" fn strip_hook_git_env() {
-    // Child processes of deliberate-poison tests keep their environment:
-    // their parent marked them with a sentinel.
-    for sentinel in [
-        "GENESIS_GIT_TEST_CHILD",
-        "GENESIS_GIT_POLICY_CHILD",
-        "GENESIS_FIXTURE_ENV_CHILD",
-        "GENESIS_GIT_HOOKS_ENV_CHILD",
-    ] {
-        if std::env::var_os(sentinel).is_some_and(|v| !v.is_empty()) {
-            return;
-        }
+    strip_hook_git_env_impl();
+}
+
+/// Child processes of deliberate-poison tests keep their environment:
+/// their parent marked them with a sentinel.
+fn strip_hook_git_env_impl() {
+    if poisoned_by_parent() {
+        return;
     }
     for var in [
         "GIT_DIR",
@@ -93,4 +90,16 @@ extern "C" fn strip_hook_git_env() {
         // Safe: called once at process init, before test threads spawn.
         unsafe { std::env::remove_var(var) };
     }
+}
+
+/// `true` when this process is a deliberate-poison test child.
+fn poisoned_by_parent() -> bool {
+    [
+        "GENESIS_GIT_TEST_CHILD",
+        "GENESIS_GIT_POLICY_CHILD",
+        "GENESIS_FIXTURE_ENV_CHILD",
+        "GENESIS_GIT_HOOKS_ENV_CHILD",
+    ]
+    .iter()
+    .any(|sentinel| std::env::var_os(sentinel).is_some_and(|v| !v.is_empty()))
 }

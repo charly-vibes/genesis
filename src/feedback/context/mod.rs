@@ -262,5 +262,6 @@ fn detect_repo_state(cwd: &Path) -> Vec<String> {
 }
 
 #[cfg(test)]
-#[path = "context/tests.rs"]
+#[path = "tests.rs"]
+#[cfg(test)]
 mod tests;

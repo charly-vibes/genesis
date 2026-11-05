@@ -79,32 +79,52 @@ fn markdown_files() -> Vec<(String, String)> {
     let mut out = Vec::new();
 
     let docs = project_file("docs/src");
-    fn visit(dir: &Path, out: &mut Vec<(String, String)>) {
-        let entries = fs::read_dir(dir).require("read docs dir");
-        for entry in entries {
-            let path = entry.require("dir entry").path();
-            let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-            if name.as_deref() == Some("_book") || name.as_deref() == Some("specs") {
-                continue; // mdBook build output / deployed spec copies — may hold stale content
-            }
-            if path.is_dir() {
-                visit(&path, out);
-            } else if path.extension().is_some_and(|e| e == "md") {
-                let rel = path
-                    .strip_prefix(MANIFEST_DIR)
-                    .require("under manifest")
-                    .to_string_lossy()
-                    .into_owned();
-                let content = fs::read_to_string(&path).require("read md");
-                out.push((rel, content));
-            }
-        }
-    }
     if docs.is_dir() {
-        visit(&docs, &mut out);
+        visit_docs(&docs, &mut out);
     }
     out.push(("README.md".to_string(), read("README.md")));
     out
+}
+
+/// Recursively collect markdown files under `dir`.
+fn visit_docs(dir: &Path, out: &mut Vec<(String, String)>) {
+    let entries = fs::read_dir(dir).require("read docs dir");
+    let paths = entries
+        .map(|e| e.require("dir entry").path())
+        .filter(|p| !is_skipped_dir(p)); // mdBook output / spec copies may hold stale content
+    for path in paths {
+        doc_entry(&path, out);
+    }
+}
+
+/// mdBook build output / deployed spec copies — may hold stale content.
+fn is_skipped_dir(path: &Path) -> bool {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+    matches!(name.as_deref(), Some("_book") | Some("specs"))
+}
+
+fn is_markdown(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e == "md")
+}
+
+/// One walk entry: recurse into dirs, collect markdown files.
+fn doc_entry(path: &Path, out: &mut Vec<(String, String)>) {
+    if path.is_dir() {
+        return visit_docs(path, out);
+    }
+    if is_markdown(path) {
+        out.push(read_doc_file(path));
+    }
+}
+
+fn read_doc_file(path: &Path) -> (String, String) {
+    let rel = path
+        .strip_prefix(MANIFEST_DIR)
+        .require("under manifest")
+        .to_string_lossy()
+        .into_owned();
+    let content = fs::read_to_string(path).require("read md");
+    (rel, content)
 }
 
 /// APIs removed or renamed in the past must not resurface in docs.
@@ -124,11 +144,7 @@ fn forbidden_api_patterns() {
 
     let mut violations = Vec::new();
     for (path, content) in &files {
-        for (pattern, why) in &forbidden {
-            if content.contains(pattern.as_str()) {
-                violations.push(format!("{path}: contains {pattern:?} — {why}"));
-            }
-        }
+        violations.extend(forbidden_hits(path, content, &forbidden));
     }
 
     assert!(
@@ -138,61 +154,110 @@ fn forbidden_api_patterns() {
     );
 }
 
+/// All blocklist hits in one markdown file.
+fn forbidden_hits(path: &str, content: &str, forbidden: &[(String, String)]) -> Vec<String> {
+    let mut violations = Vec::new();
+    for (pattern, why) in forbidden {
+        if content.contains(pattern.as_str()) {
+            violations.push(format!("{path}: contains {pattern:?} — {why}"));
+        }
+    }
+    violations
+}
+
 /// Every `#[test]` fn in tests/doc_examples.rs must have a `→ docs/…` mapping
 /// entry, and every mapping entry must point at a file that exists.
 #[test]
 fn snippet_map_covers_tests() {
     let source = read("tests/doc_examples.rs");
-    let lines: Vec<&str> = source.lines().collect();
 
-    let mut test_fns: Vec<String> = Vec::new();
-    for pair in lines.windows(2) {
-        let (prev, line) = (pair[0].trim(), pair[1].trim());
-        if prev == "#[test]" && line.starts_with("fn ") {
-            let name = line["fn ".len()..]
-                .split('(')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if !name.is_empty() {
-                test_fns.push(name);
-            }
-        }
-    }
-    test_fns.sort();
+    let test_fns = parse_test_fns(&source);
     assert!(!test_fns.is_empty(), "no tests found in doc_examples.rs");
 
-    let mut mapped_paths: Vec<String> = Vec::new();
-    let mut mapped_fns: Vec<String> = Vec::new();
-    for line in source.lines() {
-        // mapping entries live in the `//!` header: `- `fn` → docs/<file>, <section>`
-        let line = line.trim().trim_start_matches("//!").trim();
-        let Some(rest) = line.strip_prefix("- `") else {
-            continue;
-        };
-        let Some((fn_name, target)) = rest.split_once("` ") else {
-            continue;
-        };
-        // target is "` → docs/<file>, <section>" — drop the closing backtick,
-        // the arrow, and surrounding whitespace before extracting the path
-        let target = target
-            .trim()
-            .trim_start_matches('`')
-            .trim()
-            .trim_start_matches("→")
-            .trim();
-        let path = target.split(',').next().unwrap_or("").trim().to_string();
-        mapped_fns.push(fn_name.to_string());
-        mapped_paths.push(path);
-    }
+    let (mapped_fns, mapped_paths) = parse_snippet_map(&source);
     assert!(
         !mapped_fns.is_empty(),
         "no mapping entries found in doc_examples.rs header"
     );
 
-    let mut problems = Vec::new();
+    let problems = snippet_map_problems(&test_fns, &mapped_fns, &mapped_paths);
+    assert!(
+        problems.is_empty(),
+        "snippet map out of sync:\n{}",
+        problems.join("\n")
+    );
+}
 
+/// `#[test]` fn names in a source file, sorted.
+fn parse_test_fns(source: &str) -> Vec<String> {
+    let mut test_fns = Vec::new();
+    let lines: Vec<&str> = source.lines().collect();
+    for pair in lines.windows(2) {
+        let name = attr_fn_name(pair[0].trim(), pair[1].trim());
+        if let Some(name) = name {
+            test_fns.push(name);
+        }
+    }
+    test_fns.sort();
+    test_fns
+}
+
+/// Name of a `#[test]` fn when `prev` is its attribute and `line` its signature.
+fn attr_fn_name(prev: &str, line: &str) -> Option<String> {
+    if prev != "#[test]" || !line.starts_with("fn ") {
+        return None;
+    }
+    let name = line["fn ".len()..].split('(').next().unwrap_or("").trim();
+    if name.is_empty() {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+/// Mapping entries from the `//!` header: `- `fn` → docs/<file>, <section>`.
+fn parse_snippet_map(source: &str) -> (Vec<String>, Vec<String>) {
+    let mut mapped_fns = Vec::new();
+    let mut mapped_paths = Vec::new();
+    for line in source.lines() {
+        let Some((fn_name, path)) = parse_mapping_line(line) else {
+            continue;
+        };
+        mapped_fns.push(fn_name);
+        mapped_paths.push(path);
+    }
+    (mapped_fns, mapped_paths)
+}
+
+fn parse_mapping_line(line: &str) -> Option<(String, String)> {
+    let line = line.trim().trim_start_matches("//!").trim();
+    let rest = line.strip_prefix("- `")?;
+    let (fn_name, target) = rest.split_once("` ")?;
+    // target is "` → docs/<file>, <section>" — drop the closing backtick,
+    // the arrow, and surrounding whitespace before extracting the path
+    let target = target
+        .trim()
+        .trim_start_matches('`')
+        .trim()
+        .trim_start_matches("→")
+        .trim();
+    let path = target.split(',').next().unwrap_or("").trim().to_string();
+    Some((fn_name.to_string(), path))
+}
+
+fn snippet_map_problems(
+    test_fns: &[String],
+    mapped_fns: &[String],
+    mapped_paths: &[String],
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    problems.extend(mapping_coverage_problems(test_fns, mapped_fns));
+    problems.extend(mapping_target_problems(mapped_paths));
+    problems
+}
+
+/// Tests without a mapping entry, and entries for removed tests.
+fn mapping_coverage_problems(test_fns: &[String], mapped_fns: &[String]) -> Vec<String> {
+    let mut problems = Vec::new();
     let missing: Vec<&String> = test_fns
         .iter()
         .filter(|f| !mapped_fns.contains(f))
@@ -202,7 +267,6 @@ fn snippet_map_covers_tests() {
             "tests without a mapping entry: {missing:?} — add `//! - `<test>` → docs/<file>, <section>` to the header"
         ));
     }
-
     let stale: Vec<&String> = mapped_fns
         .iter()
         .filter(|f| !test_fns.contains(f))
@@ -212,19 +276,18 @@ fn snippet_map_covers_tests() {
             "mapping entries for tests that no longer exist: {stale:?}"
         ));
     }
-
-    for path in &mapped_paths {
-        if !project_file(path).exists() {
-            problems.push(format!("mapping points at missing file: {path}"));
-        }
-    }
-
-    assert!(
-        problems.is_empty(),
-        "snippet map out of sync:\n{}",
-        problems.join("\n")
-    );
+    problems
 }
+
+/// Mapping entries pointing at files that don't exist.
+fn mapping_target_problems(mapped_paths: &[String]) -> Vec<String> {
+    mapped_paths
+        .iter()
+        .filter(|p| !project_file(p).exists())
+        .map(|p| format!("mapping points at missing file: {p}"))
+        .collect()
+}
+
 
 /// Install pins in README and the book must track Cargo.toml's version.
 #[test]
@@ -254,11 +317,7 @@ fn version_pins_match_manifest() {
         ("README.md", readme.as_str()),
         ("docs/src/getting-started.md", getting_started.as_str()),
     ] {
-        if !content.contains(&pin) {
-            problems.push(format!(
-                "{path}: missing install pin `{pin}` (Cargo.toml is at {full})"
-            ));
-        }
+        check_version_pin(path, content, &pin, full, &mut problems);
     }
     // at least one of README/getting-started documents the git-tag variant
     if !readme.contains(&tag_pin) && !getting_started.contains(&tag_pin) {
@@ -272,4 +331,12 @@ fn version_pins_match_manifest() {
         "version pins drifted from the manifest:\n{}",
         problems.join("\n")
     );
+}
+
+fn check_version_pin(path: &str, content: &str, pin: &str, full: &str, problems: &mut Vec<String>) {
+    if !content.contains(pin) {
+        problems.push(format!(
+            "{path}: missing install pin `{pin}` (Cargo.toml is at {full})"
+        ));
+    }
 }
