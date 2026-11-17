@@ -17,7 +17,6 @@ mod root;
 mod wiring;
 mod wiring_command;
 
-
 /// Env pairs that point git's global/system config scopes at absent
 /// fixture-local paths. Without this, tests inherit the machine's real
 /// global `core.hooksPath` (the exact scenario genesis-c64 fixes) and
@@ -66,7 +65,6 @@ fn framework(root: &Path) -> Framework {
     framework_with_env(root, &isolated_env(root))
 }
 
-
 pub(super) fn install_fixture() -> Fixture {
     match Fixture::new().with_git_init().build() {
         Ok(f) => f,
@@ -76,10 +74,6 @@ pub(super) fn install_fixture() -> Fixture {
 
 pub(super) const TEST_MARKER: &str = "# Installed by test-tool.";
 pub(super) const TEST_SCRIPT: &str = "#!/usr/bin/env sh\nexec true\n";
-pub(super) fn write_hook(fixture: &Fixture, hook: HookName, content: &str) {
-    let path = fixture.root().join(".git/hooks").join(hook.file_name());
-    std::fs::write(&path, content).require("write hook");
-}
 
 pub(super) fn ah_block() -> BlockDef {
     BlockDef::new("AH")
@@ -105,6 +99,3 @@ fn config_fixture(contents: &str) -> Fixture {
     std::fs::write(fixture.root().join("lefthook.yml"), contents).require("value");
     fixture
 }
-
-
-

@@ -2,8 +2,6 @@
 
 use super::*;
 
-
-
 #[test]
 fn install_writes_executable_hook_with_marker_and_script() {
     let fixture = install_fixture();

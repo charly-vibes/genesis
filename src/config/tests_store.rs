@@ -35,12 +35,13 @@ impl ConfigFile for StrictConfig {
     }
 
     fn validate(&self) -> Result<Vec<ConfigValidation>, ConfigError> {
-        let errors = self
-            .name
-            .is_empty()
-            .then(|| vec![ConfigValidation::error("name", "name must not be empty")])
-            .unwrap_or_default();
-        Ok(errors)
+        if self.name.is_empty() {
+            return Ok(vec![ConfigValidation::error(
+                "name",
+                "name must not be empty",
+            )]);
+        }
+        Ok(Vec::new())
     }
 }
 

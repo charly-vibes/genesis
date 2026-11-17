@@ -34,7 +34,8 @@ fn ensure_command_wired_placement_cases() {
     // 4-space children), empty-mapping default (+2), and the wrapper
     // injected when the stage is empty.
     let four_space = "pre-commit:\n    commands:\n        lint:\n            run: lint\n";
-    let empty_mapping = "pre-commit:\n  commands:\npre-push:\n  commands:\n    test:\n      run: test\n";
+    let empty_mapping =
+        "pre-commit:\n  commands:\npre-push:\n  commands:\n    test:\n      run: test\n";
     let empty_stage = "pre-commit:\npre-push:\n  commands:\n    test:\n      run: test\n";
     let cases = vec![
         (
@@ -54,11 +55,17 @@ fn ensure_command_wired_placement_cases() {
         ),
         (
             empty_mapping.to_string(),
-            format!("pre-commit:\n  commands:\n{}pre-push:\n  commands:\n    test:\n      run: test\n", cmd_entry(4)),
+            format!(
+                "pre-commit:\n  commands:\n{}pre-push:\n  commands:\n    test:\n      run: test\n",
+                cmd_entry(4)
+            ),
         ),
         (
             empty_stage.to_string(),
-            format!("pre-commit:\n{}pre-push:\n  commands:\n    test:\n      run: test\n", cmd_wrapper(2)),
+            format!(
+                "pre-commit:\n{}pre-push:\n  commands:\n    test:\n      run: test\n",
+                cmd_wrapper(2)
+            ),
         ),
     ];
     for (config, expected) in cases {

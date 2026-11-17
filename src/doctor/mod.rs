@@ -38,9 +38,9 @@ mod check;
 mod report;
 mod runner;
 
-pub use check::{lint_to_doctor, DoctorCheck, LintCheckAdapter};
+pub use check::{DoctorCheck, LintCheckAdapter, lint_to_doctor};
 pub use report::{CheckEntry, CheckStatus, DoctorReport, DoctorSummary};
-pub use runner::{runner, DoctorRunner};
+pub use runner::{DoctorRunner, runner};
 
 #[cfg(test)]
 mod tests;

@@ -270,6 +270,22 @@ fn urlencode(input: &str) -> String {
         .collect()
 }
 
+/// Directory for local fallback reports: `$XDG_CACHE_HOME/genesis/reports`,
+/// falling back to `~/.cache` and then the temp dir.
+fn reports_dir() -> PathBuf {
+    const TOOL: &str = "genesis";
+    if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
+        return PathBuf::from(cache).join(TOOL).join("reports");
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home)
+            .join(".cache")
+            .join(TOOL)
+            .join("reports");
+    }
+    std::env::temp_dir().join(TOOL).join("reports")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,20 +371,4 @@ mod tests {
         assert!(cmd.contains("--label"));
         assert!(cmd.contains("--body-file -"));
     }
-}
-
-/// Directory for local fallback reports: `$XDG_CACHE_HOME/genesis/reports`,
-/// falling back to `~/.cache` and then the temp dir.
-fn reports_dir() -> PathBuf {
-    const TOOL: &str = "genesis";
-    if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
-        return PathBuf::from(cache).join(TOOL).join("reports");
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home)
-            .join(".cache")
-            .join(TOOL)
-            .join("reports");
-    }
-    std::env::temp_dir().join(TOOL).join("reports")
 }

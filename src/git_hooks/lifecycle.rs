@@ -2,9 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use super::hook::hook_path_with_env;
-use super::HookName;
 use super::GitHooksError;
+use super::HookName;
+use super::hook::hook_path_with_env;
 
 /// Ownership state of a hook file on disk.
 enum HookOwnership {
@@ -162,4 +162,3 @@ pub(crate) fn uninstall_with_env(
         }
     }
 }
-

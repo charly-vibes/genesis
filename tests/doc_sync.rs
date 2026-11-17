@@ -288,7 +288,6 @@ fn mapping_target_problems(mapped_paths: &[String]) -> Vec<String> {
         .collect()
 }
 
-
 /// Install pins in README and the book must track Cargo.toml's version.
 #[test]
 fn version_pins_match_manifest() {

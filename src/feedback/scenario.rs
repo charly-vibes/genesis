@@ -101,7 +101,7 @@ impl Scenario {
         .fixture_files_from(fixtures)
         .check("reproduces-recorded-failure", move |result| {
             verify_replayed_step(result, &recorded_command, recorded_exit, hint.as_deref())
-            })
+        })
     }
 }
 
@@ -137,7 +137,6 @@ pub fn from_last_error(
     };
     Ok(Scenario::from_feedback_context(&bundle, fixtures))
 }
-
 
 /// Verify a replayed step against the recorded failure signature.
 fn verify_replayed_step(
@@ -181,8 +180,7 @@ fn match_envelope_hints(hint: Option<&str>, hint_commands: &[String]) -> CheckOu
 /// Stable per-failure-signature hash of a scratch record's kind + timestamp.
 fn record_repro_hash(record: &scratch::ErrorRecord) -> u64 {
     use std::hash::{BuildHasher, Hasher};
-    let mut h =
-        std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default().build_hasher();
+    let mut h = std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default().build_hasher();
     h.write(record.kind.as_bytes());
     h.write(record.ts.as_bytes());
     h.finish()

@@ -61,8 +61,6 @@ impl LlmSection {
 /// - `module_a` — description a
 /// - `module_b` — description b
 /// ```
-
-/// ```
 pub fn modules_section(modules: &[ModuleEntry]) -> LlmSection {
     let rows: String = modules
         .iter()

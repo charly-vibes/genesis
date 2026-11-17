@@ -154,4 +154,3 @@ fn hooks_path_command(
     }
     cmd
 }
-

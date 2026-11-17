@@ -21,8 +21,8 @@ mod lifecycle;
 mod root;
 
 pub use error::GitHooksError;
-pub use hook::{framework, owner, Framework, HookName, Owner};
-pub use hooks_dir::{effective_hooks_dir, resolve_hooks_dir, EffectiveHooksDir, HooksDirScope};
+pub use hook::{Framework, HookName, Owner, framework, owner};
+pub use hooks_dir::{EffectiveHooksDir, HooksDirScope, effective_hooks_dir, resolve_hooks_dir};
 pub use lifecycle::{install, uninstall};
 pub use root::{repo_root, repo_root_from};
 

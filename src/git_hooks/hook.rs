@@ -91,7 +91,11 @@ pub fn owner(root: &Path, hook_name: &HookName) -> Option<Owner> {
 
 /// Like [`owner`], but passes extra environment variables to any spawned
 /// `git config` process (test seam — see [`effective_hooks_dir_with_env`]).
-pub(crate) fn owner_with_env(root: &Path, hook_name: &HookName, envs: &[(String, String)]) -> Option<Owner> {
+pub(crate) fn owner_with_env(
+    root: &Path,
+    hook_name: &HookName,
+    envs: &[(String, String)],
+) -> Option<Owner> {
     let content = read_hook_content(root, hook_name, envs)?;
     OWNER_SIGILS
         .iter()

@@ -117,12 +117,7 @@ impl DoctorSummary {
     /// Create a summary from an iterator of check entries.
     pub fn from_checks<'a>(checks: impl IntoIterator<Item = &'a CheckEntry>) -> Self {
         let checks: Vec<&CheckEntry> = checks.into_iter().collect();
-        let count = |status: CheckStatus| {
-            checks
-                .iter()
-                .filter(|c| c.status == status)
-                .count()
-        };
+        let count = |status: CheckStatus| checks.iter().filter(|c| c.status == status).count();
         Self {
             pass: count(CheckStatus::Pass),
             warn: count(CheckStatus::Warn),

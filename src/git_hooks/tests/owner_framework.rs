@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 fn write_hook(fixture: &Fixture, hook: HookName, content: &str) {
     let path = fixture.root().join(".git/hooks").join(hook.file_name());
     std::fs::create_dir_all(path.parent().require("value")).require("value");

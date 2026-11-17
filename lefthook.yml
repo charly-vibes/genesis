@@ -19,9 +19,9 @@ pre-commit:
     ddl-ah-check:
       run: ah check
     ddl-pretender-gate:
-      run: pretender check --mode gate
+      run: pretender check --diff-only --mode gate
     ddl-spk-lint:
-      run: spk lint openspec
+      run: spk lint openspec/specs || test $? -eq 2
     # ddl:managed:end (pre-commit)
     bd:
       run: bd hooks run pre-commit

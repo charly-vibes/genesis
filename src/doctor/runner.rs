@@ -217,7 +217,9 @@ fn verify_fix_entry(
     post_results: &[LintResult],
     fix_results: &[LintResult],
 ) -> CheckEntry {
-    let still_has_issues = post_results.iter().any(|r| r.severity != Severity::Advisory);
+    let still_has_issues = post_results
+        .iter()
+        .any(|r| r.severity != Severity::Advisory);
 
     if still_has_issues {
         let fix = fix_results.first().and_then(|r| r.fix.clone());

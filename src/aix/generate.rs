@@ -224,12 +224,8 @@ fn push_text(out: &mut String, text: &str) {
 
 // ── Token cost + bounded generation ─────────────────────────────────────
 
-/// A heuristic token-cost estimate for a generated artifact.
-///
-/// `heuristic` names the approximation (`chars/4`) so callers can never
-/// mistake the estimate for a tokenizer count. The chars/4 heuristic carries
-/// a documented **±25% error band** against typical English prose in
-
+/// Return the first sentence of `s`: everything up to and including the
+/// first `". "` delimiter, or the whole trimmed string when there is none.
 fn first_sentence(s: &str) -> &str {
     let trimmed = s.trim();
     match trimmed.find(". ") {

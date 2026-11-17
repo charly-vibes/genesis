@@ -2,9 +2,12 @@
 
 use super::*;
 
+/// `(check, expected_healthy, expected_pass, expected_warn, expected_fail)`.
+type Case = (Box<dyn DoctorCheck>, bool, usize, usize, usize);
+
 #[test]
 fn runner_summaries_reflect_check_outcomes() {
-    let cases: Vec<(Box<dyn DoctorCheck>, bool, usize, usize, usize)> = vec![
+    let cases: Vec<Case> = vec![
         (Box::new(PassCheck), true, 1, 0, 0),
         (Box::new(WarnCheck), false, 0, 1, 0),
         (Box::new(FailCheck), false, 0, 0, 1),

@@ -71,4 +71,3 @@ pub enum GitHooksError {
         message: String,
     },
 }
-

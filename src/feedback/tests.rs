@@ -247,7 +247,6 @@ fn test_aix_gap_near_misses_suggest_aix_gap() {
 
 #[test]
 fn test_aix_gap_capture_converts_to_replayable_scenario() {
-    use crate::evals::AgentStep;
     // The bundle an AIX-artifact consumer captures on a stale-artifact
     // failure: sync exited 1 pointing at a repair command.
     let bundle = stale_artifact_bundle();

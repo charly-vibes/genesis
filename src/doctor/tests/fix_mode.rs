@@ -14,15 +14,15 @@ impl AutoFixableCheck {
     }
 }
 impl DoctorCheck for AutoFixableCheck {
-    check_meta!(
-        "auto-fixable",
-        "Can auto-fix by creating a marker file"
-    );
+    check_meta!("auto-fixable", "Can auto-fix by creating a marker file");
     fn run(&self, _: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         if self.marker_path.exists() {
             Ok(vec![])
         } else {
-            Ok(vec![LintResult::new("marker file missing", Severity::Error)])
+            Ok(vec![LintResult::new(
+                "marker file missing",
+                Severity::Error,
+            )])
         }
     }
     fn auto_fixable(&self) -> bool {

@@ -1,7 +1,6 @@
 //! Lefthook `ensure_wired` / `is_wired` tests (tasks 4.1-4.5).
 
 use super::*;
-use crate::managed_block::BlockDef;
 
 #[test]
 fn ensure_wired_nests_block_inside_existing_commands_mapping() {
@@ -186,9 +185,7 @@ fn ensure_wired_anchors_past_comment_lines_mentioning_the_stage() {
     let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
     assert!(after.contains("AH:START"), "block should be wired");
     assert!(
-        after.starts_with(
-            "# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n<!--"
-        ),
+        after.starts_with("# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n<!--"),
         "block must nest inside commands:, comment preserved\n---\n{after}"
     );
 }

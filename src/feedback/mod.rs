@@ -140,7 +140,11 @@ pub fn handle_feedback(
 
     // User-supplied title wins over every derived title.
     title = apply_title_override(&args.kind, &title, args.title.as_deref());
-    body_parts.push(context_bundle_section(tool_name, tool_version, project_root));
+    body_parts.push(context_bundle_section(
+        tool_name,
+        tool_version,
+        project_root,
+    ));
     let redacted = redact_body(&body_parts, repo);
 
     file_issue(args, repo, title, redacted)
@@ -155,7 +159,11 @@ fn validate_kind(kind: &str) -> Result<(), String> {
     reg.register("kind", VALID_KINDS.iter().map(|k| k.to_string()).collect());
     let engine = SuggestionEngine::new();
     if let Some(suggestion) = engine.suggest_typo(kind, &reg) {
-        return Err(format!("unknown kind: '{}'. {}", kind, suggestion.message()));
+        return Err(format!(
+            "unknown kind: '{}'. {}",
+            kind,
+            suggestion.message()
+        ));
     }
     Err(format!(
         "unknown kind: '{}'. Valid kinds: {}",
@@ -249,7 +257,12 @@ fn labels_for_kind(kind: &str) -> Vec<String> {
 }
 
 /// Print a dry-run preview, or create the issue via `gh`.
-fn file_issue(args: &FeedbackArgs, repo: &str, title: String, body: String) -> Result<gh::GhResult, String> {
+fn file_issue(
+    args: &FeedbackArgs,
+    repo: &str,
+    title: String,
+    body: String,
+) -> Result<gh::GhResult, String> {
     let labels = labels_for_kind(&args.kind);
     if args.dry_run {
         return dry_run_result(repo, &title, &labels, &body);
@@ -285,6 +298,6 @@ fn dry_run_result(
 #[cfg(test)]
 mod tests;
 
-pub use scenario::{from_last_error, ConversionError};
+pub use scenario::{ConversionError, from_last_error};
 
 mod scenario;

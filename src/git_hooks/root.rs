@@ -50,4 +50,3 @@ fn map_root_error(error: crate::git::GitError) -> GitHooksError {
         },
     }
 }
-
