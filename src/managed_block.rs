@@ -1,6 +1,16 @@
 //! Managed block injector (`<!-- …:START -->`/`<!-- …:END -->`).
 //!
-//! Port from `wai/src/managed_block.rs` (also used in dont/espectacular).
+//! A block is a delimited region in a Markdown file, owned by one tool. The
+//! injector resolves a [`BlockDef`] by name in its [`BlockRegistry`], matches
+//! that block's markers literally, and splices only that span; text outside
+//! it — including other tools' blocks — is copied through unchanged. A file
+//! without the block gets it prepended. Marker dialects that are not
+//! `<!-- NAME:START -->` are declared with [`BlockDef::with_markers`].
+//!
+//! The ecosystem contract (ownership, retirement, dialects, drift, facts vs.
+//! procedures) is documented in
+//! `docs/src/explanation/agent-instruction-boundaries.md`; this module owns
+//! the API, not the fleet policy.
 //!
 //! ## Provenance footer
 //!
@@ -8,18 +18,13 @@
 //! marker: generator name, generator version, registry block name, and a
 //! short content hash. The hash covers only the injected content (never the
 //! footer itself), so drift is machine-checkable by recomputing expected
-//! content and comparing hashes (`ManagedBlockDrift`, suite_linter). Footer
-//! is opt-in via [`BlockInjector::with_provenance`]; footer-less output is
-//! byte-identical to pre-footer releases.
+//! content and comparing hashes. Footer is opt-in via
+//! [`BlockInjector::with_provenance`]; footer-less output is byte-identical
+//! to pre-footer releases. See [`content_sha8`] and [`provenance_footer`].
 //!
-//! ## Changes from wai
-//!
-//! - Generalized from wai-specific to any named block via `BlockRegistry`.
-//! - `BlockDef` replaces wai's hardcoded WAI_START/WAI_END constants.
-//! - `BlockInjector` replaces wai's `inject_managed_block` function.
-//! - Slim-block Layer-1 behavior preserved (progressive disclosure).
-//! - Removed pipeline-specific content generation (not general enough).
-//! - Removed `wai_detailed_content` (tool-specific; tools generate their own).
+//! Ported from `wai/src/managed_block.rs`. [`BlockDef`] replaces wai's
+//! hardcoded marker constants and [`BlockInjector`] replaces its inject
+//! function; wai-specific content generation stayed out.
 
 use std::path::Path;
 

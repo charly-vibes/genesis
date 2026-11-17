@@ -184,6 +184,10 @@ Self-healing error suggestions and typo detection.
 
 Managed block injector for `<!-- NAME:START -->` / `<!-- NAME:END -->` markers in markdown files.
 
+Ownership, retirement, marker-dialect, and drift rules for the regions this
+module writes are explained in
+[Agent Instruction Boundaries](../explanation/agent-instruction-boundaries.md).
+
 ### Key Types
 
 | Type | Description |

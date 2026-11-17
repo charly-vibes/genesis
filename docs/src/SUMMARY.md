@@ -28,6 +28,7 @@
 
 - [Architecture](explanation/architecture.md)
 - [Design Decisions](explanation/design-decisions.md)
+- [Agent Instruction Boundaries](explanation/agent-instruction-boundaries.md)
 - [Why Weak Readers](explanation/why-weak-readers.md)
 - [Removed & Renamed APIs](explanation/removed-apis.md)
 
