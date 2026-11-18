@@ -1,0 +1,387 @@
+{
+  "ok": true,
+  "envelope_version": "0.1",
+  "cli_version": "0.1.0",
+  "envelope_kind": "ok",
+  "data": {
+    "schema_version": "brief.v1",
+    "as_of": "2026-11-18",
+    "generated_at": "2026-11-18T21:12:09.150565487Z",
+    "sources": [
+      {
+        "name": "beads",
+        "status": "present",
+        "observed_at": "2026-11-17T22:42:15Z",
+        "staleness": "fresh",
+        "detail": "32 malformed line(s) skipped in .beads/issues.jsonl"
+      },
+      {
+        "name": "git",
+        "status": "present",
+        "observed_at": "2026-11-17T22:42:15Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "openspec",
+        "status": "present",
+        "observed_at": "2026-11-17T19:50:38.370110653Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "whisper",
+        "status": "present",
+        "observed_at": "2026-10-09T23:44:17Z",
+        "staleness": "stale",
+        "detail": null
+      },
+      {
+        "name": "curation",
+        "status": "present",
+        "observed_at": "2026-11-18T21:12:09.144748612Z",
+        "staleness": "fresh",
+        "detail": null
+      }
+    ],
+    "curation": {
+      "updated_at": "2026-11-18T21:12:09.144748612Z",
+      "confirmed_at": null
+    },
+    "purpose_lite": null,
+    "focus": [],
+    "in_flight": [
+      {
+        "id": "genesis-ntg",
+        "title": "Epic: Agent Value Alignment — cross-cutting findings across all 7 tools",
+        "status": "open",
+        "priority": 0,
+        "blocked_by": [],
+        "age_days": 109,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-azy",
+        "title": "Research: Hegel property-based testing plan (antithesis-research)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-b9p",
+        "title": "docs: apply README front-door standard v0.4 (§5.1)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-otx",
+        "title": "Implement Hegel property tests",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [
+          "genesis-azy"
+        ],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-3ps",
+        "title": "CI eval-gate: wire receipt check + scenario replay into downstream CI",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 48,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-9h9",
+        "title": "pre-push hook broken: lefthook.yml passes --advisory-until but installed pretender CLI rejects it",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-c9x",
+        "title": "feedback: ErrorRecord has no error-message field — auto-reported GH issues have an empty '## Error' body",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 35,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-dvf",
+        "title": "testaruda: wire feedback subcommand via genesis::feedback",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 62,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-fkt",
+        "title": "add-artifact-provenance: per-repo adoption — managed-block footers + drift lint (wai, dont, pretender, testaruda)",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 48,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-lu6",
+        "title": "Register .espectacular detector in genesis tools",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 41,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-tpf",
+        "title": "Add shared git interface module to genesis",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 40,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-tpf.8",
+        "title": "Migrate wai close.rs uncommitted-files onto genesis::git, fix rename defect (work in charly/wai)",
+        "status": "in_progress",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 40,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-2ex",
+        "title": "update-check: feature-gated genesis::update_check module + wiring in dependent CLIs",
+        "status": "in_progress",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 49,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-a1h",
+        "title": "openspec 1.x upgrade blocked: 10 validation failures under @fission-ai/openspec@1.14.2",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-le7",
+        "title": "refactor(cli): return io::Result<bool> from maybe_print_version_json_from",
+        "status": "deferred",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 78,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-orq",
+        "title": "Migrate wai way/hooks.rs onto genesis::git_hooks (work in charly/wai)",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 51,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-q4k",
+        "title": "Migrate pretender onto genesis::git_hooks (work in charly/pretender)",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 51,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-tpf.6",
+        "title": "Migrate whisper private-zone checks onto genesis::git (work in charly/whisper)",
+        "status": "in_progress",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 40,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-tpf.7",
+        "title": "Migrate dulce dot_ddl tracked check onto genesis::git (work in charly/dulce-de-leche)",
+        "status": "in_progress",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 40,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "blocked": [
+      {
+        "id": "genesis-otx",
+        "title": "Implement Hegel property tests",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [
+          "genesis-azy"
+        ],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "next": [
+      {
+        "id": "genesis-ntg",
+        "title": "Epic: Agent Value Alignment — cross-cutting findings across all 7 tools",
+        "status": "open",
+        "priority": 0,
+        "blocked_by": [],
+        "age_days": 109,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-azy",
+        "title": "Research: Hegel property-based testing plan (antithesis-research)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-b9p",
+        "title": "docs: apply README front-door standard v0.4 (§5.1)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-3ps",
+        "title": "CI eval-gate: wire receipt check + scenario replay into downstream CI",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 48,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "genesis-9h9",
+        "title": "pre-push hook broken: lefthook.yml passes --advisory-until but installed pretender CLI rejects it",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "parked": [],
+    "needs_retriage": [],
+    "recent": [
+      {
+        "sha": "4d2572031c8426261bf2f797ac895221f1e2953e",
+        "committed_at": "2026-11-17T22:42:15Z",
+        "subject": "beads: close genesis-ne0 and genesis-mpx",
+        "outcome": null
+      },
+      {
+        "sha": "e9eff8e8ca6a492a5477427336a32d7dd34f51e8",
+        "committed_at": "2026-11-17T22:41:16Z",
+        "subject": "beads: close genesis-ne0 and record the gate repair",
+        "outcome": null
+      },
+      {
+        "sha": "32970f61d165879e47256bd6a816734f3b06ad2c",
+        "committed_at": "2026-11-17T22:41:01Z",
+        "subject": "chore(gates): repair pre-existing fmt/clippy drift and refresh the gate block (genesis-mpx)",
+        "outcome": null
+      },
+      {
+        "sha": "2cc020f007e4bc53b176e182ba33e0bbfc568a41",
+        "committed_at": "2026-11-17T22:40:35Z",
+        "subject": "docs: publish the agent-instruction boundary contract (genesis-ne0)",
+        "outcome": null
+      },
+      {
+        "sha": "a6a5150a622e165c1ccd14c2e72975ad2499caf0",
+        "committed_at": "2026-11-16T11:57:19Z",
+        "subject": "docs: apply issue-review fixes to README/release tickets",
+        "outcome": null
+      }
+    ],
+    "health": {
+      "status": "amber",
+      "basis": "signals",
+      "signals": [
+        {
+          "kind": "orphan_commits",
+          "reason": "34 commits in the 14-day window link no tracker id or open work-item path: 01e0d946da4051b77a9fa7890dc87b4632286388 (fix(quality): TestUnwrap import for scratch test helper); 02cda6b2b8da3330d6664d4d8c26388a1a3cc25e (docs(brief): pretender debt fix brief — orchestrator artifact (docs-only; gate blocked by pre-existing debt)); 06d7edff1fbe49308d99e6154c2882cf9971bac9 (fix(quality): real assert! macros in fixture tests (assert_* helpers count as 0)); 16a1680a8d7096daee97304ced2d8bf3b5a58d80 (refactor(quality): extract helpers in discovery, managed_block, feedback/context, redactor); 1f55670adb8ae0e8f8351da85c3855625b494caa (refactor(quality): split update_check cache layer; extract fetch/persist helpers); 25b26fb57c581efc22a3609f640aebb4b03c402d (refactor(quality): split evals report-contract tests (tests_report.rs); prune dead imports); 3c2094114c3fadf9fdcf9731762a0d7dc54be5a5 (refactor(quality): extract round-trip assertion from lifecycle test); 4f95319dbac842dc6d4fbb152a561b6ebffbac7b (fix(quality): move append_test_records inside tests mod (cfg(test) scoping)); 5022074f349ea4c90817fc41df591aa7bd062be1 (refactor(quality): split config into config/{error,validation,registry,store}; guide+config helpers; split config tests); 50753cfd4de48f4dfb2a6f659972fa730ccd6d2d (style: cargo fmt after helper insertions); 55d50bdabb6b54c6f3d20b3475a8f32d81656676 (refactor(quality): extract inline test mods to role-annotated files; de-mut builders); 56cb9d21366e8ad2fd9df068a193570b4d1b376a (refactor(quality): split status tests (tests_builder.rs) — clears 8-member lazy cluster); 57fd5e470eeace2ee1f4d42e237f9d84b6927d71 (fix(quality): clear test-role pretender debt in tests/ (gate mode)); 6830d36b76dd0bad1807614a250fef080a6a169b (fix(quality): convert .expect sites in extracted test files (broken regex in prior batch)); 6884e00eb12ccf7b8472a4a9f6eb4d4010d4d1b6 (refactor(quality): final scoped pretender-gate sweep — doctor/git_hooks/feedback splits + helper decomposition); 756c4e3b324f873d9a167bef72f5f6a1271bca29 (docs: file README front-door and release tickets); 766c526ac9669c5f82a824a33214e4c87ec047f9 (refactor(quality): split ManagedBlockDrift into suite_linter/drift.rs; de-cluster tests); 7d7a57b63fbe70a5376d63693bdfc13b8d15ee3a (refactor(quality): decompose config lifecycle test; hoist OtherConfig fixture); 7f7e2ebc0727a2603456e4152a8c1cc152224771 (refactor(quality): split Doctor bridge from status; extract suggestion/status helpers); 8ca1ef35f34d6a26f4122ff38a7e5cb8f55fc02d (refactor(quality): scratch timestamp helpers split; test records helper; require-conversion); 8de4a248dca3dcc1876c1ea9fbc6958e38f35dc0 (refactor(quality): split evals receipt tests (tests_receipt.rs); no-nulls walker helper); a6a5150a622e165c1ccd14c2e72975ad2499caf0 (docs: apply issue-review fixes to README/release tickets); a6ededa7b411d5cde566dbfdb846122500b3ccb4 (refactor(quality): split git and fixture into module dirs; extract helpers); ac69ea1ac94caea8d87fba5ac8afb57116dd3056 (docs: apply issue-review fixes to README/release tickets); afa0ae2db3b985e93d554afe8fd8d6c68652b9c5 (refactor(quality): split suite_linter drift module; de-cluster tests; scaffold build decomposition); b7c228a7142c64776854bf018c733ee3af644f81 (refactor(quality): gh error-mapping table + spawn/parse helpers; scaffold cleanup); baf29fae5b9439cb72f64d86ed78b3e3ec26526a (refactor(quality): scaffold build decomposition + mut-free path partitioning); c3a1acbdcd40784942a313f8ea1247763995d77e (refactor(quality): extract inline test mods from 9 large src modules); df3a22842b90c1c089675a840d77d194f1b8c9df (refactor(quality): split git.rs into git/{error,runner,changes,query}; extract helpers); e0795a4f8e568aed6d513c72f76b4064ce33fb74 (refactor(quality): split guide into guide/{verbosity,format,output,error_sink,run}); ed75734d50d5f6dd70ff9b3dec57a8b12dd8ac81 (refactor(quality): split evals into evals/{taxonomy,outcome,scenario,checks}); f0e414476ba9b6bbba2091ddecf806e9ce7fa704 (refactor(quality): split aix into module dir; extract helpers in gen-aix and cli); f489190e84a26255a07080f8693964862a95c4aa (fix(quality): build_registry takes owned Vec<String>); fc69628b5927b3706473a32725c55dec31f951f8 (refactor(quality): split guide tests (guide/tests_guide.rs) for file-lines budget)"
+        },
+        {
+          "kind": "spec_change_without_bead",
+          "reason": "openspec changes link no tracker id: `document-agent-instruction-boundaries` changed 1 days ago"
+        }
+      ],
+      "owner": null,
+      "reason": "orphan_commits: 34 commits in the 14-day window link no tracker id or open work-item path: 01e0d946da4051b77a9fa7890dc87b4632286388 (fix(quality): TestUnwrap import for scratch test helper); 02cda6b2b8da3330d6664d4d8c26388a1a3cc25e (docs(brief): pretender debt fix brief — orchestrator artifact (docs-only; gate blocked by pre-existing debt)); 06d7edff1fbe49308d99e6154c2882cf9971bac9 (fix(quality): real assert! macros in fixture tests (assert_* helpers count as 0)); 16a1680a8d7096daee97304ced2d8bf3b5a58d80 (refactor(quality): extract helpers in discovery, managed_block, feedback/context, redactor); 1f55670adb8ae0e8f8351da85c3855625b494caa (refactor(quality): split update_check cache layer; extract fetch/persist helpers); 25b26fb57c581efc22a3609f640aebb4b03c402d (refactor(quality): split evals report-contract tests (tests_report.rs); prune dead imports); 3c2094114c3fadf9fdcf9731762a0d7dc54be5a5 (refactor(quality): extract round-trip assertion from lifecycle test); 4f95319dbac842dc6d4fbb152a561b6ebffbac7b (fix(quality): move append_test_records inside tests mod (cfg(test) scoping)); 5022074f349ea4c90817fc41df591aa7bd062be1 (refactor(quality): split config into config/{error,validation,registry,store}; guide+config helpers; split config tests); 50753cfd4de48f4dfb2a6f659972fa730ccd6d2d (style: cargo fmt after helper insertions); 55d50bdabb6b54c6f3d20b3475a8f32d81656676 (refactor(quality): extract inline test mods to role-annotated files; de-mut builders); 56cb9d21366e8ad2fd9df068a193570b4d1b376a (refactor(quality): split status tests (tests_builder.rs) — clears 8-member lazy cluster); 57fd5e470eeace2ee1f4d42e237f9d84b6927d71 (fix(quality): clear test-role pretender debt in tests/ (gate mode)); 6830d36b76dd0bad1807614a250fef080a6a169b (fix(quality): convert .expect sites in extracted test files (broken regex in prior batch)); 6884e00eb12ccf7b8472a4a9f6eb4d4010d4d1b6 (refactor(quality): final scoped pretender-gate sweep — doctor/git_hooks/feedback splits + helper decomposition); 756c4e3b324f873d9a167bef72f5f6a1271bca29 (docs: file README front-door and release tickets); 766c526ac9669c5f82a824a33214e4c87ec047f9 (refactor(quality): split ManagedBlockDrift into suite_linter/drift.rs; de-cluster tests); 7d7a57b63fbe70a5376d63693bdfc13b8d15ee3a (refactor(quality): decompose config lifecycle test; hoist OtherConfig fixture); 7f7e2ebc0727a2603456e4152a8c1cc152224771 (refactor(quality): split Doctor bridge from status; extract suggestion/status helpers); 8ca1ef35f34d6a26f4122ff38a7e5cb8f55fc02d (refactor(quality): scratch timestamp helpers split; test records helper; require-conversion); 8de4a248dca3dcc1876c1ea9fbc6958e38f35dc0 (refactor(quality): split evals receipt tests (tests_receipt.rs); no-nulls walker helper); a6a5150a622e165c1ccd14c2e72975ad2499caf0 (docs: apply issue-review fixes to README/release tickets); a6ededa7b411d5cde566dbfdb846122500b3ccb4 (refactor(quality): split git and fixture into module dirs; extract helpers); ac69ea1ac94caea8d87fba5ac8afb57116dd3056 (docs: apply issue-review fixes to README/release tickets); afa0ae2db3b985e93d554afe8fd8d6c68652b9c5 (refactor(quality): split suite_linter drift module; de-cluster tests; scaffold build decomposition); b7c228a7142c64776854bf018c733ee3af644f81 (refactor(quality): gh error-mapping table + spawn/parse helpers; scaffold cleanup); baf29fae5b9439cb72f64d86ed78b3e3ec26526a (refactor(quality): scaffold build decomposition + mut-free path partitioning); c3a1acbdcd40784942a313f8ea1247763995d77e (refactor(quality): extract inline test mods from 9 large src modules); df3a22842b90c1c089675a840d77d194f1b8c9df (refactor(quality): split git.rs into git/{error,runner,changes,query}; extract helpers); e0795a4f8e568aed6d513c72f76b4064ce33fb74 (refactor(quality): split guide into guide/{verbosity,format,output,error_sink,run}); ed75734d50d5f6dd70ff9b3dec57a8b12dd8ac81 (refactor(quality): split evals into evals/{taxonomy,outcome,scenario,checks}); f0e414476ba9b6bbba2091ddecf806e9ce7fa704 (refactor(quality): split aix into module dir; extract helpers in gen-aix and cli); f489190e84a26255a07080f8693964862a95c4aa (fix(quality): build_registry takes owned Vec<String>); fc69628b5927b3706473a32725c55dec31f951f8 (refactor(quality): split guide tests (guide/tests_guide.rs) for file-lines budget); spec_change_without_bead: openspec changes link no tracker id: `document-agent-instruction-boundaries` changed 1 days ago"
+    },
+    "truncation": {
+      "applied": true,
+      "omitted_counts": {
+        "next": 8,
+        "recent": 195
+      }
+    },
+    "head_sha": "4d2572031c8426261bf2f797ac895221f1e2953e",
+    "source_hash": "cebebb207178dcd925bb91391ad0cc6cf72bf8a5aab2b71f6e09443f3460221f",
+    "warnings": [
+      {
+        "source": "beads",
+        "code": "beads_parse_error",
+        "detail": "32 malformed line(s) skipped in .beads/issues.jsonl"
+      }
+    ]
+  },
+  "warnings": [],
+  "hints": [],
+  "meta": {
+    "duration_ms": 0,
+    "tx": null,
+    "request_id": null
+  }
+}
