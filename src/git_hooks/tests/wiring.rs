@@ -84,6 +84,42 @@ fn ensure_wired_creates_missing_stage_section() {
 }
 
 #[test]
+fn ensure_wired_wires_both_stages_of_a_dual_section_config() {
+    // Idempotence is per stage section: a file-level check satisfied the
+    // second stage from the first stage's block, leaving the common
+    // both-sections config with the gate in pre-commit only. Comments are
+    // not column-0 keys, so a stage section spans an injected block and
+    // the per-section check is exact.
+    let fixture = config_fixture(basic_config());
+    lefthook::ensure_wired(
+        fixture.root(),
+        lefthook::Stage::PreCommit,
+        &ah_block(),
+        ah_content(),
+    )
+    .require("value");
+    lefthook::ensure_wired(
+        fixture.root(),
+        lefthook::Stage::PrePush,
+        &ah_block(),
+        ah_content(),
+    )
+    .require("value");
+
+    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
+    let push_section = &after[after.find("pre-push:").expect("pre-push section stays")..];
+    assert!(
+        push_section.contains("run: ah check"),
+        "pre-push must run the gate; got:\n{after}"
+    );
+    assert_eq!(
+        after.matches("AH:START").count(),
+        2,
+        "each stage carries its own managed block; got:\n{after}"
+    );
+}
+
+#[test]
 fn ensure_wired_is_idempotent_when_content_present() {
     let fixture = config_fixture(basic_config());
     lefthook::ensure_wired(

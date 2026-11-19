@@ -6,6 +6,7 @@ use super::Stage;
 fn is_column_zero_key(line: &str) -> bool {
     let first = line.chars().next();
     matches!(first, Some(c) if c != ' ' && c != '\t' && c != '#' && c != '\n')
+        && !line.starts_with("<!--")
 }
 
 /// Indent of the stage section's first child line (skips the anchor

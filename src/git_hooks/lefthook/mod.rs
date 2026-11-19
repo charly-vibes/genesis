@@ -90,12 +90,14 @@ fn unanchorable_error(path: &Path, stage: Stage) -> GitHooksError {
     }
 }
 
-/// Stage section exists at `offset`: inject idempotently inside it.
+/// Stage section exists at `offset`: inject idempotently into it.
 ///
-/// Idempotence is file-level (spec: "the config already contains the
-/// block's content"): block markers at column 0 are not column-0 keys,
-/// so the stage-section scan cannot be relied on to span an injected
-/// block.
+/// Idempotence is per stage section ("the stage's section already
+/// contains the block's content"). `is_column_zero_key` treats comments
+/// as non-keys, so a stage section spans an injected block exactly; the
+/// former file-level `contains(block_text)` clause satisfied later
+/// stages from the first stage's block, leaving dual-section configs —
+/// the common real shape — with only the first stage wired.
 fn wire_into_stage(
     path: &Path,
     existing: &str,
@@ -104,7 +106,7 @@ fn wire_into_stage(
     block_text: &str,
     content: &str,
 ) -> Result<WiredOutcome, GitHooksError> {
-    if existing.contains(block_text) || section(existing, offset).contains(content) {
+    if section(existing, offset).contains(content) {
         return Ok(WiredOutcome::AlreadyWired);
     }
     // genesis-r99: lefthook only honors commands declared under the

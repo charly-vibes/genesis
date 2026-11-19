@@ -3,6 +3,22 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.3] — 2026-11-19
+
+### Fixed
+
+- **`git_hooks::lefthook::ensure_wired` — dual-section configs now wire
+  both stages** (genesis-r99 follow-up, found dogfooding sad's `hooks
+  install`): idempotence was file-level, so once the first stage's
+  managed block landed, every later stage's `ensure_wired` returned
+  `AlreadyWired` without wiring — the common both-sections `lefthook.yml`
+  ended up with the gate in `pre-commit` only, and a partially-wired
+  config could never be completed by re-running. Idempotence is now per
+  stage section. `is_column_zero_key` also treats `<!--`-comment lines
+  as non-keys so sections span the default `BlockDef::new` HTML-comment
+  markers exactly as they already spanned `#`-comment markers. Regression
+  test `ensure_wired_wires_both_stages_of_a_dual_section_config`.
+
 ## [0.13.2] — 2026-10-16
 
 ### Fixed
