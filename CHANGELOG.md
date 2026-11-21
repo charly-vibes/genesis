@@ -3,6 +3,16 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.4] — 2026-11-21
+
+### Fixed
+
+- **Windows builds compile again** (genesis-hhk): `fixture.rs` imported
+  `command::signal_of` unconditionally while the function is
+  `#[cfg(unix)]`-only, failing E0432 on Windows targets. The import is now
+  gated; the existing `#[cfg(not(unix))]` stub covers non-Unix. First
+  surfaced through sad's release workflow — the first Windows consumer.
+
 ## [0.13.3] — 2026-11-19
 
 ### Fixed

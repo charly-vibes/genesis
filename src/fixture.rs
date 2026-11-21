@@ -195,7 +195,9 @@ mod entries;
 mod git_init;
 
 pub use command::CommandOutput;
-use command::{hermetic_git, signal_of};
+use command::hermetic_git;
+#[cfg(unix)]
+use command::signal_of;
 use entries::{
     ConfigEntry, FileEntry, TomlEntry, create_markers, write_plain_files, write_toml_files,
 };
