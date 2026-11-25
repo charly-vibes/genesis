@@ -8,7 +8,9 @@ Meter: `just ci` and `ah check`.
 
 - [ ] 1.1 RED: `tests/doctor_not_applicable.rs` — a result state for "not
       applicable" exists; it serializes distinctly from healthy/advisory and
-      from a failure; a report containing one renders it distinctly.
+      from a failure; a report containing one renders it distinctly; a
+      consumer reading an *unrecognized* state reports neither a failure nor
+      health.
 - [ ] 1.2 GREEN: extend the result type in `src/doctor/check.rs` with the
       not-applicable state; the existing severity vocabulary is unchanged.
 
@@ -55,9 +57,12 @@ Meter: `just ci` and `ah check`.
 - [ ] 5.1 wai, dont, ddL, vampiro, pretender, espectacular, specodelic,
       whisper, gently: adopt the standard checks their tool configures,
       keeping their domain checks.
+- [ ] 5.2 Consumers of serialized doctor reports (ddL's diagnostics report,
+      evallerina's tool-shape checks) tolerate the new state.
 
 ## 6. Tidy
 
 - [ ] 6.1 `just ci` green.
-- [ ] 6.2 `versions.ddl.toml` minor bump entry (new public module).
+- [ ] 6.2 `versions.ddl.toml` **minor** bump entry (new public module and a
+      new result state).
 - [ ] 6.3 CHANGELOG entry.

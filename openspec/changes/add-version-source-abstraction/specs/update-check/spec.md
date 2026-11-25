@@ -64,9 +64,3 @@ through this module, and the HTTP stack SHALL NOT be compiled into it.
 - **WHEN** a dependent builds without the `update-check` feature
 - **THEN** the HTTP stack SHALL NOT be part of the dependency graph
 - **AND** no version lookup SHALL be possible
-
-#### Scenario: a tool with a no-network contract keeps the feature off
-
-- **WHEN** a tool whose contract forbids network access is inspected
-- **THEN** the tool SHALL NOT enable the `update-check` feature
-- **AND** the version-check code SHALL NOT be compiled into it

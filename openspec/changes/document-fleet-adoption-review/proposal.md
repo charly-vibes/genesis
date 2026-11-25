@@ -1,5 +1,29 @@
 # Proposal: document-fleet-adoption-review
 
+Tracked as `genesis-7mi` in beads (base_commit `3bffa47`).
+
+Findings addressed (Rule-of-5 review of the fleet adoption review):
+`DRAFT-001`–`DRAFT-004`, `CLAR-001`–`CLAR-003`, `CORR-001`–`CORR-007`,
+`EDGE-001`–`EDGE-007`, `EXCL-001`–`EXCL-004`.
+
+Evidence: the Rule-of-5 review of the fleet adoption report, with the
+independent verification pass (5 findings judged, 2 above the 0.8 confidence
+gate, 3 below it and kept as `REVIEW_REQUIRED`, measured false-positive rate
+0%).
+
+Verification: the review's own verification record is the page's source.
+
+Scope: the whole fleet review — 18 Rust CLIs scanned; scan date 2026-11-25.
+
+Depends on: `add-fleet-adoption-plan` (the page indexes the per-repo ticket
+set that change defines).
+
+Capability path: none — documentation only (`skip_specs: true`).
+
+Version bump: none (docs only).
+
+Downstream repos: 0 — documentation only.
+
 ## Why
 
 A fleet-wide review of the charly Rust CLIs against `genesis-vibes` was run to
@@ -37,6 +61,9 @@ corrected, and honest about what was verified.
 - The page states the adoption *rule* in one place: a capability belongs in
   genesis only if two or more suite tools need it, and a tool that needs
   nothing shared stays out.
+- The page uses the **review's finding ids** (`DRAFT-…`, `CORR-…`, `CLAR-…`,
+  `EDGE-…`, `EXCL-…`) as the stable ids — the same ids each proposal
+  references under "Findings addressed". One id system, not two.
 
 ## Capabilities
 

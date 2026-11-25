@@ -61,6 +61,22 @@ declared deprecated on the error path (readers may accept; writers are not
 required to emit). Removal is scheduled for the next envelope version bump,
 which is out of scope here.
 
+**The tolerance is defensive.** No in-fleet producer emits hints on an error
+path (`Envelope::error` sets `hints: None`; wai and ddL pass hints only via
+`Envelope::success`; kaya emits an empty array; sunshine has no `hints`
+member). The reader tolerance therefore exists for foreign and older
+producers and for the ordering rule — **not** because a fleet migration is
+waiting for it. Stating this explicitly keeps the next implementer from
+assuming a population that does not exist.
+
+**Both channels survive a conflict.** When the two channels name *different*
+commands, both are reported, error channel first; neither is discarded. The
+alternative — "the error channel wins" — would satisfy every scenario while
+silently narrowing the union the proposal promises. Consumers compare by
+membership (`hint_commands.iter().any(...)` in `src/evals/checks.rs:157-165`,
+`commands.iter().any(...)` in `evallerina/src/envelope.rs:113-118`), so a
+union is safe for today's checks.
+
 ## Risks / Trade-offs
 
 - [A producer emits a channel nobody reads] → Mitigation: the union makes
@@ -74,7 +90,13 @@ which is out of scope here.
 - [The union changes existing eval reports] → Mitigation: scenarios that
   previously reported "hint-blind" against a `data.remediation` producer now
   pass. That is the intended correction; the affected evallerina recordings
-  are re-run in the evallerina repo.
+  are re-run in the evallerina repo — and the genesis-side recorded corpus
+  (`evallerina/src/recorded.rs`, `scenarios/*.json`) is re-run in the same
+  ticket, with every classification flip reviewed rather than absorbed.
+- [A union entry changes a check that expects exactly one hint] → Mitigation:
+  today's checks compare by membership, so a union is safe; the spec states
+  the conflict rule (both survive) so a future equality-style check has a
+  stated contract to follow.
 
 ## Migration Plan
 

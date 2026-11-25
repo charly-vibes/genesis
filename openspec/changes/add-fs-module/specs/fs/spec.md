@@ -51,6 +51,15 @@ writers to the same target never share a staging path.
 - **WHEN** the same process writes the same target twice in succession
 - **THEN** the second staging file SHALL NOT reuse the first staging file name
 
+#### Scenario: a stale staging file is identifiable
+
+- **WHEN** a writer is killed before the rename and leaves a staging file
+      behind
+- **THEN** the staging file's name SHALL be recognizable as a staging file of
+      the target
+- **AND** sweeping stale staging files SHALL NOT be required for the write to
+      have succeeded
+
 ### Requirement: Durability before the rename
 
 The staged bytes SHALL be flushed to the device before the rename step, so that
@@ -78,6 +87,13 @@ another process holds the target open.
 
 - **WHEN** the rename fails for a reason other than a sharing violation
 - **THEN** the operation SHALL report the failure without retrying
+
+#### Scenario: the retry is bounded
+
+- **WHEN** the rename keeps failing with a sharing violation
+- **THEN** the operation SHALL stop after a bounded number of attempts, or
+      after a bounded total time
+- **AND** SHALL report the failure rather than retrying indefinitely
 
 ### Requirement: JSON helpers
 

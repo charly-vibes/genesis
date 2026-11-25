@@ -1,5 +1,35 @@
 # Proposal: add-fs-module
 
+Tracked as `genesis-mqt` in beads (base_commit `3bffa47`).
+
+Findings addressed (Rule-of-5 review of the fleet adoption review):
+`CORR-001`, `CORR-003`, `CORR-004`, `CORR-005`, `DRAFT-002`, `DRAFT-003`,
+`CLAR-001`, `CLAR-002`, `CLAR-003`, `EDGE-002`, `EDGE-003`, `EDGE-004`,
+`EXCL-001`–`EXCL-004`.
+
+Evidence: 12 atomic-write sites in 7 tools, each re-checked in this session:
+`dulce-de-leche/src/dot_ddl/persist.rs` (+`manifest.rs`), `kaya/src/projection/state.rs`
+(+`publication/io.rs`), `podras/src/write.rs`, `podras/src/curation.rs`,
+`podras/src/roadmap/file.rs`, `sunshine/src/stamp.rs`,
+`pretender/pretender/src/history/events.rs`, `sad/sad/src/baseline.rs`,
+`wai/src/state.rs`. `podras/src/verbs/init.rs` stages via **hard-link**, not
+rename, and is excluded (see below).
+
+Verification: the strongest-implementation claim was independently checked
+(confidence 0.88 and 0.92, above the 0.8 gate).
+
+Scope: atomic file writes across the fleet — 18 Rust CLIs scanned, 12 implementation sites in 7 tools.
+
+Depends on: nothing. Blocked by: nothing. Unblocks: `add-fs-module`
+migrations in 6 other repos.
+
+Capability path: `fs` (new); module: `genesis::fs`.
+
+Version bump: **minor** — a new public module.
+
+Downstream repos: 6 (dulce-de-leche, kaya, podras, sunshine, pretender, sad)
+plus `wai` — one ticket each; `wai`'s is a **bug fix**, not a de-duplication.
+
 ## Why
 
 Twelve hand-rolled atomic-write sites exist across seven fleet tools, with four
@@ -41,6 +71,19 @@ Boundary rule: two or more tools need it — seven do, by a wide margin.
 - Downstream migrations of the twelve sites (one ticket per repo), including
   the `wai` fix for the fixed-name temp file, which is a **bug fix**, not
   merely a de-duplication.
+- **Excluded**: `podras/src/verbs/init.rs` stages a file into place with a
+  **hard link**, not a rename — a different mechanism, not an `atomic_write`
+  case; it stays local until a separate proposal covers link-based staging.
+
+### Public API (sketch)
+
+```rust
+use genesis::fs::{atomic_write, atomic_write_json, read_json, FsError};
+
+atomic_write(&path, &bytes)?;              // stage → flush → rename
+atomic_write_json(&path, &value)?;         // serialize + atomic_write
+let cfg: MyConfig = read_json(&path)?;     // typed error on malformed JSON
+```
 
 ## Capabilities
 
@@ -56,13 +99,17 @@ Boundary rule: two or more tools need it — seven do, by a wide margin.
 ## Impact
 
 - **Affected code**: `src/fs.rs` (new), `src/lib.rs` (module decl).
-  No new dependency (uses `std::fs`; no `tempfile` in the runtime path —
-  `tempfile` stays a dev-dependency).
+  The module adds **no new dependency**: it uses `std::fs` only, and does not
+  rely on `tempfile` at runtime. Note that `tempfile` is currently a
+  **regular** dependency (`Cargo.toml:38-41` — `# Test fixtures` /
+  `tempfile = "3"` under `[dependencies]`, not `[dev-dependencies]`); a task
+  moves it to `[dev-dependencies]` if the module confirms it is unused at
+  runtime.
 - **Affected specs**: new `openspec/specs/fs/spec.md`.
 - **Downstream migrations** (separate tickets, one per repo):
   - `dulce-de-leche` — `dot_ddl/persist.rs`, `manifest.rs`
   - `kaya` — `projection/state.rs`, `publication/io.rs`
-  - `podras` — `write.rs`, `curation.rs`, `verbs/init.rs`, `roadmap/file.rs`
+  - `podras` — `write.rs`, `curation.rs`, `roadmap/file.rs`
   - `sunshine` — `stamp.rs` (its `atomic_write` becomes a thin wrapper)
   - `pretender` — `history/events.rs`
   - `sad` — `baseline.rs`

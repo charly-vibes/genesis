@@ -1,5 +1,29 @@
 # Proposal: add-version-source-abstraction
 
+Tracked as `genesis-cn6` in beads (base_commit `3bffa47`).
+
+Findings addressed (Rule-of-5 review of the fleet adoption review):
+`CORR-006`, `DRAFT-002`, `DRAFT-003`, `CLAR-001`, `CLAR-003`, `EDGE-004`,
+`EXCL-001`–`EXCL-004`.
+
+Evidence: `genesis/src/update_check.rs:105` (crates.io, feature-gated) and
+`dulce-de-leche/src/installer/upgrade.rs:326,365` (npm CLI + GitHub releases
+API). The no-network constraint comes from wild's tool contract
+(`wild/src/main.rs` — "never … perform network access").
+
+Verification: self-reported validation.
+
+Scope: the fleet's version-checking paths — crates.io (wai, specodelic) and ddL's npm/GitHub-release paths.
+
+Depends on: nothing. Blocked by: nothing. Unblocks: nothing.
+
+Capability path: `update-check` (existing); module: `genesis::update_check`.
+
+Version bump: **patch** — the crates.io path's behavior is unchanged; the new
+sources are additive behind the same opt-in feature.
+
+Downstream repos: 1 (dulce-de-leche) — one ticket.
+
 ## Why
 
 Version checking is split across the fleet in two unrelated shapes:
@@ -30,6 +54,12 @@ carries an explicit contract that it never performs network access, and
   behavior (cache TTL, fail-silent, notice text) is unchanged.
 - The `update-check` feature stays **opt-in**. No tool gains a network call
   by default; tools with no-network contracts (wild) must not enable it.
+
+> **Fleet constraint, not a spec scenario.** The no-network rule is a property
+> of *other repos'* build (wild's contract forbids network access), so it
+> cannot be asserted inside genesis's own capability contract. It is recorded
+> here and in the design; the spec asserts only what genesis can assert — that
+> a dependent which does not enable the feature performs no lookup.
 - ddL migrates `check_latest_version` onto the shared sources, keeping its
   npm-CLI routing and GitHub-release API calls.
 

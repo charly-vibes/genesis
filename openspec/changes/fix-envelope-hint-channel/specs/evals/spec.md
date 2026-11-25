@@ -36,6 +36,13 @@ MAY be an object carrying `command`, or a bare string naming a command.
 - **THEN** `parse_envelope` SHALL treat it as that command
 - **AND** SHALL NOT fail
 
+#### Scenario: conflicting channels keep both commands
+
+- **WHEN** an error envelope names one command in `data.remediation` and a
+      *different* command in the top-level `hints`
+- **THEN** the returned outcome SHALL contain both commands
+- **AND** SHALL NOT discard either channel's command
+
 #### Scenario: an envelope with no hint channel resolves to no commands
 
 - **WHEN** an error envelope carries neither remediation nor hints

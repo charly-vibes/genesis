@@ -12,8 +12,10 @@ Meter: `just ci` (includes the mdBook docs build).
 - [ ] 1.2 The matrix: tool → genesis version → modules used → verification
       state (`verified` / `dep-only` / `unverified`); include the 18 CLIs,
       exclude `fotos` with the reason stated.
-- [ ] 1.3 The findings: `F-01`… with location, one-line claim, lane
-      (genesis / tool repo / fleet contract), and the reproduction command.
+- [ ] 1.3 The findings: the review's finding ids (`DRAFT-…`, `CORR-…`,
+      `CLAR-…`, `EDGE-…`, `EXCL-…`) with location, one-line claim, lane
+      (genesis / tool repo / fleet contract), and the reproduction command —
+      the same ids each proposal cites under "Findings addressed".
 - [ ] 1.4 The corrected counts with their derivations: atomic-write sites
       (12 in 7 tools), `genesis::doctor` adopters (9), `genesis::feedback`
       adopters (8), `genesis::status` adopters (5), tools with no genesis
@@ -35,7 +37,10 @@ Meter: `just ci` (includes the mdBook docs build).
 
 ## 3. Follow-up (filed at approval, not implemented here)
 
-- [ ] 3.1 One bd issue per finding, quoting its `F-` id and naming its lane.
-- [ ] 3.2 Close `genesis-lu6` (register the `.espectacular` detector) once
+- [ ] 3.1 One bd issue per finding, quoting its finding id and naming its lane.
+- [ ] 3.2 The fleet-adoption lane (per-repo tickets) is indexed from
+      `add-fleet-adoption-plan` — the page links the change rather than
+      re-listing the tickets.
+- [ ] 3.3 Close `genesis-lu6` (register the `.espectacular` detector) once
       `populate-tool-registry` lands.
-- [ ] 3.3 `versions.ddl.toml` — no entry (docs only).
+- [ ] 3.4 `versions.ddl.toml` — no entry (docs only).

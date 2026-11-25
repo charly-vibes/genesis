@@ -45,12 +45,13 @@ Meter: `just ci` and `ah check`.
 
 ## 4. Downstream (optional, one ticket per repo — filed at approval)
 
-- [ ] 4.1 pretender, vampiro, wai, ddL, specodelic, whisper, spectacular,
-      dont: add one conformance test replacing or complementing the local
-      compatibility test.
+- [ ] 4.1 pretender, vampiro, wai, ddL, specodelic, whisper, espectacular,
+      dont: add one conformance test **alongside** the local compatibility
+      test (which keeps its domain assertions), gaining the error-channel and
+      exit-code properties.
 
 ## 5. Tidy
 
 - [ ] 5.1 `just ci` green.
-- [ ] 5.2 `versions.ddl.toml` minor bump entry (new public module).
+- [ ] 5.2 `versions.ddl.toml` **minor** bump entry (new public module).
 - [ ] 5.3 CHANGELOG entry.

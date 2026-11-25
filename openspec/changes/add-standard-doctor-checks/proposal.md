@@ -1,5 +1,31 @@
 # Proposal: add-standard-doctor-checks
 
+Tracked as `genesis-ykp` in beads (base_commit `3bffa47`).
+
+Findings addressed (Rule-of-5 review of the fleet adoption review):
+`CORR-004`, `DRAFT-002`, `DRAFT-003`, `CLAR-001`, `CLAR-003`, `EDGE-005`,
+`EXCL-001`–`EXCL-004`.
+
+Evidence: 9 tools ship a doctor through `genesis::doctor` — wai, dont,
+dulce-de-leche, vampiro, pretender, espectacular, specodelic, whisper,
+gently. The same check name means different things across them: `config`
+means `.vampiro/config.toml` in vampiro
+(`vampiro/crates/vampiro-cli/src/doctor.rs:20-45`) and "store opened" in dont
+(`dont/src/doctor_checks.rs:25-60`).
+
+Verification: self-reported validation.
+
+Scope: the 9 tools that ship a doctor through `genesis::doctor`.
+
+Depends on: nothing. Blocked by: nothing. Unblocks: nothing.
+
+Capability path: `doctor` (new); module: `genesis::doctor` (+ `standard`
+submodule).
+
+Version bump: **minor** — a new public module and a new result state.
+
+Downstream repos: 9 (the doctor adopters) — one ticket each, optional.
+
 ## Why
 
 Nine fleet tools ship a `doctor` command through `genesis::doctor`, and each
@@ -30,6 +56,12 @@ must not report "healthy".
 - The battery composes with the existing `DoctorCheck` trait and the existing
   `genesis::status` bridge (`StatusBuilder::register_doctor`), so a tool's
   `status` reflects the same checks as its `doctor`.
+- **Serialization impact (stated, not hidden):** the result *enum* gains a
+  third member, so the serialized `doctor` output gains a state. Existing
+  checks keep their behavior, but consumers that match on the state (ddL's
+  diagnostics report, evallerina's tool-shape checks) must tolerate an
+  unknown state rather than treating it as a failure. The `doctor` spec
+  states that tolerance rule.
 - No existing check changes behavior; this is additive.
 
 ## Capabilities

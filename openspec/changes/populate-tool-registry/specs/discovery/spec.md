@@ -56,6 +56,18 @@ resolvable on `PATH`.
 - **THEN** discovery SHALL report that entry as invalid
 - **AND** SHALL NOT treat it as installed
 
+#### Scenario: an entry without a detector is invalid
+
+- **WHEN** a registry entry carries a description but no detector path
+- **THEN** discovery SHALL report that entry as invalid
+- **AND** SHALL NOT report it as merely absent
+
+#### Scenario: the resolved command path is reported
+
+- **WHEN** a command detector resolves to an executable
+- **THEN** discovery SHALL report the path it resolved to
+- **AND** a reader SHALL be able to see which binary was matched
+
 ### Requirement: Absence is a finding, not a failure
 
 Discovery SHALL NOT return an error when a declared tool is absent or when a

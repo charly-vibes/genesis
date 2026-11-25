@@ -15,10 +15,14 @@ Meter: `just ci` and `ah check`.
       never as installed.
 - [ ] 1.4 GREEN: the `command` detector kind; unknown kinds reported as
       invalid.
-- [ ] 1.5 RED: `tests/discovery_invalid.rs` — an entry without a detector is
-      invalid; a malformed manifest yields a report, not an error and not a
-      panic.
-- [ ] 1.6 GREEN: entry validation and non-fatal reporting.
+- [ ] 1.5 RED: `tests/discovery_invalid.rs` — an entry without a detector
+      path is invalid; an unknown detector kind is invalid (a distinct state
+      from "not installed"); a malformed manifest yields a report, not an
+      error and not a panic.
+- [ ] 1.6 GREEN: entry validation and non-fatal reporting; the state machine
+      gains a third outcome (invalid) alongside installed / not-installed —
+      today both an empty path and an unknown kind collapse to "not detected"
+      (`src/discovery.rs:128-138`).
 
 ## 2. Fleet registry (this repo)
 
@@ -49,5 +53,6 @@ Meter: `just ci` and `ah check`.
 ## 5. Tidy
 
 - [ ] 5.1 `just ci` green.
-- [ ] 5.2 `versions.ddl.toml` minor bump entry (schema change).
+- [ ] 5.2 `versions.ddl.toml` **minor** bump entry (schema change: new
+      detector kind + a new invalid state).
 - [ ] 5.3 CHANGELOG entry naming the declared/installed split.

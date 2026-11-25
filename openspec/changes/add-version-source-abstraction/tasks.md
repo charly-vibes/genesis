@@ -49,6 +49,6 @@ Meter: `just ci` and `ah check`.
 ## 5. Tidy
 
 - [ ] 5.1 `just ci` green.
-- [ ] 5.2 `versions.ddl.toml` patch bump entry (behavior-preserving
-      refactor + new sources).
+- [ ] 5.2 `versions.ddl.toml` **patch** bump entry (behavior-preserving
+      refactor of the crates.io path + new sources behind the same feature).
 - [ ] 5.3 CHANGELOG entry naming the supported publishers.

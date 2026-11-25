@@ -5,8 +5,9 @@
 See proposal.md — Why. Constraints that shape the approach:
 
 - No new runtime dependency: `std::fs` only. `tempfile` is currently a
-  regular dependency of genesis (`Cargo.toml`) but is listed as a "test
-  fixtures" dependency; the module must not rely on it at runtime.
+  **regular** dependency of genesis (`Cargo.toml:38-41`) even though the
+  comment above it says "Test fixtures"; the module must not rely on it at
+  runtime, and a task moves it to `[dev-dependencies]` once that is confirmed.
 - ddL's implementation is the reference and already carries the platform
   subtleties (`dulce-de-leche/src/dot_ddl/persist.rs:24-33,129`): counter-based
   unique names, `fsync`, no-follow open, `with_sharing_retry` for Windows.
@@ -51,12 +52,13 @@ empty file after a crash is worse than a failed write. ddL already does it;
 generic retry wrapper; the shared helper takes it as-is rather than
 reimplementing the retry policy. The alternative — a POSIX-only helper —
 would regress the Windows users ddL explicitly supports (`cmd /C` npm routing
-exists for the BatBadBut mitigation).
+exists for the BatBadBut mitigation). The retry is **bounded** (count and
+total duration), so a process holding the target open cannot turn the rename
+into a hang.
 
-**Single-file scope.** A directory-staging API (podras `verbs/init.rs`,
-`roadmap/file.rs` stage a file; only `verbs/init.rs` stages a directory) is
-deferred. The module exposes the file-level primitive; directory staging stays
-in podras.
+**Single-file scope.** A directory-staging API (podras `verbs/init.rs`
+hard-links a staged file into place) is deferred. The module exposes the
+file-level primitive; link-based staging stays in podras.
 
 ## Risks / Trade-offs
 
@@ -70,7 +72,11 @@ in podras.
 - [The staging file is visible to other processes] → Mitigation: the staging
   name is unique and prefixed; readers of the target never see it. Tools that
   scan directories for stray files (e.g. `pretender` history snapshots) may
-  need a cleanup sweep.
+  need a cleanup sweep — see the stale-staging requirement in the spec.
+- [A hard kill (SIGKILL, power loss) leaves a staging file behind] →
+  Mitigation: the staging name carries a recognizable prefix so a stale file
+  is identifiable; sweeping it is out of scope for this change and is stated
+  as such in the spec.
 - [Two tools migrate with different temp-name conventions] → Mitigation: the
   shared helper owns the naming; the migration tickets remove the local
   convention.

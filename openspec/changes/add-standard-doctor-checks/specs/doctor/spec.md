@@ -65,6 +65,24 @@ something that was not examined.
       unconfigured one
 - **AND** a reader SHALL be able to tell them apart
 
+### Requirement: Consumers tolerate unknown states
+
+A consumer of a serialized doctor report SHALL tolerate a state it does not
+recognize. An unrecognized state SHALL NOT be reported as a failure.
+
+#### Scenario: an unrecognized state is not a failure
+
+- **WHEN** a consumer reads a report carrying a state it does not recognize
+- **THEN** the consumer SHALL NOT report a failure for that state
+- **AND** SHALL NOT treat it as healthy
+
+#### Scenario: the not-applicable state survives serialization
+
+- **WHEN** a doctor report carrying a not-applicable result is serialized
+      and read back
+- **THEN** the not-applicable state SHALL be preserved
+- **AND** SHALL NOT be reported as healthy or as a failure
+
 ### Requirement: Battery results flow into the shared status dashboard
 
 The results of the battery SHALL be usable by the shared status dashboard, so

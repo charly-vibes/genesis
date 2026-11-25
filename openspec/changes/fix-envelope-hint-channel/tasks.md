@@ -24,11 +24,17 @@ Meter: `just ci` (fmt, clippy, test, docs, build-release, aix-check) and
       non-empty hint-command list; a fixture built with `Envelope::success`
       parses as `Ok`.
 - [ ] 2.2 GREEN: add a fixture helper that builds envelopes through the
-      genesis constructors; replace the hand-written JSON literal in
-      `src/evals/tests_e2e.rs:11-18` with it.
+      genesis constructors; replace the hand-written JSON literals in
+      `src/evals/tests_e2e.rs:11-18` (error path) **and** `:20-22`
+      (`ok_envelope_stdout`, success path) with it — the spec requires every
+      scenario fixture to come from the constructors.
 - [ ] 2.3 Re-run the hint-following scenarios (`hint_followed`,
       `error_envelope_with_remediation_hint`, `agent_followed_hint`) against
       the genesis-built fixture; the suite SHALL pass.
+- [ ] 2.4 Re-run the genesis eval suite and report every classification flip
+      (a scenario that previously reported `ERR_ENVELOPE_HINT_BLINDNESS` and
+      now passes is a correction, not a regression — each flip is reviewed,
+      not absorbed).
 
 ## 3. Spec
 
@@ -53,6 +59,9 @@ Meter: `just ci` (fmt, clippy, test, docs, build-release, aix-check) and
 
 - [ ] 5.1 evallerina: replace the private dual-channel reader
       (`evallerina/src/envelope.rs:60-84`) with `genesis::evals::parse_envelope`
-      + the union helper; re-run recorded scenarios.
+      + the union helper; **re-run the recorded scenario corpus**
+      (`evallerina/src/recorded.rs`, `scenarios/*.json`) and reconcile every
+      classification flip against the pre-change report.
 - [ ] 5.2 CHANGELOG entry naming the channel contract (genesis side).
-- [ ] 5.3 `versions.ddl.toml` patch bump entry (reader behavior change).
+- [ ] 5.3 `versions.ddl.toml` **patch** bump entry (reader behavior change,
+      no public signature change).
