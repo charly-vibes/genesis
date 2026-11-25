@@ -110,27 +110,37 @@ impl LintCheck for ManagedBlockDrift {
     }
 }
 
+/// Advisory when the target's file is missing or unreadable.
+fn missing_file(target: &DriftTarget) -> LintResult {
+    advisory(
+        target,
+        format!(
+            "managed block '{}' file not found: {}",
+            target.block.name,
+            target.path.display()
+        ),
+    )
+}
+
+/// Advisory when the file exists but carries no block markers.
+fn absent_block(target: &DriftTarget) -> LintResult {
+    advisory(
+        target,
+        format!(
+            "managed block '{}' absent from {}",
+            target.block.name,
+            target.path.display()
+        ),
+    )
+}
+
 /// Check one drift target: missing file, absent block, or drifted body.
 pub(super) fn check_target(repo_root: &Path, target: &DriftTarget) -> Vec<LintResult> {
     let Ok(content) = std::fs::read_to_string(repo_root.join(&target.path)) else {
-        return vec![advisory(
-            target,
-            format!(
-                "managed block '{}' file not found: {}",
-                target.block.name,
-                target.path.display()
-            ),
-        )];
+        return vec![missing_file(target)];
     };
     let Some(inner) = extract_block(&content, target) else {
-        return vec![advisory(
-            target,
-            format!(
-                "managed block '{}' absent from {}",
-                target.block.name,
-                target.path.display()
-            ),
-        )];
+        return vec![absent_block(target)];
     };
     if has_drifted(inner, target) {
         return vec![LintResult::with_fix(

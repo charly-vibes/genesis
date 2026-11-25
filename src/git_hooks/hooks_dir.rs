@@ -77,6 +77,21 @@ pub(crate) fn effective_hooks_dir_with_env(
     root: &Path,
     envs: &[(String, String)],
 ) -> Result<EffectiveHooksDir, GitHooksError> {
+    if let Some(effective) = first_set_scope(root, envs)? {
+        return Ok(effective);
+    }
+    Ok(EffectiveHooksDir {
+        path: root.join(".git/hooks"),
+        scope: HooksDirScope::Default,
+    })
+}
+
+/// Walk config scopes in precedence order and report the first scope
+/// where `core.hooksPath` is set; `Ok(None)` when unset everywhere.
+fn first_set_scope(
+    root: &Path,
+    envs: &[(String, String)],
+) -> Result<Option<EffectiveHooksDir>, GitHooksError> {
     let scopes = [
         (&["--local"][..], HooksDirScope::Local),
         (&["--global"][..], HooksDirScope::Global),
@@ -84,24 +99,27 @@ pub(crate) fn effective_hooks_dir_with_env(
     ];
     for (scope_args, scope) in scopes {
         if let Some(value) = query_hooks_path(root, scope_args, envs)? {
-            if value.is_empty() {
-                return Ok(EffectiveHooksDir {
-                    path: PathBuf::new(),
-                    scope: HooksDirScope::Disabled,
-                });
-            }
-            let path = if Path::new(&value).is_relative() {
-                root.join(value)
-            } else {
-                PathBuf::from(value)
-            };
-            return Ok(EffectiveHooksDir { path, scope });
+            return Ok(Some(scope_hooks_dir(value, root, scope)));
         }
     }
-    Ok(EffectiveHooksDir {
-        path: root.join(".git/hooks"),
-        scope: HooksDirScope::Default,
-    })
+    Ok(None)
+}
+
+/// Interpret one non-optional `core.hooksPath` value: the empty string
+/// disables hooks entirely; relative paths resolve against `root`.
+fn scope_hooks_dir(value: String, root: &Path, scope: HooksDirScope) -> EffectiveHooksDir {
+    if value.is_empty() {
+        return EffectiveHooksDir {
+            path: PathBuf::new(),
+            scope: HooksDirScope::Disabled,
+        };
+    }
+    let path = if Path::new(&value).is_relative() {
+        root.join(value)
+    } else {
+        PathBuf::from(value)
+    };
+    EffectiveHooksDir { path, scope }
 }
 
 /// Query `core.hooksPath` at one config scope; `Ok(None)` when unset.
@@ -110,25 +128,28 @@ fn query_hooks_path(
     scope_args: &[&str],
     envs: &[(String, String)],
 ) -> Result<Option<String>, GitHooksError> {
-    // Anchored at `root`: strip hook-context variables (git exports
-    // GIT_DIR to hook processes, and this suite runs inside hooks during
-    // testing) so the query reads the repository at `root`, never the
-    // ambient GIT_DIR's repository. Same rationale as the fixture guard.
-    let output = hooks_path_command(root, scope_args, envs)
+    let output = run_hooks_path_query(root, scope_args, envs)?;
+    // Non-zero exit means the config is unset at this scope.
+    Ok(if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        None
+    })
+}
+
+/// Spawn the scope query, surfacing spawn failures as `Io` at `root`.
+fn run_hooks_path_query(
+    root: &Path,
+    scope_args: &[&str],
+    envs: &[(String, String)],
+) -> Result<std::process::Output, GitHooksError> {
+    hooks_path_command(root, scope_args, envs)
         .output()
         .map_err(|source| GitHooksError::Io {
             path: root.to_path_buf(),
             message: "failed to run `git config core.hooksPath`".to_string(),
             source,
-        })?;
-    // Non-zero exit means the config is unset at this scope.
-    if output.status.success() {
-        Ok(Some(
-            String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        ))
-    } else {
-        Ok(None)
-    }
+        })
 }
 
 /// Build the scope-anchored `git config core.hooksPath` query.

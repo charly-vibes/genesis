@@ -1,7 +1,7 @@
 //! Drift-check and evals-adoption filesystem tests (split from tests.rs for
 //! the pretender file-lines and lazy-cluster budget).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::managed_block::{BlockDef, BlockInjector, BlockRegistry, content_sha8};
@@ -19,6 +19,17 @@ fn write_repo(files: &[(&str, &str)]) -> PathBuf {
     let path = dir.path().to_path_buf();
     std::mem::forget(dir);
     path
+}
+
+/// Inject a provenance-stamped `WAI` block holding `content` into
+/// `root/AGENTS.md` via the real injector.
+fn inject_block(root: &Path, content: &str) {
+    let mut reg = BlockRegistry::new();
+    reg.register(BlockDef::new("WAI"));
+    let injector = BlockInjector::new(reg).with_provenance("genesis");
+    injector
+        .inject(&root.join("AGENTS.md"), "WAI", content)
+        .require("value");
 }
 
 #[test]
@@ -106,13 +117,8 @@ fn test_drift_reported_with_file_block_and_fix() {
 #[test]
 fn test_current_block_no_finding() {
     let expected = "# generated\ncontent";
-    let mut reg = BlockRegistry::new();
-    reg.register(BlockDef::new("WAI"));
-    let injector = BlockInjector::new(reg).with_provenance("genesis");
     let root = write_repo(&[("AGENTS.md", "# head\n")]);
-    injector
-        .inject(&root.join("AGENTS.md"), "WAI", expected)
-        .require("value");
+    inject_block(&root, expected);
     let check = ManagedBlockDrift::new(vec![drift_target("AGENTS.md", expected, "my-tool init")]);
     assert!(check.run(&root).require("value").is_empty());
 }
@@ -137,13 +143,8 @@ fn test_footerless_drift_full_text_fallback() {
 #[test]
 fn test_hand_edited_block_is_finding_not_crash() {
     let expected = "# generated\ncontent";
-    let mut reg = BlockRegistry::new();
-    reg.register(BlockDef::new("WAI"));
-    let injector = BlockInjector::new(reg).with_provenance("genesis");
     let root = write_repo(&[("AGENTS.md", "# head\n")]);
-    injector
-        .inject(&root.join("AGENTS.md"), "WAI", expected)
-        .require("value");
+    inject_block(&root, expected);
     // Hand-edit: markers intact, body changed, footer untouched.
     let edited = std::fs::read_to_string(root.join("AGENTS.md"))
         .require("value")

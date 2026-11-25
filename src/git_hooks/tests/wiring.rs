@@ -2,28 +2,45 @@
 
 use super::*;
 
+/// Fixture with no `lefthook.yml` (framework detection must fail).
+fn built_fixture() -> Fixture {
+    match Fixture::new().build() {
+        Ok(f) => f,
+        Err(e) => panic!("fixture build failed: {e}"),
+    }
+}
+
+/// Wire `stage` on `root`, failing the test on error.
+fn wire(root: &Path, stage: lefthook::Stage) {
+    lefthook::ensure_wired(root, stage, &ah_block(), ah_content()).require("value");
+}
+
+/// Read back the wired `.yml` config.
+fn wired_config(root: &Path) -> String {
+    std::fs::read_to_string(root.join("lefthook.yml")).require("value")
+}
+
+/// The managed block verbatim, as it must appear in the config.
+fn block_text() -> String {
+    format!(
+        "{}{}{}",
+        ah_block().start_marker,
+        ah_content(),
+        ah_block().end_marker
+    )
+}
+
 #[test]
 fn ensure_wired_nests_block_inside_existing_commands_mapping() {
     // genesis-r99: lefthook silently ignores stage-level unknown
     // keys — the block MUST land inside the stage's `commands:`
     // mapping, and the stage must not gain a duplicate key.
     let fixture = config_fixture(basic_config());
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
-    let block_text = format!(
-        "{}{}{}",
-        ah_block().start_marker,
-        ah_content(),
-        ah_block().end_marker
-    );
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    let after = wired_config(fixture.root());
     let expected = format!(
-        "pre-commit:\n  commands:\n{block_text}\n{}",
+        "pre-commit:\n  commands:\n{}\n{}",
+        block_text(),
         &basic_config()["pre-commit:\n  commands:\n".len()..]
     );
     assert_eq!(after, expected);
@@ -33,25 +50,12 @@ fn ensure_wired_nests_block_inside_existing_commands_mapping() {
 fn ensure_wired_emits_commands_mapping_when_stage_lacks_one() {
     // Stage exists but has no `commands:` key: create it, then the
     // block, so the wired command is a real lefthook command.
-    let config = "pre-commit:\n  skip: true\n";
-    let fixture = config_fixture(config);
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
-    let block_text = format!(
-        "{}{}{}",
-        ah_block().start_marker,
-        ah_content(),
-        ah_block().end_marker
-    );
+    let fixture = config_fixture("pre-commit:\n  skip: true\n");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    let after = wired_config(fixture.root());
     // `commands:` is emitted right after the anchor; existing stage
     // children (e.g. `skip:`) follow the block, still stage-level.
-    let expected = format!("pre-commit:\n  commands:\n{block_text}\n  skip: true\n");
+    let expected = format!("pre-commit:\n  commands:\n{}\n  skip: true\n", block_text());
     assert_eq!(after, expected);
 }
 
@@ -60,27 +64,11 @@ fn ensure_wired_creates_missing_stage_section() {
     // Config has only a pre-commit section; wiring pre-push must
     // append the missing stage section containing the block.
     let config = "pre-commit:\n  commands:\n    lint:\n      run: lint\n";
-    let fixture = match Fixture::new().build() {
-        Ok(f) => f,
-        Err(e) => panic!("fixture build failed: {e}"),
-    };
-    std::fs::write(fixture.root().join("lefthook.yml"), config).require("value");
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PrePush,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
-    let block_text = format!(
-        "{}{}{}",
-        ah_block().start_marker,
-        ah_content(),
-        ah_block().end_marker
-    );
+    let fixture = config_fixture(config);
+    wire(fixture.root(), lefthook::Stage::PrePush);
+    let after = wired_config(fixture.root());
     assert!(after.starts_with(config));
-    assert!(after.contains(&format!("\npre-push:\n  commands:\n{block_text}\n")));
+    assert!(after.contains(&format!("\npre-push:\n  commands:\n{}\n", block_text())));
 }
 
 #[test]
@@ -91,22 +79,10 @@ fn ensure_wired_wires_both_stages_of_a_dual_section_config() {
     // not column-0 keys, so a stage section spans an injected block and
     // the per-section check is exact.
     let fixture = config_fixture(basic_config());
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PrePush,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    wire(fixture.root(), lefthook::Stage::PrePush);
 
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
+    let after = wired_config(fixture.root());
     let push_section = &after[after.find("pre-push:").expect("pre-push section stays")..];
     assert!(
         push_section.contains("run: ah check"),
@@ -122,32 +98,17 @@ fn ensure_wired_wires_both_stages_of_a_dual_section_config() {
 #[test]
 fn ensure_wired_is_idempotent_when_content_present() {
     let fixture = config_fixture(basic_config());
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let once = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let twice = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    let once = wired_config(fixture.root());
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    let twice = wired_config(fixture.root());
     assert_eq!(once, twice);
     assert_eq!(twice.matches("AH:START").count(), 1);
 }
 
 #[test]
 fn ensure_wired_errors_on_missing_config_and_never_creates_one() {
-    let fixture = match Fixture::new().build() {
-        Ok(f) => f,
-        Err(e) => panic!("fixture build failed: {e}"),
-    };
+    let fixture = built_fixture();
     let err = lefthook::ensure_wired(
         fixture.root(),
         lefthook::Stage::PreCommit,
@@ -166,20 +127,10 @@ fn ensure_wired_errors_on_missing_config_and_never_creates_one() {
 
 #[test]
 fn ensure_wired_prefers_yml_when_both_exist() {
-    let fixture = match Fixture::new().build() {
-        Ok(f) => f,
-        Err(e) => panic!("fixture build failed: {e}"),
-    };
-    std::fs::write(fixture.root().join("lefthook.yml"), basic_config()).require("value");
+    let fixture = config_fixture(basic_config());
     std::fs::write(fixture.root().join("lefthook.yaml"), "other: file\n").require("value");
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let yml = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    let yml = wired_config(fixture.root());
     let yaml = std::fs::read_to_string(fixture.root().join("lefthook.yaml")).require("value");
     assert!(yml.contains("AH:START"), ".yml should be modified");
     assert_eq!(yaml, "other: file\n", ".yaml must be ignored (D6)");
@@ -200,8 +151,11 @@ fn ensure_wired_errors_unmodified_on_quoted_stage_key() {
         matches!(err, GitHooksError::UnanchorableLefthookConfig { .. }),
         "got: {err}"
     );
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
-    assert_eq!(after, quoted, "config must not be modified");
+    assert_eq!(
+        wired_config(fixture.root()),
+        quoted,
+        "config must not be modified"
+    );
 }
 
 #[test]
@@ -211,14 +165,8 @@ fn ensure_wired_anchors_past_comment_lines_mentioning_the_stage() {
     // stage is anchorable.
     let config = "# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n    test:\n      run: test\n";
     let fixture = config_fixture(config);
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    let after = wired_config(fixture.root());
     assert!(after.contains("AH:START"), "block should be wired");
     assert!(
         after.starts_with("# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n<!--"),
@@ -230,29 +178,18 @@ fn ensure_wired_anchors_past_comment_lines_mentioning_the_stage() {
 fn ensure_wired_treats_comment_only_stage_mention_as_absent() {
     // Stage name appears only in a comment: not present (D6 refusal
     // must not fire), so the section is appended.
-    let config = "# no pre-commit stage yet, see docs\nother: key\n";
-    let fixture = config_fixture(config);
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
-    let after = std::fs::read_to_string(fixture.root().join("lefthook.yml")).require("value");
-    assert!(after.contains("AH:START"), "block should be wired");
+    let fixture = config_fixture("# no pre-commit stage yet, see docs\nother: key\n");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
+    assert!(
+        wired_config(fixture.root()).contains("AH:START"),
+        "block should be wired"
+    );
 }
 
 #[test]
 fn injected_block_is_recognized_by_managed_block_reader() {
     let fixture = config_fixture(basic_config());
-    lefthook::ensure_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        &ah_block(),
-        ah_content(),
-    )
-    .require("value");
+    wire(fixture.root(), lefthook::Stage::PreCommit);
     let mut reg = crate::managed_block::BlockRegistry::new();
     reg.register(ah_block());
     let injector = crate::managed_block::BlockInjector::new(reg);
@@ -288,10 +225,7 @@ fn is_wired_false_when_stage_missing_or_no_config() {
         lefthook::Stage::PreCommit,
         "ah check"
     ));
-    let empty = match Fixture::new().build() {
-        Ok(f) => f,
-        Err(e) => panic!("fixture build failed: {e}"),
-    };
+    let empty = built_fixture();
     assert!(!lefthook::is_wired(
         empty.root(),
         lefthook::Stage::PreCommit,

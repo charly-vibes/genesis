@@ -41,12 +41,16 @@ fn map_root_error(error: crate::git::GitError) -> GitHooksError {
             message,
             source,
         },
-        // The root walk never spawns git, so `Git`/`Spawn` are unreachable;
-        // still map them exhaustively onto `Io` for future-proofing.
-        other => GitHooksError::Io {
-            path: PathBuf::from("."),
-            message: other.to_string(),
-            source: std::io::Error::other(other.to_string()),
-        },
+        other => map_unexpected_root_error(other),
+    }
+}
+
+/// The root walk never spawns git, so `Git`/`Spawn` are unreachable;
+/// still map them exhaustively onto `Io` for future-proofing.
+fn map_unexpected_root_error(other: crate::git::GitError) -> GitHooksError {
+    GitHooksError::Io {
+        path: PathBuf::from("."),
+        message: other.to_string(),
+        source: std::io::Error::other(other.to_string()),
     }
 }

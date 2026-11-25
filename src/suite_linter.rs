@@ -105,88 +105,11 @@ pub trait LintCheck: Send + Sync {
     fn run(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>>;
 }
 
-// ── LinterRegistry ────────────────────────────────────────────────────
-
-/// Adoption probe for the suite-wide evals guidelines
-/// (`add-evals-guidelines`, task 5.3): verifies that a consumer repo's
-/// eval docs reference the genesis guideline pages (the report contract
-/// and the tier-ladder how-tos). Advisory — an adoption probe, not a gate.
-/// Register it in the consumer's linter registry at startup.
-pub struct EvalsGuidelinesAdoption;
-
-/// Marker strings that count as "references the guidelines" — any one hit
-/// per eval doc satisfies the probe.
-const EVALS_GUIDELINE_MARKERS: &[&str] = &[
-    "eval-report",
-    "evals-guidelines",
-    "evals-ci",
-    "why-weak-readers",
-];
-
-impl LintCheck for EvalsGuidelinesAdoption {
-    fn name(&self) -> &'static str {
-        "genesis.evals_guidelines"
-    }
-
-    fn description(&self) -> &'static str {
-        "eval docs reference the suite-wide evals-guidelines pages"
-    }
-
-    fn run(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
-        let docs = repo_root.join("docs");
-        if !docs.is_dir() {
-            return Ok(vec![LintResult::new(
-                "no eval docs found — evals-guidelines not yet adopted \
-                 (battery not started)",
-                Severity::Advisory,
-            )]);
-        }
-
-        let eval_docs = collect_eval_docs(&docs)?;
-
-        if eval_docs.is_empty() {
-            return Ok(vec![LintResult::new(
-                "no eval docs found — evals-guidelines not yet adopted \
-                 (battery not started)",
-                Severity::Advisory,
-            )]);
-        }
-
-        let mut findings = Vec::new();
-        for doc in eval_docs {
-            if let Some(finding) = check_eval_doc(repo_root, &doc) {
-                findings.push(finding);
-            }
-        }
-        Ok(findings)
-    }
-}
-
-/// Advisory finding when `doc` does not reference any guideline marker.
-fn check_eval_doc(repo_root: &Path, doc: &std::path::Path) -> Option<LintResult> {
-    let content = std::fs::read_to_string(doc)
-        .map_err(|e| format!("cannot read {}: {e}", doc.display()))
-        .ok()?;
-    let references = EVALS_GUIDELINE_MARKERS.iter().any(|m| content.contains(m));
-    if references {
-        return None;
-    }
-    let rel = doc.strip_prefix(repo_root).unwrap_or(doc).display();
-    Some(LintResult::with_fix(
-        format!(
-            "{rel} does not reference the suite-wide evals-guidelines pages \
-             (report contract / tier ladder) — cross-tool results are not \
-             comparable without the shared conventions"
-        ),
-        Severity::Advisory,
-        "see genesis docs: how-to/evals.md, how-to/evals-ci.md, \
-         reference/eval-report.md",
-    ))
-}
-
 mod drift;
+mod evals;
 
 pub use drift::{DriftTarget, ManagedBlockDrift};
+pub use evals::EvalsGuidelinesAdoption;
 
 // ── LinterRegistry ────────────────────────────────────────────────────
 
@@ -295,28 +218,13 @@ impl LinterRegistry {
 mod tests;
 
 #[cfg(test)]
+#[path = "suite_linter/tests_registry.rs"]
+mod tests_registry;
+
+#[cfg(test)]
 #[path = "suite_linter/tests_drift.rs"]
 mod tests_drift;
 
-/// Collect `evals*.md` files under `docs/`, any depth.
-fn collect_eval_docs(
-    docs: &std::path::Path,
-) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
-    let mut eval_docs: Vec<std::path::PathBuf> = Vec::new();
-    let mut stack = vec![docs.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.starts_with("evals")
-                && name.ends_with(".md")
-            {
-                eval_docs.push(path);
-            }
-        }
-    }
-    Ok(eval_docs)
-}
+#[cfg(test)]
+#[path = "suite_linter/tests_support.rs"]
+mod tests_support;

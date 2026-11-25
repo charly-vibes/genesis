@@ -8,8 +8,8 @@ mod inject;
 
 use super::GitHooksError;
 use crate::managed_block::BlockDef;
-use anchor::{find_anchor, section};
-use inject::{append_missing_stage, marker_outcome, wired_at_anchor};
+use anchor::{find_anchor, line_end_after, section};
+use inject::{Wiring, ensure_trailing_newline, wire_command};
 use std::path::{Path, PathBuf};
 
 /// A lefthook config stage (design D5b: config vocabulary, not hook
@@ -53,21 +53,25 @@ fn config_path(root: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Resolve the config path or fail — never creates a config (design D4).
+fn config_path_or_error(root: &Path) -> Result<PathBuf, GitHooksError> {
+    config_path(root).ok_or_else(|| GitHooksError::MissingLefthookConfig {
+        root: root.to_path_buf(),
+    })
+}
+
 pub fn ensure_wired(
     root: &Path,
     stage: Stage,
     block: &BlockDef,
     content: &str,
 ) -> Result<WiredOutcome, GitHooksError> {
-    let path = config_path(root).ok_or_else(|| GitHooksError::MissingLefthookConfig {
-        root: root.to_path_buf(),
-    })?;
+    let path = config_path_or_error(root)?;
     let existing = read_config(&path)?;
     let block_text = format!("{}{}{}", block.start_marker, content, block.end_marker);
-
     match find_anchor(&existing, stage) {
         Err(()) => Err(unanchorable_error(&path, stage)),
-        Ok(Some(offset)) => wire_into_stage(&path, &existing, offset, stage, &block_text, content),
+        Ok(Some(offset)) => wire_into_stage(&path, &existing, offset, &block_text, content),
         Ok(None) => append_stage_with_commands(&path, &existing, stage, &block_text),
     }
 }
@@ -102,42 +106,44 @@ fn wire_into_stage(
     path: &Path,
     existing: &str,
     offset: usize,
-    _stage: Stage,
     block_text: &str,
     content: &str,
 ) -> Result<WiredOutcome, GitHooksError> {
-    if section(existing, offset).contains(content) {
+    let stage_section = section(existing, offset);
+    if stage_section.contains(content) {
         return Ok(WiredOutcome::AlreadyWired);
     }
-    // genesis-r99: lefthook only honors commands declared under the
-    // stage's `commands:` mapping — nest the block inside `commands:`,
-    // emitting the mapping after the stage anchor when the stage lacks
-    // one. Caller content is inserted verbatim: it is written for the
-    // `commands:` child level.
-    let stage_section = section(existing, offset);
-    let anchor_line_end = existing[offset..]
-        .find('\n')
-        .map_or(existing.len(), |nl| offset + nl + 1);
-    let (insert_at, prefix) = match commands_key_end(stage_section) {
-        // `commands_end` is relative to the stage section: re-base it
-        // onto the full config before splicing.
-        Some(end) => (offset + end, ""),
-        None => (anchor_line_end, "  commands:\n"),
-    };
-    let updated = splice_with_prefix(existing, insert_at, prefix, block_text);
+    let updated = splice_into_stage(existing, offset, stage_section, block_text);
     write_config(path, &updated)?;
     Ok(WiredOutcome::Injected)
 }
 
-/// Byte offset just past the stage section's `commands:` line, if any.
+/// Splice `block_text` into the stage section `sec`: after the existing
+/// `commands:` line when present (its offset is relative to the stage
+/// section and re-based onto the full config), otherwise after the
+/// anchor line with a `commands:` prefix.
+///
+/// genesis-r99: lefthook only honors commands declared under the
+/// stage's `commands:` mapping — nest the block inside `commands:`,
+/// emitting the mapping after the stage anchor when the stage lacks
+/// one. Caller content is inserted verbatim: it is written for the
+/// `commands:` child level.
+fn splice_into_stage(existing: &str, offset: usize, sec: &str, block_text: &str) -> String {
+    let anchor_line_end = line_end_after(existing, offset);
+    let (insert_at, prefix) = match commands_key_end(sec) {
+        Some(end) => (offset + end, ""),
+        None => (anchor_line_end, "  commands:\n"),
+    };
+    splice_with_prefix(existing, insert_at, prefix, block_text)
+}
+
+/// Byte offset just past the stage section's `commands:` line, if any
+/// (skips the anchor line itself).
 fn commands_key_end(stage_section: &str) -> Option<usize> {
     let mut scanned = 0usize;
     for (i, line) in stage_section.split_inclusive('\n').enumerate() {
-        if i > 0 {
-            let trimmed = line.trim_end();
-            if trimmed.trim() == "commands:" && !trimmed.starts_with('#') {
-                return Some(scanned + line.len());
-            }
+        if i > 0 && line.trim() == "commands:" {
+            return Some(scanned + line.len());
         }
         scanned += line.len();
     }
@@ -174,10 +180,7 @@ fn append_stage_with_commands(
     stage: Stage,
     block_text: &str,
 ) -> Result<WiredOutcome, GitHooksError> {
-    let mut updated = existing.to_string();
-    if !updated.ends_with('\n') {
-        updated.push('\n');
-    }
+    let mut updated = ensure_trailing_newline(existing);
     updated.push_str(stage.key());
     updated.push_str(":\n  commands:\n");
     updated.push_str(block_text);
@@ -225,25 +228,17 @@ pub fn ensure_command_wired(
     run: &str,
     block: &BlockDef,
 ) -> Result<WiredOutcome, GitHooksError> {
-    let path = config_path(root).ok_or_else(|| GitHooksError::MissingLefthookConfig {
-        root: root.to_path_buf(),
-    })?;
-    let existing = std::fs::read_to_string(&path).map_err(|source| GitHooksError::Io {
-        path: path.clone(),
-        message: "failed to read lefthook config".to_string(),
-        source,
-    })?;
-
-    // Idempotence at file level; exactly one marker = unknown state.
-    if let Some(outcome) = marker_outcome(&path, &existing, block)? {
-        return Ok(outcome);
-    }
-
-    match find_anchor(&existing, stage) {
-        Err(()) => Err(unanchorable_error(&path, stage)),
-        Ok(Some(anchor)) => wired_at_anchor(&path, &existing, anchor, stage, command, run, block),
-        Ok(None) => append_missing_stage(&path, &existing, stage, command, run, block),
-    }
+    let path = config_path_or_error(root)?;
+    let existing = read_config(&path)?;
+    let wiring = Wiring {
+        path: &path,
+        existing: &existing,
+        stage,
+        command,
+        run,
+        block,
+    };
+    wire_command(&wiring)
 }
 
 /// Report whether `command` appears in a stage's section of the

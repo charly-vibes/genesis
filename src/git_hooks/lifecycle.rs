@@ -50,24 +50,29 @@ fn apply_marker(script: &str, marker: &str) -> String {
 
 fn set_executable(path: &Path) -> Result<(), GitHooksError> {
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(path)
-            .map_err(|source| GitHooksError::Io {
-                path: path.to_path_buf(),
-                message: "failed to stat hook".to_string(),
-                source,
-            })?
-            .permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(path, perms).map_err(|source| GitHooksError::Io {
-            path: path.to_path_buf(),
-            message: "failed to chmod hook".to_string(),
-            source,
-        })?;
-    }
+    set_executable_unix(path)?;
     #[cfg(not(unix))]
     let _ = path;
+    Ok(())
+}
+
+/// Mode 0755: git refuses to run hooks that are not executable.
+#[cfg(unix)]
+fn set_executable_unix(path: &Path) -> Result<(), GitHooksError> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = std::fs::metadata(path)
+        .map_err(|source| GitHooksError::Io {
+            path: path.to_path_buf(),
+            message: "failed to stat hook".to_string(),
+            source,
+        })?
+        .permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(path, perms).map_err(|source| GitHooksError::Io {
+        path: path.to_path_buf(),
+        message: "failed to chmod hook".to_string(),
+        source,
+    })?;
     Ok(())
 }
 
@@ -106,19 +111,24 @@ pub(crate) fn install_with_env(
 ) -> Result<PathBuf, GitHooksError> {
     let path = hook_path_with_env(root, &hook_name, envs)?;
     ensure_writable(&path, marker)?;
+    create_hook_parent_dir(&path)?;
+    std::fs::write(&path, apply_marker(script, marker))
+        .map_err(|source| io_err(&path, "failed to write hook", source))?;
+    set_executable(&path)?;
+    Ok(path)
+}
+
+/// Create the hooks directory when missing (e.g. fresh `.git/hooks`).
+fn create_hook_parent_dir(path: &Path) -> Result<(), GitHooksError> {
     let parent = path.parent().ok_or_else(|| {
         io_err(
-            &path,
+            path,
             "invalid hook path (no parent directory)",
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "no parent"),
         )
     })?;
     std::fs::create_dir_all(parent)
-        .map_err(|source| io_err(parent, "failed to create hook dir", source))?;
-    std::fs::write(&path, apply_marker(script, marker))
-        .map_err(|source| io_err(&path, "failed to write hook", source))?;
-    set_executable(&path)?;
-    Ok(path)
+        .map_err(|source| io_err(parent, "failed to create hook dir", source))
 }
 
 /// Refuse to overwrite a foreign hook (design D6: empty files are foreign).
