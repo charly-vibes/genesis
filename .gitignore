@@ -81,3 +81,7 @@ docs/src/specs/
 
 # legacy repo-local whisper workspace (canonical store lives in ~/.whisper)
 .whisper/
+
+# kaya research compiler runtime state (ledger itself is committed)
+.kaya/build-state.json
+.kaya/capture.lock

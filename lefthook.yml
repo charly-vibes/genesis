@@ -15,6 +15,10 @@ pre-commit:
 
   parallel: true
   commands:
+# sad:managed:start
+    sad-check:
+      run: sad check
+# sad:managed:end
     # ddl:managed:start (pre-commit)
     ddl-ah-check:
       run: ah check
@@ -36,6 +40,10 @@ pre-commit:
 
 pre-push:
   commands:
+# sad:managed:start
+    sad-check:
+      run: sad check
+# sad:managed:end
     # ddl:managed:start (pre-push)
     ddl-ah-check:
       run: ah check
