@@ -75,3 +75,9 @@ docs/src/specs/
 
 # tool data dirs (managed by `ddl init --gates`)
 .pretender/
+
+# wai pipeline run logs
+.wai/projects/*/runs/
+
+# legacy repo-local whisper workspace (canonical store lives in ~/.whisper)
+.whisper/
