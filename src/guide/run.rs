@@ -196,12 +196,8 @@ impl Guide {
 
     /// Like [`Guide::run`], but writes to the provided streams.
     ///
-    /// Enables testing of the internal-failure (`exit: 2`) path without
-    /// replacing process-level streams. See [`Guide::run`] for the
-    /// exit-code contract.
-    ///
-    /// Diagnostics on emission failure are best-effort: they are written
-    /// to the provided `stderr`, so a broken stderr loses them silently.
+    /// See [`Guide::run`] for the exit-code contract; emission failures
+    /// exit `2` and are reported best-effort on `stderr`.
     pub fn run_with_writers<T, F>(
         &self,
         f: F,
@@ -212,21 +208,14 @@ impl Guide {
         T: std::fmt::Debug,
         F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
     {
-        match f() {
-            Ok(output) => {
-                if let Err(e) = output.print(self.verbosity, stdout, stderr) {
-                    let _ = writeln!(stderr, "error printing output: {}", e);
-                    // Internal failure (I/O), not a user-facing error.
-                    return 2;
-                }
-                if output.is_error { 1 } else { 0 }
-            }
-            Err(err) => {
-                let sink = ErrorSink::new(&self.name).with_verbosity(self.verbosity);
-                sink.handle(err.as_ref(), stderr);
-                1
-            }
+        let output = match f() {
+            Ok(output) => output,
+            Err(err) => return self.handler_failure(err.as_ref(), stderr),
+        };
+        if let Err(e) = output.print(self.verbosity, stdout, stderr) {
+            return self.internal_failure(e, stderr);
         }
+        i32::from(output.is_error)
     }
 
     /// Run a command handler, dispatching to human or JSON output.
@@ -244,12 +233,8 @@ impl Guide {
 
     /// Like [`Guide::run_formatted`], but writes to the provided streams.
     ///
-    /// Enables testing of the internal-failure (`exit: 2`) path without
-    /// replacing process-level streams. See [`Guide::run`] for the
-    /// exit-code contract.
-    ///
-    /// Diagnostics on emission failure are best-effort: they are written
-    /// to the provided `stderr`, so a broken stderr loses them silently.
+    /// See [`Guide::run`] for the exit-code contract; emission failures
+    /// exit `2` and are reported best-effort on `stderr`.
     pub fn run_formatted_with_writers<T, F>(
         &self,
         format: OutputFormat,
@@ -261,51 +246,45 @@ impl Guide {
         T: std::fmt::Debug + serde::Serialize,
         F: FnOnce() -> Result<Output<T>, Box<dyn std::error::Error>>,
     {
-        match f() {
-            Ok(output) => {
-                if let Err(e) = output.emit(&self.version, format, self.verbosity, stdout, stderr) {
-                    let _ = writeln!(stderr, "error printing output: {}", e);
-                    // Internal failure (I/O), not a user-facing error.
-                    return 2;
-                }
-                if output.is_error { 1 } else { 0 }
-            }
-            Err(err) => {
-                let sink = ErrorSink::new(&self.name).with_verbosity(self.verbosity);
-                sink.handle(err.as_ref(), stderr);
-                1
-            }
+        let output = match f() {
+            Ok(output) => output,
+            Err(err) => return self.handler_failure(err.as_ref(), stderr),
+        };
+        if let Err(e) = self.emit_output(&output, format, stdout, stderr) {
+            return self.internal_failure(e, stderr);
         }
+        i32::from(output.is_error)
+    }
+
+    /// Emit via [`Output::emit`] with this guide's version and verbosity.
+    fn emit_output<T>(
+        &self,
+        output: &Output<T>,
+        format: OutputFormat,
+        stdout: &mut impl Write,
+        stderr: &mut impl Write,
+    ) -> std::io::Result<()>
+    where
+        T: std::fmt::Debug + serde::Serialize,
+    {
+        output.emit(&self.version, format, self.verbosity, stdout, stderr)
+    }
+
+    /// Emission I/O error: internal failure (`exit: 2`). Diagnostics are
+    /// best-effort — written to `stderr`, so a broken stderr loses them.
+    fn internal_failure(&self, e: std::io::Error, stderr: &mut impl Write) -> i32 {
+        let _ = writeln!(stderr, "error printing output: {}", e);
+        2
+    }
+
+    /// Handler error: report through the `ErrorSink` (`exit: 1`).
+    fn handler_failure(&self, err: &dyn std::error::Error, stderr: &mut impl Write) -> i32 {
+        self.error_sink().handle(err, stderr);
+        1
     }
 
     /// Create an `ErrorSink` configured for this tool.
     pub fn error_sink(&self) -> ErrorSink {
         ErrorSink::new(&self.name).with_verbosity(self.verbosity)
-    }
-}
-
-impl ErrorSink {
-    /// Set the verbosity level (fluent).
-    pub fn with_verbosity(mut self, verbosity: Verbosity) -> Self {
-        self.verbosity = verbosity;
-        self
-    }
-
-    /// Enable or disable scratch persistence (fluent).
-    pub fn with_scratch(mut self, enabled: bool) -> Self {
-        self.scratch = enabled;
-        self
-    }
-
-    /// Enable or disable suggestion footer (fluent).
-    pub fn with_suggest(mut self, enabled: bool) -> Self {
-        self.suggest = enabled;
-        self
-    }
-
-    /// Set the feedback subcommand name (fluent).
-    pub fn with_feedback(mut self, name: Option<&str>) -> Self {
-        self.feedback_subcommand = name.map(|s| s.to_string());
-        self
     }
 }

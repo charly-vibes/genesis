@@ -39,6 +39,10 @@ mod sections;
 mod tests;
 
 #[cfg(test)]
+#[path = "aix/tests_provenance.rs"]
+mod tests_provenance;
+
+#[cfg(test)]
 #[path = "aix/tests_sections.rs"]
 mod tests_sections;
 

@@ -123,27 +123,18 @@ impl ConfigError {
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigError::MissingFile { path, tool, .. } => {
-                write!(
-                    f,
-                    "config file not found: {} (tool: {})",
-                    path.display(),
-                    tool
-                )
-            }
+            ConfigError::MissingFile { path, tool, .. } => fmt_missing_file(f, path, tool),
             ConfigError::ParseError { path, detail, .. } => {
-                write!(f, "config parse error: {}: {}", path.display(), detail)
+                fmt_detail(f, "config parse error", path, detail)
             }
             ConfigError::ValidationError { path, detail, .. } => {
-                write!(f, "config validation error: {}: {}", path.display(), detail)
+                fmt_detail(f, "config validation error", path, detail)
             }
             ConfigError::TypeMismatch {
                 path,
                 expected,
                 actual,
-            } => {
-                write!(f, "{}", type_mismatch_message(path, expected, actual))
-            }
+            } => fmt_type_mismatch(f, path, expected, actual),
             ConfigError::IoError { path, source } => {
                 write!(f, "IO error for {}: {}", path.display(), source)
             }
@@ -151,9 +142,36 @@ impl std::fmt::Display for ConfigError {
     }
 }
 
+/// `"config file not found: <path> (tool: <tool>)"`.
+fn fmt_missing_file(f: &mut std::fmt::Formatter<'_>, path: &Path, tool: &str) -> std::fmt::Result {
+    write!(
+        f,
+        "config file not found: {} (tool: {})",
+        path.display(),
+        tool
+    )
+}
+
+/// `"<prefix>: <path>: <detail>"` — shape shared by parse and validation
+/// errors.
+fn fmt_detail(
+    f: &mut std::fmt::Formatter<'_>,
+    prefix: &str,
+    path: &Path,
+    detail: &str,
+) -> std::fmt::Result {
+    write!(f, "{}: {}: {}", prefix, path.display(), detail)
+}
+
 /// Human message for a type mismatch.
-fn type_mismatch_message(path: &Path, expected: &str, actual: &str) -> String {
-    format!(
+fn fmt_type_mismatch(
+    f: &mut std::fmt::Formatter<'_>,
+    path: &Path,
+    expected: &str,
+    actual: &str,
+) -> std::fmt::Result {
+    write!(
+        f,
         "config type mismatch for {}: expected {}, got {}",
         path.display(),
         expected,

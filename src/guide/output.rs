@@ -80,19 +80,20 @@ impl<T: Debug> Output<T> {
         stdout: &mut impl Write,
         stderr: &mut impl Write,
     ) -> std::io::Result<()> {
-        // Always show errors.
+        self.print_errors(stderr)?;
+        if current_verbosity.should_show(self.verbosity) {
+            writeln!(stdout, "{:?}", self.data)?;
+        }
+        self.print_secondary(current_verbosity, stdout, stderr)
+    }
+
+    /// Error warnings go to stderr regardless of verbosity or format.
+    fn print_errors(&self, stderr: &mut impl Write) -> std::io::Result<()> {
         if self.is_error {
             for warning in &self.warnings {
                 writeln!(stderr, "{}", warning)?;
             }
         }
-
-        // Show data if verbosity threshold is met.
-        if current_verbosity.should_show(self.verbosity) {
-            writeln!(stdout, "{:?}", self.data)?;
-        }
-
-        self.print_secondary(current_verbosity, stdout, stderr)?;
         Ok(())
     }
 
@@ -127,22 +128,23 @@ impl<T: Debug> Output<T> {
     where
         T: Serialize,
     {
-        let kind = if self.is_error {
+        let hints = self.envelope_hints();
+        crate::envelope::Envelope::success(
+            cli_version,
+            self.envelope_kind(),
+            &self.data,
+            self.envelope_warnings(),
+            hints.unwrap_or_default(),
+        )
+    }
+
+    /// The envelope kind matching this output's error state.
+    fn envelope_kind(&self) -> crate::envelope::EnvelopeKind {
+        if self.is_error {
             crate::envelope::EnvelopeKind::Error
         } else {
             crate::envelope::EnvelopeKind::Ok
-        };
-
-        let hints = self.envelope_hints();
-        let warnings = self.envelope_warnings();
-
-        crate::envelope::Envelope::success(
-            cli_version,
-            kind,
-            &self.data,
-            warnings,
-            hints.unwrap_or_default(),
-        )
+        }
     }
 
     /// The next-step suggestion as envelope hints, if any.
@@ -193,18 +195,24 @@ impl<T: Debug> Output<T> {
     {
         match format {
             OutputFormat::Human => self.print(current_verbosity, stdout, stderr),
-            OutputFormat::Json => {
-                // Always print errors to stderr even in JSON mode.
-                if self.is_error {
-                    for warning in &self.warnings {
-                        writeln!(stderr, "{}", warning)?;
-                    }
-                }
-                let envelope = self.to_envelope(cli_version);
-                let json = serde_json::to_string(&envelope).map_err(std::io::Error::other)?;
-                writeln!(stdout, "{}", json)?;
-                Ok(())
-            }
+            OutputFormat::Json => self.emit_json(cli_version, stdout, stderr),
         }
+    }
+
+    /// JSON emission: errors are always printed to stderr even in JSON
+    /// mode, then the envelope serializes as one JSON line on stdout.
+    fn emit_json(
+        &self,
+        cli_version: &str,
+        stdout: &mut impl Write,
+        stderr: &mut impl Write,
+    ) -> std::io::Result<()>
+    where
+        T: Serialize,
+    {
+        self.print_errors(stderr)?;
+        let envelope = self.to_envelope(cli_version);
+        let json = serde_json::to_string(&envelope).map_err(std::io::Error::other)?;
+        writeln!(stdout, "{}", json)
     }
 }

@@ -13,6 +13,26 @@ fn tmp() -> TempDir {
     TempDir::new().expect("tempdir")
 }
 
+#[path = "tests_store_lifecycle.rs"]
+mod lifecycle;
+
+/// Registry with both standard fixtures (`mock`, `app`) registered.
+fn two_tool_registry() -> ConfigRegistry {
+    let mut reg = ConfigRegistry::new();
+    reg.register::<MockConfig>("mock", ".mock/config.toml");
+    reg.register::<ValidatedConfig>("app", "app.toml");
+    reg
+}
+
+/// Whether `tool_name` appears among `discovered` as found.
+fn is_found(discovered: &[DiscoveredConfig], tool_name: &str) -> bool {
+    discovered
+        .iter()
+        .find(|d| d.tool_name == tool_name)
+        .require("value")
+        .found
+}
+
 // ── ConfigStore: task 4.1–4.6 ─────────────────────────────────────
 
 /// A config whose validation rejects empty names.
@@ -114,28 +134,15 @@ fn test_config_store_discover_all_found() {
 #[test]
 fn test_config_store_discover_some_missing() {
     let dir = tmp();
-    let mut reg = ConfigRegistry::new();
-    reg.register::<MockConfig>("mock", ".mock/config.toml");
-    reg.register::<ValidatedConfig>("app", "app.toml");
+    let reg = two_tool_registry();
 
     // Only create one config
-    let mock = MockConfig::default();
-    mock.write(dir.path()).require("value");
+    MockConfig::default().write(dir.path()).require("value");
 
     let discovered = ConfigStore::discover(dir.path(), &reg);
     assert_eq!(discovered.len(), 2);
-
-    let mock_dc = discovered
-        .iter()
-        .find(|d| d.tool_name == "mock")
-        .require("value");
-    assert!(mock_dc.found);
-
-    let app_dc = discovered
-        .iter()
-        .find(|d| d.tool_name == "app")
-        .require("value");
-    assert!(!app_dc.found);
+    assert!(is_found(&discovered, "mock"));
+    assert!(!is_found(&discovered, "app"));
 }
 
 #[test]
@@ -178,13 +185,8 @@ fn test_config_store_get_type_mismatch() {
 #[test]
 fn test_config_store_managed_block() {
     let dir = tmp();
-    let mut reg = ConfigRegistry::new();
-    reg.register::<MockConfig>("mock", ".mock/config.toml");
-    reg.register::<ValidatedConfig>("app", "app.toml");
-
-    // Only create mock config
-    let config = MockConfig::default();
-    config.write(dir.path()).require("value");
+    let reg = two_tool_registry();
+    MockConfig::default().write(dir.path()).require("value");
 
     let store = ConfigStore::new(reg);
     let block = store.managed_block(dir.path());
@@ -192,9 +194,7 @@ fn test_config_store_managed_block() {
     // Block should mention both tools
     assert!(block.contains("mock"));
     assert!(block.contains("app"));
-    // Mock should be found
     assert!(block.contains("✅ found"));
-    // App should be missing
     assert!(block.contains("❌ missing"));
 }
 
@@ -253,88 +253,4 @@ fn test_read_whitespace_only_file_returns_parse_error() {
         }
         e => panic!("expected ParseError for whitespace-only file, got: {:?}", e),
     }
-}
-
-// ── Integration: full lifecycle ───────────────────────────────────
-
-#[test]
-fn test_integration_full_lifecycle() {
-    let dir = tmp();
-
-    // 1. Create registry with two tools
-    let mut reg = ConfigRegistry::new();
-    reg.register::<MockConfig>("mock", ".mock/config.toml");
-    reg.register::<OtherConfig>("other", "other.toml");
-
-    // 2. Write configs
-    write_lifecycle_configs(dir.path());
-
-    // 3. Create store and discover
-    let store = ConfigStore::new(reg);
-    let discovered = ConfigStore::discover(dir.path(), store.registry());
-    assert_eq!(discovered.len(), 2);
-    assert!(discovered.iter().all(|d| d.found));
-
-    // 4. Read typed configs
-    let read_mock: MockConfig = store.get("mock", dir.path()).require("value");
-    let read_other: OtherConfig = store.get("other", dir.path()).require("value");
-    assert_round_trip(&read_mock, "lifecycle", &read_other, "example.com");
-
-    // 5. Generate managed block
-    let block = store.managed_block(dir.path());
-    assert!(block.contains("✅ found"));
-    assert!(block.contains("mock"));
-    assert!(block.contains("other"));
-}
-
-/// Both lifecycle round-trips: names must survive the write/read cycle.
-fn assert_round_trip(
-    mock: &MockConfig,
-    expected_mock_name: &str,
-    other: &OtherConfig,
-    expected_host: &str,
-) {
-    assert_eq!(mock.name, expected_mock_name);
-    assert_eq!(other.host, expected_host);
-    assert_eq!(other.port, 443);
-}
-
-/// The second lifecycle tool: an `other.toml` with host/port.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-struct OtherConfig {
-    host: String,
-    port: u16,
-}
-
-impl Default for OtherConfig {
-    fn default() -> Self {
-        Self {
-            host: "localhost".to_string(),
-            port: 8080,
-        }
-    }
-}
-
-impl ConfigFile for OtherConfig {
-    fn path(repo_root: &Path) -> PathBuf {
-        repo_root.join("other.toml")
-    }
-}
-
-/// Write both lifecycle configs under `root`.
-fn write_lifecycle_configs(root: &Path) {
-    MockConfig {
-        name: "lifecycle".to_string(),
-        version: 3,
-        enabled: true,
-    }
-    .write(root)
-    .require("write mock config");
-
-    OtherConfig {
-        host: "example.com".to_string(),
-        port: 443,
-    }
-    .write(root)
-    .require("write other config");
 }

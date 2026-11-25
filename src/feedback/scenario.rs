@@ -21,6 +21,21 @@ fn footer_hint_command(footer: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// The scenario's description: what ran, its exit code, and the footer.
+fn diagnose_description(
+    recorded_command: &Option<String>,
+    recorded_exit: Option<i32>,
+    footer_text: &str,
+) -> String {
+    match recorded_command {
+        Some(cmd) => format!(
+            "Reproduce and diagnose: `{cmd}` exited {}. {footer_text}",
+            recorded_exit.unwrap_or_default()
+        ),
+        None => format!("Reproduce and diagnose the recorded failure. {footer_text}"),
+    }
+}
+
 impl Scenario {
     /// Convert captured feedback context into a replayable regression
     /// scenario (design D4).
@@ -87,21 +102,35 @@ impl Scenario {
             .as_deref()
             .and_then(footer_hint_command);
         let footer_text = bundle.suggestion_footer.clone().unwrap_or_default();
+        let description = diagnose_description(&recorded_command, recorded_exit, &footer_text);
 
-        Self::new(
-            format!("feedback-{:x}", bundle.repro_hash),
-            match &recorded_command {
-                Some(cmd) => format!(
-                    "Reproduce and diagnose: `{cmd}` exited {}. {footer_text}",
-                    recorded_exit.unwrap_or_default()
-                ),
-                None => format!("Reproduce and diagnose the recorded failure. {footer_text}"),
-            },
-        )
-        .fixture_files_from(fixtures)
-        .check("reproduces-recorded-failure", move |result| {
-            verify_replayed_step(result, &recorded_command, recorded_exit, hint.as_deref())
-        })
+        Self::new(format!("feedback-{:x}", bundle.repro_hash), description)
+            .fixture_files_from(fixtures)
+            .check("reproduces-recorded-failure", move |result| {
+                verify_replayed_step(result, &recorded_command, recorded_exit, hint.as_deref())
+            })
+    }
+}
+
+/// The [`context::ContextBundle`] standing in for a scratch error record.
+/// The record's kind + timestamp form the repro hash: stable per failure
+/// signature, traceable back to the scratch file.
+fn recorded_bundle(tool_name: &str, record: scratch::ErrorRecord) -> context::ContextBundle {
+    let repro_hash = record_repro_hash(&record);
+    context::ContextBundle {
+        tool_name: tool_name.to_string(),
+        tool_version: "unknown".to_string(),
+        command: Some(record.argv.join(" ")),
+        exit_code: Some(record.exit),
+        suggestion_footer: record.footer,
+        os_arch: "unknown/unknown".to_string(),
+        shell: None,
+        gh_version: None,
+        git_remote: None,
+        git_branch: None,
+        git_dirty: None,
+        repo_state: vec![],
+        repro_hash,
     }
 }
 
@@ -117,24 +146,7 @@ pub fn from_last_error(
 ) -> Result<Scenario, ConversionError> {
     let record = scratch::read_last_error(tool_name)
         .ok_or_else(|| ConversionError::NoScratchRecord(tool_name.to_string()))?;
-    let repro_hash = record_repro_hash(&record);
-    let bundle = context::ContextBundle {
-        tool_name: tool_name.to_string(),
-        tool_version: "unknown".to_string(),
-        command: Some(record.argv.join(" ")),
-        exit_code: Some(record.exit),
-        suggestion_footer: record.footer,
-        os_arch: "unknown/unknown".to_string(),
-        shell: None,
-        gh_version: None,
-        git_remote: None,
-        git_branch: None,
-        git_dirty: None,
-        repo_state: vec![],
-        // The record's kind + timestamp stand in for a repro hash: stable
-        // per failure signature, traceable back to the scratch file.
-        repro_hash,
-    };
+    let bundle = recorded_bundle(tool_name, record);
     Ok(Scenario::from_feedback_context(&bundle, fixtures))
 }
 
@@ -154,7 +166,12 @@ fn verify_replayed_step(
     if let Some(fault) = exit_mismatch(step.exit_code, recorded_exit) {
         return fault;
     }
-    match crate::evals::parse_envelope(&step.stdout) {
+    envelope_check(&step.stdout, hint)
+}
+
+/// Judge the replayed step's error envelope against the footer hint.
+fn envelope_check(stdout: &str, hint: Option<&str>) -> CheckOutcome {
+    match crate::evals::parse_envelope(stdout) {
         Ok(EnvelopeOutcome::Error { hint_commands, .. }) => {
             match_envelope_hints(hint, &hint_commands)
         }

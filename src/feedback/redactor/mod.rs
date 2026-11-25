@@ -16,26 +16,19 @@ use std::path::Path;
 
 /// Redact sensitive information from a string.
 ///
-/// Applies all redaction rules in order. Returns the redacted string.
+/// Applies all redaction rules in order — git remote reduction, secret
+/// value stripping, env var value redaction, home path replacement —
+/// and returns the redacted string.
 pub fn redact(input: &str, home_dir: Option<&Path>, git_remote: Option<&str>) -> String {
     let mut result = Cow::Borrowed(input);
-
-    // 1. Reduce git_remote if present in the text
     if let Some(remote) = git_remote {
         result = Cow::Owned(reduce_git_remote(&result, remote));
     }
-
-    // 2. Strip secret values
     result = Cow::Owned(redact_secret_values(&result));
-
-    // 3. Redact env var values
     result = Cow::Owned(redact_env_var_values(&result));
-
-    // 4. Replace absolute home paths
     if let Some(home) = home_dir {
         result = Cow::Owned(replace_home_paths(&result, home));
     }
-
     result.into_owned()
 }
 
@@ -142,6 +135,42 @@ fn apply_redaction(input: &str, pattern: &str) -> String {
     .to_string()
 }
 
+/// Whether an env var value must be redacted or kept verbatim.
+enum EnvValueDisposition {
+    Keep,
+    Redact,
+}
+
+/// Classify an env var value. Short simple values (booleans, numbers,
+/// short words, paths) are kept; long hex strings, GitHub PATs, and
+/// values with non-alphanumeric characters are redacted.
+fn env_value_disposition(value: &str) -> EnvValueDisposition {
+    if value.len() < 4 {
+        return EnvValueDisposition::Keep;
+    }
+    if is_simple_path(value) && !(is_long_hex(value) || is_github_pat(value)) {
+        return EnvValueDisposition::Keep;
+    }
+    EnvValueDisposition::Redact
+}
+
+/// Only alphanumeric plus path punctuation (`/`, `:`, `.`, `_`, `-`).
+fn is_simple_path(value: &str) -> bool {
+    value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | ':' | '.' | '_' | '-'))
+}
+
+/// A hex token of at least eight characters.
+fn is_long_hex(value: &str) -> bool {
+    value.len() >= 8 && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// A `ghp_`/`ghs_`/`gho_` GitHub PAT prefix.
+fn is_github_pat(value: &str) -> bool {
+    value.starts_with("ghp_") || value.starts_with("ghs_") || value.starts_with("gho_")
+}
+
 /// Redact environment variable values (`FOO=secret` → `FOO=[redacted]`).
 ///
 /// Redacts if the value looks like a secret (long hex string, long base64,
@@ -150,27 +179,11 @@ fn apply_redaction(input: &str, pattern: &str) -> String {
 fn redact_env_var_values(input: &str) -> String {
     let re = regex::Regex::new(r"(?m)^([A-Za-z_][A-Za-z0-9_]*)=(.+)$").unwrap();
     re.replace_all(input, |caps: &regex::Captures| {
-        let key = &caps[1];
-        let value = &caps[2];
-        // Don't redact short or simple values
-        if value.len() < 4 {
-            return format!("{}={}", key, value);
+        let (key, value) = (&caps[1], &caps[2]);
+        match env_value_disposition(value) {
+            EnvValueDisposition::Keep => format!("{key}={value}"),
+            EnvValueDisposition::Redact => format!("{key}=[redacted]"),
         }
-        // Don't redact simple paths (contain only alphanumeric, /, :, ., _, -)
-        if value.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c == '/' || c == ':' || c == '.' || c == '_' || c == '-'
-        }) {
-            // But redact if it looks like a hex token (long hex string)
-            if value.len() >= 8 && value.chars().all(|c| c.is_ascii_hexdigit()) {
-                return format!("{}={}", key, "[redacted]");
-            }
-            // Redact if it looks like a ghp_ GitHub PAT
-            if value.starts_with("ghp_") || value.starts_with("ghs_") || value.starts_with("gho_") {
-                return format!("{}={}", key, "[redacted]");
-            }
-            return format!("{}={}", key, value);
-        }
-        format!("{}={}", key, "[redacted]")
     })
     .to_string()
 }
@@ -182,172 +195,5 @@ fn replace_home_paths(input: &str, home: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── git_remote reduction ──────────────────────────────────────────
-
-    #[test]
-    fn test_reduce_git_remote_url_https() {
-        assert_eq!(
-            reduce_git_remote_url("https://github.com/owner/repo.git"),
-            "github.com/owner/repo"
-        );
-    }
-
-    #[test]
-    fn test_reduce_git_remote_url_with_pat() {
-        assert_eq!(
-            reduce_git_remote_url("https://ghp_abc123@github.com/owner/repo.git"),
-            "github.com/owner/repo"
-        );
-    }
-
-    #[test]
-    fn test_reduce_git_remote_url_ssh() {
-        assert_eq!(
-            reduce_git_remote_url("git@github.com:owner/repo.git"),
-            "github.com/owner/repo"
-        );
-    }
-
-    #[test]
-    fn test_reduce_git_remote_url_with_query() {
-        assert_eq!(
-            reduce_git_remote_url("https://github.com/owner/repo?foo=bar"),
-            "github.com/owner/repo"
-        );
-    }
-
-    #[test]
-    fn test_reduce_git_remote_url_no_git_suffix() {
-        assert_eq!(
-            reduce_git_remote_url("https://github.com/owner/repo"),
-            "github.com/owner/repo"
-        );
-    }
-
-    #[test]
-    fn test_reduce_git_remote_in_text() {
-        let text = "remote: https://pat@github.com/owner/repo.git";
-        let result = reduce_git_remote(text, "https://pat@github.com/owner/repo.git");
-        assert_eq!(result, "remote: github.com/owner/repo");
-    }
-
-    // ── Secret value redaction ────────────────────────────────────────
-
-    #[test]
-    fn test_redact_token_value() {
-        let input = "ghp_abc123def456";
-        let result = redact_secret_values(input);
-        // Without a keyword prefix, individual tokens might not match
-        // This tests that the function doesn't panic
-        assert!(result.contains("ghp_abc123def456") || result.contains("[redacted]"));
-    }
-
-    #[test]
-    fn test_redact_token_in_env_var() {
-        let input = "GITHUB_TOKEN=ghp_abc123";
-        let result = env_var_value_redacted(input);
-        assert!(result.contains("[redacted]"));
-    }
-
-    #[test]
-    fn test_redact_secret_in_json() {
-        let input = r#"{"token": "ghp_abc123", "user": "me"}"#;
-        let result = redact_secret_values(input);
-        assert!(result.contains("[redacted]"));
-        assert!(result.contains("user"));
-        assert!(result.contains("me"));
-    }
-
-    #[test]
-    fn test_redact_does_not_overredact_key_substrings() {
-        // "monkey_type" or "keymap" should not be redacted
-        let input = "monkey_type = \"foo\"\nkeymap = \"vim\"";
-        let result = redact_secret_values(input);
-        assert!(result.contains("monkey_type"));
-        assert!(result.contains("keymap"));
-    }
-
-    // ── Env var value redaction ───────────────────────────────────────
-
-    fn env_var_value_redacted(input: &str) -> String {
-        redact_env_var_values(input)
-    }
-
-    #[test]
-    fn test_redact_env_var_long_value() {
-        let input = "SECRET=abcdef123456";
-        let result = env_var_value_redacted(input);
-        assert_eq!(result, "SECRET=[redacted]");
-    }
-
-    #[test]
-    fn test_redact_env_var_short_value() {
-        let input = "DEBUG=true";
-        let result = env_var_value_redacted(input);
-        assert_eq!(result, "DEBUG=true");
-    }
-
-    #[test]
-    fn test_redact_env_var_simple_path() {
-        let input = "PATH=/usr/bin:/bin";
-        let result = env_var_value_redacted(input);
-        assert_eq!(result, "PATH=/usr/bin:/bin");
-    }
-
-    #[test]
-    fn test_redact_env_var_hex_path_not_redacted() {
-        // Long hex path should not be incorrectly redacted
-        let input = "BUILD_DIR=/a/b/c/d/e/f/g";
-        let result = env_var_value_redacted(input);
-        assert_eq!(result, "BUILD_DIR=/a/b/c/d/e/f/g");
-    }
-
-    // ── Home path replacement ─────────────────────────────────────────
-
-    #[test]
-    fn test_replace_home_path() {
-        let home = Path::new("/home/user");
-        let input = "file at /home/user/project/src/main.rs";
-        let result = replace_home_paths(input, home);
-        assert_eq!(result, "file at ~/project/src/main.rs");
-    }
-
-    #[test]
-    fn test_replace_home_path_multiple() {
-        let home = Path::new("/home/user");
-        let input = "/home/user/a and /home/user/b";
-        let result = replace_home_paths(input, home);
-        assert_eq!(result, "~/a and ~/b");
-    }
-
-    #[test]
-    fn test_replace_home_no_match() {
-        let home = Path::new("/home/user");
-        let input = "no home path here";
-        let result = replace_home_paths(input, home);
-        assert_eq!(result, "no home path here");
-    }
-
-    // ── Full redact function ──────────────────────────────────────────
-
-    #[test]
-    fn test_full_redact() {
-        let home = Some(Path::new("/home/user"));
-        let input = "path: /home/user/project\nremote: https://pat@github.com/owner/repo.git\nGITHUB_TOKEN=ghp_abc123";
-        let result = redact(input, home, Some("https://pat@github.com/owner/repo.git"));
-        assert!(result.contains("~/project"));
-        assert!(result.contains("github.com/owner/repo"));
-        // The env var should be redacted by the env var redactor
-        assert!(result.contains("[redacted]") || result.contains("GITHUB_TOKEN"));
-    }
-
-    #[test]
-    fn test_redact_no_home() {
-        let input = "just a normal message";
-        let result = redact(input, None, None);
-        assert_eq!(result, "just a normal message");
-    }
-}
+#[path = "tests.rs"]
+mod tests;

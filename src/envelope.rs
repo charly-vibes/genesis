@@ -32,6 +32,12 @@
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
+mod notice;
+mod receipt;
+
+pub use notice::{HintEntry, RemediationEntry, UnmetClause, Warning};
+pub use receipt::{ReceiptMeta, TerminalOutcome};
+
 static CURRENT_AUTHOR: OnceLock<String> = OnceLock::new();
 
 /// Set the global author for envelope metadata.
@@ -45,6 +51,13 @@ pub fn set_author(author: String) {
 
 fn current_author() -> Option<String> {
     CURRENT_AUTHOR.get().cloned()
+}
+
+/// `ok` must agree with the envelope kind (genesis-r13): failed outputs are
+/// routed through `Envelope::success` with kind `Error`, and claiming
+/// `ok: true` there would lie to machine consumers.
+fn ok_for(kind: EnvelopeKind) -> bool {
+    !matches!(kind, EnvelopeKind::Error)
 }
 
 /// Envelope protocol version — bump when the envelope shape changes. This
@@ -80,31 +93,6 @@ pub enum EnvelopeKind {
     Warning,
 }
 
-/// A structured warning associated with a rule or check.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Warning {
-    pub rule_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub entity_id: Option<String>,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub suggested_remediation: Option<String>,
-}
-
-/// A suggested command the user can run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemediationEntry {
-    pub command: String,
-    pub description: String,
-}
-
-/// An unmet clause within an error result.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnmetClause {
-    pub clause: String,
-    pub fix: String,
-}
-
 /// Observability metadata attached to every envelope.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
@@ -113,6 +101,18 @@ pub struct Meta {
     pub request_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
+}
+
+impl Meta {
+    /// Baseline metadata: zeroed timing, no tx/request id, current author.
+    fn fresh() -> Self {
+        Self {
+            duration_ms: 0,
+            tx: None,
+            request_id: None,
+            author: current_author(),
+        }
+    }
 }
 
 /// Structured error result, carrying remediation steps.
@@ -142,9 +142,7 @@ impl ErrorResult {
         unmet_clauses: Vec<UnmetClause>,
         remediation: Vec<RemediationEntry>,
     ) -> Result<Self, &'static str> {
-        if remediation.is_empty() {
-            return Err("remediation must be non-empty (Invariant 3.2.5)");
-        }
+        Self::ensure_remediation(&remediation)?;
         Ok(Self {
             code: code.to_string(),
             message: message.to_string(),
@@ -155,54 +153,15 @@ impl ErrorResult {
             remediation,
         })
     }
-}
 
-/// A hint entry — a suggested next command for the user.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HintEntry {
-    pub command: String,
-    pub description: String,
-}
-
-/// Terminal outcome of a command run, recorded in a [`ReceiptMeta`].
-///
-/// Every external boundary needs an ending — silence cannot be neutral
-/// (B173). Timeout is explicit so a deadline hit is never mistaken for a
-/// silent failure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TerminalOutcome {
-    /// The run completed successfully.
-    Success,
-    /// The run completed with a failure.
-    Failure,
-    /// The run hit its deadline. Independent of the envelope's `ok` field:
-    /// a delivered result with a timed-out follow-up is representable.
-    Timeout,
-    /// The run was cancelled before reaching a terminal state.
-    Cancelled,
-}
-
-/// Receipt metadata recording the terminal outcome, retry identity, and
-/// user-visible evidence of a command run (add-aix-eval-loop D1).
-///
-/// Attached to an envelope via [`Envelope::with_receipt`]; tools decide
-/// which commands qualify as mutating and what evidence means for them.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReceiptMeta {
-    /// How the run ended.
-    pub terminal_outcome: TerminalOutcome,
-    /// 1-based attempt counter; retried runs of the same mutating command
-    /// carry increasing numbers.
-    pub attempt: u32,
-    /// Optional key shared by attempts of the same logical command, so
-    /// duplicates and retries are distinguishable.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
-    /// Optional verifiable statement of the user-visible edge
-    /// ("file X exists at path Y") — not free-form narrative.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<String>,
+    /// Invariant 3.2.5: a bare error message without a suggested fix is
+    /// never emitted.
+    fn ensure_remediation(remediation: &[RemediationEntry]) -> Result<(), &'static str> {
+        if remediation.is_empty() {
+            return Err("remediation must be non-empty (Invariant 3.2.5)");
+        }
+        Ok(())
+    }
 }
 
 /// The universal CLI output envelope.
@@ -245,10 +204,7 @@ impl<T: Serialize> Envelope<T> {
         hints: Vec<HintEntry>,
     ) -> Self {
         Self {
-            // genesis-r13: ok must agree with the envelope kind —
-            // Output::to_envelope routes failed outputs through here with
-            // kind=Error; claiming ok:true would lie to machine consumers.
-            ok: !matches!(kind, EnvelopeKind::Error),
+            ok: ok_for(kind),
             envelope_version: ENVELOPE_VERSION.to_string(),
             cli_version: cli_version.to_string(),
             envelope_kind: kind,
@@ -257,12 +213,7 @@ impl<T: Serialize> Envelope<T> {
             hints: Some(hints),
             ephemeral: None,
             receipt: None,
-            meta: Meta {
-                duration_ms: 0,
-                tx: None,
-                request_id: None,
-                author: current_author(),
-            },
+            meta: Meta::fresh(),
         }
     }
 
@@ -319,12 +270,7 @@ impl Envelope<ErrorResult> {
             hints: None,
             ephemeral: None,
             receipt: None,
-            meta: Meta {
-                duration_ms: 0,
-                tx: None,
-                request_id: None,
-                author: current_author(),
-            },
+            meta: Meta::fresh(),
         }
     }
 }

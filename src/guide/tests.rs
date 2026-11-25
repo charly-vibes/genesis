@@ -6,7 +6,12 @@ use crate::testutil::TestUnwrap;
 
 use super::*;
 use crate::envelope::EnvelopeKind;
-use crate::suggestions::Suggestion;
+
+/// Sibling guide tests (split for the pretender file-lines budget); the
+/// declaration lives here rather than in guide.rs, which declares only
+/// `tests` itself.
+#[path = "tests_guide.rs"]
+mod tests_guide;
 
 // -- Verbosity ---------------------------------------------------------
 
@@ -274,68 +279,3 @@ fn test_to_envelope_serializes_to_json() {
     assert!(json.contains("run doctor"));
     assert!(json.contains("my-tool/1.0.0"));
 }
-
-// -- ErrorSink ---------------------------------------------------------
-
-#[test]
-fn test_error_sink_defaults() {
-    let sink = ErrorSink::new("test-tool");
-    assert_eq!(sink.tool_name, "test-tool");
-    assert!(sink.scratch);
-    assert!(sink.suggest);
-    assert!(!sink.context);
-    assert_eq!(sink.feedback_subcommand.as_deref(), Some("feedback"));
-}
-
-#[test]
-fn test_error_sink_fluent_builders() {
-    let sink = ErrorSink::new("tool")
-        .with_verbosity(Verbosity::Quiet)
-        .with_scratch(false)
-        .with_suggest(false)
-        .with_feedback(None);
-
-    assert_eq!(sink.verbosity, Verbosity::Quiet);
-    assert!(!sink.scratch);
-    assert!(!sink.suggest);
-    assert!(sink.feedback_subcommand.is_none());
-}
-
-#[test]
-fn test_error_sink_handle_prints_error() {
-    let sink = ErrorSink::new("test-tool").with_scratch(false);
-    let mut stderr = Vec::new();
-    let err = std::io::Error::other("something broke");
-    sink.handle(&err, &mut stderr);
-    let stderr = String::from_utf8(stderr).require("value");
-    assert!(stderr.contains("test-tool"));
-    assert!(stderr.contains("something broke"));
-    assert!(stderr.contains("Run:"));
-}
-
-#[test]
-fn test_error_sink_handle_without_suggest() {
-    let sink = ErrorSink::new("test-tool")
-        .with_scratch(false)
-        .with_suggest(false);
-    let mut stderr = Vec::new();
-    let err = std::io::Error::other("fail");
-    sink.handle(&err, &mut stderr);
-    let stderr = String::from_utf8(stderr).require("value");
-    assert!(stderr.contains("fail"));
-    // No suggestion footer
-    assert!(!stderr.contains("Run:"));
-}
-
-#[test]
-fn test_error_sink_handle_with_footer() {
-    let sink = ErrorSink::new("tool").with_scratch(false);
-    let mut stderr = Vec::new();
-    let err = std::io::Error::other("err");
-    let suggestion = Suggestion::fix("custom fix");
-    sink.handle_with_footer(&err, &suggestion, &mut stderr);
-    let stderr = String::from_utf8(stderr).require("value");
-    assert!(stderr.contains("custom fix"));
-}
-
-// -- GuideBuilder & Guide ----------------------------------------------

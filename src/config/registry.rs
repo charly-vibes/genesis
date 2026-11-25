@@ -143,29 +143,41 @@ impl ConfigRegistry {
     pub fn validate_registered(&self, repo_root: &Path) -> Vec<ConfigValidation> {
         let mut results = Vec::new();
         for (tool_name, _marker) in self.iter() {
-            match self.get(tool_name, repo_root) {
-                Ok(any) => {
-                    let entry = &self.entries[tool_name];
-                    match (entry.validator)(&*any) {
-                        Ok(validations) => results.extend(validations),
-                        Err(e) => results.push(ConfigValidation::error(
-                            tool_name,
-                            format!("Validation failed: {}", e),
-                        )),
-                    }
-                }
-                Err(ConfigError::MissingFile { .. }) => {
-                    // Missing file is not a validation error
-                }
-                Err(e) => {
-                    results.push(ConfigValidation::error(
-                        tool_name,
-                        format!("Failed to read config: {}", e),
-                    ));
-                }
-            }
+            self.validate_one(tool_name, repo_root, &mut results);
         }
         results
+    }
+
+    /// Validate one registered tool, appending to `results`.
+    ///
+    /// Missing files are silently skipped (not treated as validation
+    /// errors).
+    fn validate_one(&self, tool_name: &str, repo_root: &Path, results: &mut Vec<ConfigValidation>) {
+        match self.get(tool_name, repo_root) {
+            Ok(any) => self.validated_result(tool_name, &*any, results),
+            Err(ConfigError::MissingFile { .. }) => {}
+            Err(e) => {
+                let message = format!("Failed to read config: {}", e);
+                results.push(ConfigValidation::error(tool_name, message));
+            }
+        }
+    }
+
+    /// Run a registered tool's validator over its successfully-read config.
+    fn validated_result(
+        &self,
+        tool_name: &str,
+        any: &dyn Any,
+        results: &mut Vec<ConfigValidation>,
+    ) {
+        let entry = &self.entries[tool_name];
+        match (entry.validator)(any) {
+            Ok(validations) => results.extend(validations),
+            Err(e) => {
+                let message = format!("Validation failed: {}", e);
+                results.push(ConfigValidation::error(tool_name, message));
+            }
+        }
     }
 }
 

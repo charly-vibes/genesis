@@ -44,11 +44,23 @@ pub fn parse_envelope(stdout: &str) -> Result<EnvelopeOutcome, EvalsError> {
     if ok {
         return Ok(EnvelopeOutcome::Ok);
     }
-    let code = value
+    Ok(EnvelopeOutcome::Error {
+        code: error_code(&value),
+        hint_commands: hint_commands(&value),
+    })
+}
+
+/// `data.code` from an error envelope, when present.
+fn error_code(value: &Value) -> Option<String> {
+    value
         .pointer("/data/code")
         .and_then(Value::as_str)
-        .map(str::to_owned);
-    let hint_commands = value
+        .map(str::to_owned)
+}
+
+/// `command` of each hint entry, in order; empty when `hints` is absent.
+fn hint_commands(value: &Value) -> Vec<String> {
+    value
         .get("hints")
         .and_then(Value::as_array)
         .map(|hints| {
@@ -58,11 +70,7 @@ pub fn parse_envelope(stdout: &str) -> Result<EnvelopeOutcome, EvalsError> {
                 .map(str::to_owned)
                 .collect()
         })
-        .unwrap_or_default();
-    Ok(EnvelopeOutcome::Error {
-        code,
-        hint_commands,
-    })
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------

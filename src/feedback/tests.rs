@@ -1,5 +1,6 @@
 //! Tests for the feedback entry point and title/body partitioning.
 
+use super::content::{apply_title_override, stdin_title_and_body};
 use super::*;
 use crate::evals::Scenario;
 use scratch::ErrorRecord;

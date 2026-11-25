@@ -47,26 +47,54 @@ pub fn gather_context(
     suggestion_footer: Option<String>,
     cwd: &Path,
 ) -> ContextBundle {
-    let os_arch = format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH);
-    let shell = std::env::var("SHELL").ok();
-    let gh_version = get_gh_version();
-    let git = probe_git(cwd);
-    let repro_hash = repro_hash(tool_name, tool_version, &command, exit_code);
+    let mut bundle = core_bundle(
+        tool_name,
+        tool_version,
+        command,
+        exit_code,
+        suggestion_footer,
+    );
+    bundle.apply_env();
+    bundle.apply_git(cwd);
+    bundle
+}
 
+/// The caller-supplied fields; [`ContextBundle::apply_env`] and
+/// [`ContextBundle::apply_git`] fill in the probed remainder.
+fn core_bundle(
+    tool_name: &str,
+    tool_version: &str,
+    command: Option<String>,
+    exit_code: Option<i32>,
+    suggestion_footer: Option<String>,
+) -> ContextBundle {
+    let repro_hash = repro_hash(tool_name, tool_version, &command, exit_code);
     ContextBundle {
         tool_name: tool_name.to_string(),
         tool_version: tool_version.to_string(),
         command,
         exit_code,
         suggestion_footer,
-        os_arch,
-        shell,
-        gh_version,
-        git_remote: git.remote,
-        git_branch: git.branch,
-        git_dirty: git.dirty,
-        repo_state: git.state,
         repro_hash,
+        ..ContextBundle::default()
+    }
+}
+
+impl ContextBundle {
+    /// Fill the environment-derived fields (platform, shell, gh version).
+    fn apply_env(&mut self) {
+        self.os_arch = format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH);
+        self.shell = std::env::var("SHELL").ok();
+        self.gh_version = get_gh_version();
+    }
+
+    /// Fill the git-derived fields probed at `cwd`.
+    fn apply_git(&mut self, cwd: &Path) {
+        let git = probe_git(cwd);
+        self.git_remote = git.remote;
+        self.git_branch = git.branch;
+        self.git_dirty = git.dirty;
+        self.repo_state = git.state;
     }
 }
 
@@ -128,34 +156,26 @@ pub fn format_context_bundle(bundle: &ContextBundle) -> String {
     out
 }
 
+/// One `- key: value` line when `value` is present.
+fn opt_line<V: std::fmt::Display>(key: &str, value: Option<V>) -> Option<String> {
+    value.map(|v| format!("- {key}: {v}\n"))
+}
+
 /// The optional environment fields, one `- key: value` line each.
-fn optional_fields(bundle: &ContextBundle) -> String {
-    let optional = [
-        bundle
-            .command
-            .as_ref()
-            .map(|c| format!("- command: `{c}`\n")),
-        bundle.exit_code.map(|c| format!("- exit_code: {c}\n")),
-        bundle
-            .suggestion_footer
-            .as_ref()
-            .map(|f| format!("- suggestion: {f}\n")),
-        bundle.shell.as_ref().map(|s| format!("- shell: {s}\n")),
-        bundle
-            .gh_version
-            .as_ref()
-            .map(|v| format!("- gh_version: {v}\n")),
-        bundle
-            .git_remote
-            .as_ref()
-            .map(|r| format!("- git_remote: {r}\n")),
-        bundle
-            .git_branch
-            .as_ref()
-            .map(|b| format!("- git_branch: {b}\n")),
-        bundle.git_dirty.map(|d| format!("- git_dirty: {d}\n")),
-    ];
-    optional.into_iter().flatten().collect::<Vec<_>>().concat()
+fn optional_fields(b: &ContextBundle) -> String {
+    [
+        opt_line("command", b.command.as_deref()),
+        opt_line("exit_code", b.exit_code),
+        opt_line("suggestion", b.suggestion_footer.as_deref()),
+        opt_line("shell", b.shell.as_deref()),
+        opt_line("gh_version", b.gh_version.as_deref()),
+        opt_line("git_remote", b.git_remote.as_deref()),
+        opt_line("git_branch", b.git_branch.as_deref()),
+        opt_line("git_dirty", b.git_dirty),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<String>()
 }
 
 /// Get the gh version string.

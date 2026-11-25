@@ -65,30 +65,17 @@ impl ErrorTaxonomy {
     }
 
     /// One-line, agent-actionable description of the failure mode.
+    #[rustfmt::skip]
     pub fn description(&self) -> &'static str {
         match self {
-            Self::EnvelopeHintBlindness => {
-                "the tool suggested a fix in its error envelope, but the agent ignored it"
-            }
-            Self::StateMachineViolation => {
-                "the agent made an illegal state transition or bypassed state checks"
-            }
+            Self::EnvelopeHintBlindness => "the tool suggested a fix in its error envelope, but the agent ignored it",
+            Self::StateMachineViolation => "the agent made an illegal state transition or bypassed state checks",
             Self::ManagedBlockCorruption => "the agent overwrote or deleted managed-block tags",
-            Self::ToolExecutionHallucination => {
-                "the agent claimed to run a command without a corresponding subprocess call"
-            }
-            Self::ContextRecoveryFailure => {
-                "the agent hit an error but did not refresh its orientation context"
-            }
-            Self::ToolDiscoveryFailure => {
-                "the agent ignored the specialized tool and used a blunt strategy"
-            }
-            Self::DocDriftBlindness => {
-                "the agent trusted stale documentation over the tool's structured output"
-            }
-            Self::ActionFormatViolation => {
-                "the agent failed to produce a parseable structured action after one re-ask"
-            }
+            Self::ToolExecutionHallucination => "the agent claimed to run a command without a corresponding subprocess call",
+            Self::ContextRecoveryFailure => "the agent hit an error but did not refresh its orientation context",
+            Self::ToolDiscoveryFailure => "the agent ignored the specialized tool and used a blunt strategy",
+            Self::DocDriftBlindness => "the agent trusted stale documentation over the tool's structured output",
+            Self::ActionFormatViolation => "the agent failed to produce a parseable structured action after one re-ask",
         }
     }
 }
@@ -98,7 +85,3 @@ impl std::fmt::Display for ErrorTaxonomy {
         write!(f, "{}: {}", self.code(), self.description())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Envelope assertions
-// ---------------------------------------------------------------------------
