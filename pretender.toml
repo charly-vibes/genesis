@@ -1,10 +1,17 @@
 [pretender]
-mode = "tiered"
-# advisory lease (pretender-1te / DDL-dqr): tiered is a dated downgrade from
-# the gate default; renewal = push the date forward (reviewable diff)
-advisory_until = "2027-03-31"
+mode = "gate"
 languages = ["auto"]
 exclude = ["vendor/**", "node_modules/**", "**/*_generated.*"]
+
+[thresholds]
+cyclomatic_max = 5
+cognitive_max = 8
+function_lines_max = 20
+file_lines_max = 300
+nesting_max = 2
+abc_max = 20
+unwrap_max = 0
+duplication_pct_max = 3
 
 [roles.test]
 paths = ["tests/**", "**/*_test.*", "spec/**"]
