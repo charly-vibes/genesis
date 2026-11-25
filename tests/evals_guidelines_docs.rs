@@ -8,30 +8,13 @@
 //! `src/evals.rs`: guideline requirements that govern *consumer harnesses*
 //! (tier cadences, sandbox, fault routing) have no genesis-runtime behavior
 //! to test — their verification target is the published normative text.
+//!
+//! The protocol/attribution, report-contract, and fault-routing guards live
+//! in `tests/evals_guidelines_protocol.rs`.
 
-use std::path::PathBuf;
+mod common;
 
-fn doc(rel: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read normative doc {}: {e}", path.display()))
-}
-
-/// Collapse whitespace and strip markdown noise (backslash escapes,
-/// emphasis markers, inline-code backticks) so guards survive prose
-/// formatting.
-fn norm(text: &str) -> String {
-    let stripped: String = text
-        .chars()
-        .filter(|c| !matches!(c, '\\' | '*' | '`'))
-        .collect();
-    stripped.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// Normalized text of a normative page, by repo-relative path.
-fn norm_doc(rel: &str) -> String {
-    norm(&doc(rel))
-}
+use common::{norm_doc, norm_markdown, read};
 
 // -- Tier ladder -----------------------------------------------------------
 
@@ -88,7 +71,7 @@ fn battery_maintenance_normative_content_is_published() {
     );
     // The deployed spec is the other normative home — the never-failing
     // rule must be stated there too.
-    let spec = norm(&doc("openspec/specs/evals-guidelines/spec.md"));
+    let spec = norm_markdown(&read("openspec/specs/evals-guidelines/spec.md"));
     assert!(
         spec.contains("permanently green"),
         "permanently-green rule missing from the deployed spec"
@@ -114,7 +97,7 @@ fn process_boundary_scoring_normative_content_is_published() {
     );
     // The executable check exists in the crate (hallucination remains
     // detectable) — guarded by the unit test suite, referenced here.
-    let modules = doc("docs/src/reference/modules.md");
+    let modules = read("docs/src/reference/modules.md");
     assert!(modules.contains("ErrorTaxonomy"));
 }
 
@@ -145,7 +128,7 @@ fn provisioning_and_sandbox_normative_content_is_published() {
     // Confinement requirements live under a dedicated sandbox heading in
     // the raw (non-normalized) page.
     assert!(
-        doc("docs/src/how-to/evals.md").contains("Sandbox"),
+        read("docs/src/how-to/evals.md").contains("Sandbox"),
         "sandbox section heading missing from evals.md"
     );
 }
@@ -176,173 +159,9 @@ fn check_discipline_normative_content_is_published() {
     );
     // The deployed spec carries the "One fault per check" requirement;
     // its normative wording there is "exactly one agent-fault taxonomy code".
-    let spec = norm(&doc("openspec/specs/evals-guidelines/spec.md"));
+    let spec = norm_markdown(&read("openspec/specs/evals-guidelines/spec.md"));
     assert!(
         spec.contains("exactly one agent-fault taxonomy code"),
         "one-fault-per-check rule missing from the deployed spec"
-    );
-}
-
-// -- Live action protocol ------------------------------------------------------
-
-/// Requirement: Live action protocol — one re-ask (consumes a turn),
-/// persistent malformation → invalid_output + ERR_ACTION_FORMAT_VIOLATION,
-/// parseable actions execute once, bounds, check logic never exposed.
-#[test]
-fn live_action_protocol_normative_content_is_published() {
-    let howto = norm_doc("docs/src/how-to/evals.md");
-    assert!(howto.contains("re-ask once"), "one-re-ask rule missing");
-    assert!(
-        howto.contains("consumes a turn"),
-        "re-ask-consumes-turn rule missing"
-    );
-    assert!(
-        howto.contains("invalid_output") && howto.contains("ERR_ACTION_FORMAT_VIOLATION"),
-        "persistent-malformation outcome missing"
-    );
-    assert!(
-        howto.contains("**exactly once**") || howto.contains("exactly once"),
-        "execute-once rule missing"
-    );
-    for bound in ["turn cap", "wall-clock timeout", "token-estimate budget"] {
-        assert!(howto.contains(bound), "bound missing: {bound}");
-    }
-    assert!(
-        howto.contains("not** attributed") || howto.contains("not attributed"),
-        "bound-stop-no-fault rule missing"
-    );
-    assert!(
-        howto.contains("Never") && howto.contains("check logic"),
-        "check-logic-never-exposed rule missing"
-    );
-    // The code exists: ERR_ACTION_FORMAT_VIOLATION in the taxonomy table.
-    assert!(howto.contains("ERR_ACTION_FORMAT_VIOLATION"));
-}
-
-// -- Free-tier entry and attribution --------------------------------------------
-
-/// Requirement: Free-tier entry and attribution — raw attribution,
-/// repetitions are distinct rows, 429 retried once then recorded, no
-/// silent model substitution.
-#[test]
-fn free_tier_attribution_normative_content_is_published() {
-    let howto = norm_doc("docs/src/how-to/evals.md");
-    assert!(
-        howto.contains("verbatim") && howto.contains(":free"),
-        "verbatim-id rule missing"
-    );
-    assert!(
-        howto.contains("distinct report row"),
-        "distinct-rows rule missing"
-    );
-    assert!(
-        howto.contains("retry once after ≥ 2 s") || howto.contains("retry once after"),
-        "429-retry rule missing"
-    );
-    assert!(
-        howto.contains("never a silent substitution"),
-        "no-silent-substitution rule missing"
-    );
-    let readers = norm_doc("docs/src/explanation/why-weak-readers.md");
-    assert!(
-        readers.contains("scheduling priority") && readers.contains("failover"),
-        "ordering-not-failover rule missing from why-weak-readers.md"
-    );
-    // CI page: 429 semantics live there too.
-    let ci = norm_doc("docs/src/how-to/evals-ci.md");
-    assert!(ci.contains("retry **once**") || ci.contains("retry once"));
-    assert!(ci.contains("rate_limited"));
-}
-
-// -- Interoperable report contract -----------------------------------------------
-
-/// Requirement: Interoperable report contract — tool faults carry no code,
-/// suite-wide aggregation, additive evolution, breaking change bumps the
-/// version. Verified against the reference page AND the normative fixtures.
-#[test]
-fn report_contract_normative_content_is_published() {
-    let contract = norm_doc("docs/src/reference/eval-report.md");
-    assert!(contract.contains("report_version"), "version field missing");
-    assert!(
-        contract.contains("Omitted — never null") || contract.contains("omit, never null"),
-        "omit-not-null rule missing"
-    );
-    assert!(
-        contract.contains("passed | failed | rate_limited | invalid_output"),
-        "status vocabulary missing"
-    );
-    assert!(
-        contract
-            .to_lowercase()
-            .contains("one entry per declared check"),
-        "all-declared-checks rule missing"
-    );
-    assert!(
-        contract.contains("for humans and tickets, not parsed by aggregators"),
-        "reason-not-parsed rule missing"
-    );
-    for scenario in [
-        "tool faults carry no code",
-        "suite-wide aggregation",
-        "additive evolution",
-    ] {
-        // Fixture-level contract tests in src/evals.rs cover the vocabulary
-        // rules; the page must name the evolution rule for the rest.
-        let _ = scenario;
-    }
-    assert!(
-        contract.contains("removing or re-typing a field bumps report_version"),
-        "breaking-change rule missing"
-    );
-    assert!(
-        contract.contains("older consumers ignore unknown fields"),
-        "additive-evolution rule missing"
-    );
-}
-
-/// The normative fixtures stay byte-stable (contract drift guard).
-#[test]
-fn report_fixtures_are_loadable_and_versioned() {
-    for name in [
-        "tests/golden/eval_report_tier2.json",
-        "tests/golden/eval_report_replay.json",
-    ] {
-        let raw_json = doc(name);
-        let v: serde_json::Value = serde_json::from_str(&raw_json)
-            .unwrap_or_else(|e| panic!("{name} is not valid JSON: {e}"));
-        assert_eq!(v["report_version"], 1, "{name}");
-    }
-}
-
-// -- Fault routing -----------------------------------------------------------------
-
-/// Requirement: Fault routing — tool fault becomes a ticket, cross-model
-/// agent fault points at the channel, sub-threshold occurrences recorded,
-/// small registries can still route.
-#[test]
-fn fault_routing_normative_content_is_published() {
-    let howto = norm_doc("docs/src/how-to/evals.md");
-    assert!(
-        howto.contains("become tickets in your tool's repo"),
-        "tool-fault-becomes-ticket rule missing"
-    );
-    assert!(
-        howto.contains("≥ 3 model ids"),
-        "cross-model threshold missing"
-    );
-    assert!(
-        howto.contains("points at **your output channel**")
-            || howto.contains("points at your output channel"),
-        "channel-routing rule missing"
-    );
-    assert!(
-        howto.contains("recorded without action"),
-        "sub-threshold rule missing"
-    );
-    // Small registries: the spec text itself is the normative home.
-    let spec = norm(&doc("openspec/specs/evals-guidelines/spec.md"));
-    assert!(
-        spec.contains("or across all configured ids when fewer"),
-        "small-registry rule missing from the deployed spec"
     );
 }

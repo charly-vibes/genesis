@@ -6,32 +6,42 @@ use std::process::Command;
 use super::FixtureError;
 use crate::fixture::command::hermetic_git;
 
+/// Author/committer date pinned so fixture history stays reproducible.
+const COMMIT_DATE: &str = "2020-01-01T00:00:00Z";
+
 /// Run `git init` plus an initial commit in `root`.
 pub(super) fn git_init_repo(root: &Path) -> Result<(), FixtureError> {
-    let run = |stage: &'static str, args: &[&str]| -> Result<std::process::Output, FixtureError> {
-        hermetic_git(&mut Command::new("git"))
-            .args(args)
-            .current_dir(root)
-            .output()
-            .map_err(|e| FixtureError::Git { stage, source: e })
-    };
-
-    require_success(run("init", &["init"]), "init")?;
+    git(root, "init", &["init"], &[])?;
     seed_gitkeep(root)?;
     seed_identity(root);
-    require_success(run("add", &["add", "-A"]), "add")?;
-    let commit = hermetic_git(&mut Command::new("git"))
-        .args(["commit", "-m", "initial"])
-        .current_dir(root)
-        .env("GIT_AUTHOR_DATE", "2020-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_DATE", "2020-01-01T00:00:00Z")
-        .output()
-        .map_err(|e| FixtureError::Git {
-            stage: "commit",
-            source: e,
-        })?;
-    require_success(Ok(commit), "commit")?;
+    git(root, "add", &["add", "-A"], &[])?;
+    git(
+        root,
+        "commit",
+        &["commit", "-m", "initial"],
+        &[
+            ("GIT_AUTHOR_DATE", COMMIT_DATE),
+            ("GIT_COMMITTER_DATE", COMMIT_DATE),
+        ],
+    )?;
     Ok(())
+}
+
+/// Run a git subcommand in `root`, hermetically; spawn or non-zero exit
+/// failure maps to [`FixtureError::Git`] with `stage` context.
+fn git(
+    root: &Path,
+    stage: &'static str,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> Result<(), FixtureError> {
+    let output = hermetic_git(&mut Command::new("git"))
+        .args(args)
+        .current_dir(root)
+        .envs(env.iter().copied())
+        .output()
+        .map_err(|e| FixtureError::Git { stage, source: e })?;
+    require_success(output, stage)
 }
 
 /// Seed an empty `.gitkeep` so the initial commit always has content.
@@ -44,28 +54,19 @@ fn seed_gitkeep(root: &Path) -> Result<(), FixtureError> {
 
 /// Configure a deterministic commit identity (failures ignored: not fatal).
 fn seed_identity(root: &Path) {
-    let configure = |key: &str, value: &str| -> Result<std::process::Output, FixtureError> {
-        hermetic_git(&mut Command::new("git"))
-            .args(["config", key, value])
-            .current_dir(root)
-            .output()
-            .map_err(|e| FixtureError::Git {
-                stage: "config",
-                source: e,
-            })
-    };
-    let _ = configure("user.email", "test@test.com");
-    let _ = configure("user.name", "Test");
+    let _ = git(
+        root,
+        "config",
+        &["config", "user.email", "test@test.com"],
+        &[],
+    );
+    let _ = git(root, "config", &["config", "user.name", "Test"], &[]);
 }
 
 /// Map a non-zero git exit to a [`FixtureError::Git`] with context.
-fn require_success(
-    output: Result<std::process::Output, FixtureError>,
-    stage: &'static str,
-) -> Result<std::process::Output, FixtureError> {
-    let output = output?;
+fn require_success(output: std::process::Output, stage: &'static str) -> Result<(), FixtureError> {
     if output.status.success() {
-        return Ok(output);
+        return Ok(());
     }
     Err(FixtureError::Git {
         stage,

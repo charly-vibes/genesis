@@ -125,24 +125,29 @@ pub fn scan(project_root: &Path) -> Vec<DetectedTool> {
 
 /// Probe one manifest entry: does its detector's marker exist on disk?
 fn detect_tool(project_root: &Path, name: &str, entry: &ToolEntry) -> DetectedTool {
-    let detected = if entry.detector.path.is_empty() {
-        false
-    } else {
-        let marker_path = project_root.join(&entry.detector.path);
-        match entry.detector.detector_type.as_str() {
-            "directory" => marker_path.is_dir(),
-            "file" => marker_path.is_file(),
-            other => {
-                // Unknown detector type — treat as not detected
-                log_unknown_detector(other, name);
-                false
-            }
-        }
-    };
     DetectedTool {
         name: name.to_string(),
         description: entry.description.clone(),
-        detected,
+        detected: marker_exists(project_root, name, &entry.detector),
+    }
+}
+
+/// Does the detector's marker exist, given a non-empty relative path?
+///
+/// An empty path never matches; an unknown detector type logs a note and
+/// reports `false` so tools degrade gracefully instead of erroring.
+fn marker_exists(project_root: &Path, name: &str, detector: &DetectorDef) -> bool {
+    if detector.path.is_empty() {
+        return false;
+    }
+    let marker_path = project_root.join(&detector.path);
+    match detector.detector_type.as_str() {
+        "directory" => marker_path.is_dir(),
+        "file" => marker_path.is_file(),
+        other => {
+            log_unknown_detector(other, name);
+            false
+        }
     }
 }
 
@@ -161,7 +166,6 @@ pub fn register(
 ) -> Result<(), String> {
     let manifest_path = project_root.join(MANIFEST_FILENAME);
     ensure_manifest_dir(&manifest_path)?;
-
     let manifest = upsert_tool(
         read_manifest(project_root).unwrap_or_default(),
         name,
@@ -169,9 +173,7 @@ pub fn register(
         detector_type,
         detector_path,
     );
-
-    write_manifest(&manifest_path, &manifest)?;
-    Ok(())
+    write_manifest(&manifest_path, &manifest)
 }
 
 /// Create the manifest's parent directory (`.genesis/`) on demand.
@@ -215,31 +217,27 @@ fn write_manifest(manifest_path: &Path, manifest: &Manifest) -> Result<(), Strin
 
 /// Remove a tool from the genesis manifest.
 ///
-/// Useful for `deinit` or uninstall workflows.
+/// Useful for `deinit` or uninstall workflows. A missing manifest is a
+/// no-op success: there is nothing to remove and none must be created.
 pub fn unregister(project_root: &Path, name: &str) -> Result<(), String> {
-    let manifest_path = project_root.join(MANIFEST_FILENAME);
-    let mut manifest = match read_manifest(project_root) {
-        Some(m) => m,
-        None => return Ok(()), // Nothing to remove
+    let Some(mut manifest) = read_manifest(project_root) else {
+        return Ok(());
     };
-
     manifest.tools.remove(name);
-
+    let manifest_path = project_root.join(MANIFEST_FILENAME);
     if manifest.tools.is_empty() {
-        // Last tool removed — delete the file
-        std::fs::remove_file(&manifest_path)
-            .map_err(|e| format!("failed to remove manifest: {e}"))?;
-        // Try to clean up empty .genesis/ directory (best-effort)
-        if let Some(parent) = manifest_path.parent() {
-            let _ = std::fs::remove_dir(parent);
-        }
+        remove_manifest_and_dir(&manifest_path)
     } else {
-        let content = toml::to_string_pretty(&manifest)
-            .map_err(|e| format!("failed to serialize manifest: {e}"))?;
-        std::fs::write(&manifest_path, &content)
-            .map_err(|e| format!("failed to write manifest: {e}"))?;
+        write_manifest(&manifest_path, &manifest)
     }
+}
 
+/// Delete the manifest file, then the `.genesis/` parent if it is now empty.
+fn remove_manifest_and_dir(manifest_path: &Path) -> Result<(), String> {
+    std::fs::remove_file(manifest_path).map_err(|e| format!("failed to remove manifest: {e}"))?;
+    if let Some(parent) = manifest_path.parent() {
+        let _ = std::fs::remove_dir(parent);
+    }
     Ok(())
 }
 
@@ -256,8 +254,8 @@ pub fn has_manifest(project_root: &Path) -> bool {
     project_root.join(MANIFEST_FILENAME).exists()
 }
 
+/// Note an unknown detector type on stderr; best-effort, never fatal.
 fn log_unknown_detector(detector_type: &str, tool_name: &str) {
-    // Best-effort stderr note — not a hard error so tools degrade gracefully.
     let _ = writeln!(
         std::io::stderr(),
         "genesis: unknown detector type '{}' for tool '{}' (expected 'directory' or 'file')",

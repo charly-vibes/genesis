@@ -13,6 +13,24 @@ fn tmp() -> TempDir {
     tempfile::tempdir().require("tempdir")
 }
 
+/// Write `toml` as the project manifest inside `dir`, creating `.genesis/`.
+fn seed_manifest(dir: &TempDir, toml: &str) {
+    let path = dir.path().join(MANIFEST_FILENAME);
+    std::fs::create_dir_all(path.parent().require("manifest parent dir"))
+        .require("manifest parent dir");
+    std::fs::write(&path, toml).require("write manifest");
+}
+
+/// Create a detector marker on disk: a directory when `is_dir`, else a file.
+fn seed_marker(dir: &TempDir, marker_path: &str, is_dir: bool) {
+    let target = dir.path().join(marker_path);
+    if is_dir {
+        std::fs::create_dir(target).require("create marker dir");
+    } else {
+        std::fs::write(target, "").require("create marker file");
+    }
+}
+
 // ── read_manifest ──────────────────────────────────────────────────
 
 #[test]
@@ -28,10 +46,8 @@ fn test_read_manifest_nonexistent() {
 #[test]
 fn test_read_manifest_valid() {
     let dir = tmp();
-    let path = dir.path().join(MANIFEST_FILENAME);
-    std::fs::create_dir_all(path.parent().require("value")).require("value");
-    std::fs::write(
-        &path,
+    seed_manifest(
+        &dir,
         r#"[tools.wai]
 description = "Workflow manager"
 detector = { type = "directory", path = ".wai" }
@@ -40,8 +56,7 @@ detector = { type = "directory", path = ".wai" }
 description = "Conventions"
 detector = { type = "directory", path = ".dont" }
 "#,
-    )
-    .require("value");
+    );
 
     let manifest = read_manifest(dir.path()).require("value");
     assert_eq!(manifest.tools.len(), 2);
@@ -103,18 +118,9 @@ detector = {{ type = \"{dtype}\", path = \"{dpath}\" }}
     ];
     for (toml, marker, name, detected, why) in cases {
         let dir = tmp();
-        let path = dir.path().join(MANIFEST_FILENAME);
-        std::fs::create_dir_all(path.parent().require("manifest parent dir"))
-            .require("manifest parent dir");
-        std::fs::write(&path, toml).require("write manifest");
-        match marker {
-            Some((marker_path, true)) => {
-                std::fs::create_dir(dir.path().join(marker_path)).require("create marker dir");
-            }
-            Some((marker_path, false)) => {
-                std::fs::write(dir.path().join(marker_path), "").require("create marker file");
-            }
-            None => {}
+        seed_manifest(&dir, &toml);
+        if let Some((marker_path, is_dir)) = marker {
+            seed_marker(&dir, marker_path, is_dir);
         }
 
         let tools = scan(dir.path());
@@ -191,7 +197,6 @@ fn test_unregister_removes_file_when_empty() {
 #[test]
 fn test_unregister_nonexistent_is_noop() {
     let dir = tmp();
-    // No manifest at all — should not error, and must not create one
     unregister(dir.path(), "ghost").require("unregister without manifest");
     assert!(
         !dir.path().join(MANIFEST_FILENAME).exists(),
@@ -242,22 +247,16 @@ fn test_has_manifest_true() {
 #[test]
 fn test_scan_multiple_tools() {
     let dir = tmp();
-    let path = dir.path().join(MANIFEST_FILENAME);
-    std::fs::create_dir_all(path.parent().require("value")).require("value");
-
-    // Create marker dirs
-    std::fs::create_dir(dir.path().join(".present")).require("value");
-
-    std::fs::write(
-        &path,
+    seed_marker(&dir, ".present", true);
+    seed_manifest(
+        &dir,
         r#"[tools.present]
 detector = { type = "directory", path = ".present" }
 
 [tools.absent]
 detector = { type = "directory", path = ".absent" }
 "#,
-    )
-    .require("value");
+    );
 
     let tools = scan(dir.path());
     assert_eq!(tools.len(), 2);

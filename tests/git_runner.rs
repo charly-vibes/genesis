@@ -34,6 +34,22 @@ fn child_context() -> Option<PathBuf> {
     ))
 }
 
+/// Spawn this test binary for the `--exact` child test `exact_test`, apply
+/// `poison` to the child's environment, and return the child's output.
+///
+/// Spawning with a poisoned env affects only the child process, never this
+/// one (parallel test threads).
+fn run_exact_child(exact_test: &str, poison: impl FnOnce(&mut Command)) -> std::process::Output {
+    let exe = std::env::current_exe().require("locate test binary");
+    let mut cmd = Command::new(exe);
+    cmd.args(["--exact", exact_test, "--nocapture"]);
+    poison(&mut cmd);
+    cmd.stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .output()
+        .require("spawn child test")
+}
+
 /// Build the poisoned environment a child test runs under.
 ///
 /// `GIT_DIR` points at the real repository `.git`, `GIT_WORK_TREE` at a
@@ -42,19 +58,14 @@ fn child_context() -> Option<PathBuf> {
 fn spawn_child(exact_test: &str, repo: &std::path::Path, corrupt_index: &std::path::Path) {
     let fake_worktree = std::env::temp_dir().join("genesis-git-runner-fake-worktree");
     std::fs::create_dir_all(&fake_worktree).require("create fake worktree dir");
-    let exe = std::env::current_exe().require("locate test binary");
-    let output = Command::new(exe)
-        .args(["--exact", exact_test, "--nocapture"])
-        .env(CHILD_SENTINEL, "1")
-        .env(CHILD_REPO, repo)
-        .env("GENESIS_GIT_TEST_CORRUPT_INDEX", corrupt_index)
-        .env("GIT_DIR", repo.join(".git"))
-        .env("GIT_WORK_TREE", &fake_worktree)
-        .env("GIT_INDEX_FILE", corrupt_index)
-        .stderr(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .output()
-        .require("spawn child test");
+    let output = run_exact_child(exact_test, |cmd| {
+        cmd.env(CHILD_SENTINEL, "1")
+            .env(CHILD_REPO, repo)
+            .env("GENESIS_GIT_TEST_CORRUPT_INDEX", corrupt_index)
+            .env("GIT_DIR", repo.join(".git"))
+            .env("GIT_WORK_TREE", &fake_worktree)
+            .env("GIT_INDEX_FILE", corrupt_index);
+    });
     assert!(
         output.status.success(),
         "child test `{exact_test}` must pass:\n{}",
@@ -204,16 +215,11 @@ fn runner_spawn_failure_yields_spawn_error() {
     // Spawning with an empty PATH only affects the child process, never
     // this one (parallel test threads).
     let fixture = Fixture::new().with_git_init().build().require("fixture");
-    let exe = std::env::current_exe().require("locate test binary");
-    let output = Command::new(exe)
-        .args(["--exact", "runner_spawn_failure_child", "--nocapture"])
-        .env(CHILD_SENTINEL, "1")
-        .env(CHILD_REPO, fixture.root())
-        .env("PATH", "")
-        .stderr(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .output()
-        .require("spawn child test");
+    let output = run_exact_child("runner_spawn_failure_child", |cmd| {
+        cmd.env(CHILD_SENTINEL, "1")
+            .env(CHILD_REPO, fixture.root())
+            .env("PATH", "");
+    });
     assert!(
         output.status.success(),
         "child test with empty PATH must pass:\n{}",

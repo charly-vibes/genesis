@@ -205,49 +205,54 @@ fn write_new_file(abs_path: &Path, content: &str) -> std::io::Result<()> {
 /// Returns `(created, existed)` paths according to whether the file was
 /// newly created, rewritten, or left untouched.
 fn update_gitignore(builder: &Scaffold) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
-    let mut created = Vec::new();
-    let mut existed = Vec::new();
     if builder.gitignore_entries.is_empty() {
-        return Ok((created, existed));
+        return Ok((Vec::new(), Vec::new()));
     }
     let gitignore_path = builder.project_root.join(".gitignore");
     let gitignore_existed = gitignore_path.exists();
+    let wrote_entries = merge_gitignore_entries(
+        &gitignore_path,
+        gitignore_existed,
+        &builder.gitignore_entries,
+    )?;
+    Ok(classify_gitignore(
+        gitignore_path,
+        gitignore_existed,
+        wrote_entries,
+    ))
+}
+
+/// Append the builder's missing entries to `.gitignore`, creating parent
+/// directories on demand; returns whether any entry was written.
+fn merge_gitignore_entries(
+    gitignore_path: &Path,
+    existed: bool,
+    entries: &[String],
+) -> std::io::Result<bool> {
     if let Some(parent) = gitignore_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
-    let mut existing = read_gitignore(&gitignore_path, gitignore_existed)?;
-    let new_entries = missing_entries(&existing, &builder.gitignore_entries);
-
-    if !new_entries.is_empty() {
-        existing.push_str(&new_entries.concat());
-        std::fs::write(&gitignore_path, &existing)?;
+    let mut existing = read_gitignore(gitignore_path, existed)?;
+    let new_entries = missing_entries(&existing, entries);
+    if new_entries.is_empty() {
+        return Ok(false);
     }
-    classify_gitignore(
-        gitignore_path,
-        gitignore_existed,
-        new_entries.is_empty(),
-        &mut created,
-        &mut existed,
-    );
-    Ok((created, existed))
+    existing.push_str(&new_entries.concat());
+    std::fs::write(gitignore_path, &existing)?;
+    Ok(true)
 }
 
 /// Record the `.gitignore` path as created/existed. An absent file with no
 /// new entries is still kept (now present on disk, empty).
-#[allow(clippy::too_many_arguments)]
 fn classify_gitignore(
     gitignore_path: PathBuf,
     gitignore_existed: bool,
-    no_new_entries: bool,
-    created: &mut Vec<PathBuf>,
-    existed: &mut Vec<PathBuf>,
-) {
-    if gitignore_existed || !no_new_entries {
-        existed.push(gitignore_path);
+    wrote_entries: bool,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    if gitignore_existed || wrote_entries {
+        (Vec::new(), vec![gitignore_path])
     } else {
-        // gitignore was created but had no new entries — keep it.
-        created.push(gitignore_path);
+        (vec![gitignore_path], Vec::new())
     }
 }
 

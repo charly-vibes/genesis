@@ -11,10 +11,8 @@ use genesis::git::{self, EnvPolicy, GitError, GitOutput};
 /// Source of the `git` module, inspected for write-path commands.
 const GIT_SRC: &str = include_str!("../src/git.rs");
 
-#[test]
-fn no_write_path_api() {
-    // Enumerate the public API surface with compile-checked shapes: the
-    // module exposes read-only queries only.
+/// Compile-checked shapes of the plain read-only query surface.
+fn assert_read_only_surface() {
     let _run: fn(&Path, EnvPolicy, &[&str]) -> Result<GitOutput, GitError> = git::run;
     let _repo_root: fn() -> Result<PathBuf, GitError> = git::repo_root;
     let _repo_root_from: fn(&Path) -> Result<PathBuf, GitError> = git::repo_root_from;
@@ -28,9 +26,15 @@ fn no_write_path_api() {
     let _content_hash: fn(&Path, &Path) -> Result<String, GitError> = git::content_hash;
     let _committed_hash: fn(&Path, &Path) -> Result<String, GitError> = git::committed_content_hash;
     let _parse_porcelain: fn(&str) -> Vec<String> = git::parse_porcelain;
+    let _path_status: fn(&Path, &Path) -> Result<Option<git::PathStatus>, GitError> =
+        git::path_status;
+    let _changed_files_lossy: fn(&Path) -> Vec<String> = git::changed_files_lossy;
+}
 
-    // Policy-aware variants: every named helper that spawns git exposes a
-    // `*_with_policy` variant taking the policy as the last argument.
+/// Compile-checked shapes of the policy-aware variants: every named helper
+/// that spawns git exposes a `*_with_policy` variant taking the policy as
+/// the last argument.
+fn assert_policy_variants() {
     let _changed_files: fn(&Path, EnvPolicy) -> Result<Vec<String>, GitError> =
         git::changed_files_with_policy;
     let _changed_between: fn(&Path, &str, &str, EnvPolicy) -> Result<Vec<String>, _> =
@@ -46,11 +50,14 @@ fn no_write_path_api() {
         git::committed_content_hash_with_policy;
     let _path_status: fn(&Path, &Path, EnvPolicy) -> Result<Option<git::PathStatus>, GitError> =
         git::path_status_with_policy;
+}
 
-    // Single-path status and the lossy changed-files variant.
-    let _path_status: fn(&Path, &Path) -> Result<Option<git::PathStatus>, GitError> =
-        git::path_status;
-    let _changed_files_lossy: fn(&Path) -> Vec<String> = git::changed_files_lossy;
+#[test]
+fn no_write_path_api() {
+    // Enumerate the public API surface with compile-checked shapes: the
+    // module exposes read-only queries only.
+    assert_read_only_surface();
+    assert_policy_variants();
 
     // No git invocation in the module may build a write-path command:
     // the string literals for `git init`, `git add`, and `git commit`

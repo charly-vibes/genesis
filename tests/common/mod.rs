@@ -15,6 +15,10 @@
 //! starts, so it does not race parallel test threads and does not mutate
 //! the environment mid-run.
 //!
+//! Beyond env hygiene this module carries shared doc-reading helpers
+//! (repo-relative paths, markdown normalization) and a buffered
+//! stdout/stderr capture pair used by the doc-drift and evals guards.
+//!
 //! Deliberate child-process poisoning: some tests spawn themselves as
 //! children with hook-context variables *deliberately* set (the
 //! `GENESIS_*_CHILD` sentinel marks them) to assert inherit-vs-strip
@@ -34,6 +38,60 @@ pub trait TestUnwrap: Sized {
     /// Unwrap with context; panics with `why` plus the error/None detail.
     #[track_caller]
     fn require(self, why: &str) -> Self::Output;
+}
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// Absolute path of a repo-relative file.
+#[allow(dead_code)]
+pub fn project_file(rel: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(rel)
+}
+
+/// Read a repo-relative file, panicking with the path on failure.
+#[allow(dead_code)]
+pub fn read(rel: &str) -> String {
+    fs::read_to_string(project_file(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
+}
+
+/// Collapse whitespace and strip markdown noise (backslash escapes,
+/// emphasis markers, inline-code backticks) so text guards survive prose
+/// formatting.
+#[allow(dead_code)]
+pub fn norm_markdown(text: &str) -> String {
+    let stripped: String = text
+        .chars()
+        .filter(|c| !matches!(c, '\\' | '*' | '`'))
+        .collect();
+    stripped.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Normalized text of a repo-relative doc file.
+#[allow(dead_code)]
+pub fn norm_doc(rel: &str) -> String {
+    norm_markdown(&read(rel))
+}
+
+/// Buffered stdout/stderr pair so tests don't write to the real terminal.
+#[allow(dead_code)]
+#[derive(Default)]
+pub struct Streams {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+#[allow(dead_code)]
+impl Streams {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn as_strings(&self) -> (String, String) {
+        (
+            String::from_utf8_lossy(&self.stdout).into_owned(),
+            String::from_utf8_lossy(&self.stderr).into_owned(),
+        )
+    }
 }
 
 impl<T, E: std::fmt::Debug> TestUnwrap for Result<T, E> {

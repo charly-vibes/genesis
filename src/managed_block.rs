@@ -192,18 +192,14 @@ impl BlockInjector {
         block_name: &str,
         content: &str,
     ) -> Result<InjectResult, std::io::Error> {
-        let block = self.registry.get(block_name).ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("block '{}' not registered", block_name),
-            )
-        })?;
-
+        let block = self
+            .registry
+            .get(block_name)
+            .ok_or_else(|| unknown_block_error(block_name))?;
         let block_text = self.render_block(block, content);
         if path.exists() {
             self.inject_into_existing(path, block, &block_text)
         } else {
-            // New file
             std::fs::write(path, &block_text)?;
             Ok(InjectResult::Created)
         }
@@ -261,31 +257,37 @@ impl BlockInjector {
         block_text: &str,
     ) -> Result<InjectResult, std::io::Error> {
         let existing = std::fs::read_to_string(path)?;
-        let (start, end) = (
-            existing.find(&block.start_marker),
-            existing.find(&block.end_marker),
-        );
-        if let (Some(start), Some(end)) = (start, end) {
-            // Block exists — update in-place
-            let end_pos = end + block.end_marker.len();
+        if let Some((start, end_pos)) = block_span(&existing, block) {
             let new_content = splice_block(&existing, start, end_pos, block_text);
             std::fs::write(path, new_content)?;
             Ok(InjectResult::Updated)
         } else {
-            // No block — prepend
             prepend_block(path, &existing, block_text)?;
             Ok(InjectResult::Prepended)
         }
     }
 }
 #[cfg(test)]
-#[path = "managed_block/tests.rs"]
 mod tests;
 
 /// Prepend `block_text` ahead of `existing` content, writing to `path`.
 fn prepend_block(path: &Path, existing: &str, block_text: &str) -> std::io::Result<()> {
     let new_content = format!("{block_text}\n\n{existing}");
     std::fs::write(path, new_content)
+}
+
+/// `NotFound` error for a block name missing from the registry.
+fn unknown_block_error(block_name: &str) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("block '{}' not registered", block_name),
+    )
+}
+
+/// Byte span `[start, end_pos)` covered by `block`'s markers in `existing`.
+fn block_span(existing: &str, block: &BlockDef) -> Option<(usize, usize)> {
+    let end_pos = existing.find(&block.end_marker)? + block.end_marker.len();
+    Some((existing.find(&block.start_marker)?, end_pos))
 }
 
 /// Replace `existing[start..end_pos]` with `block_text`.

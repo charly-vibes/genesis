@@ -180,29 +180,39 @@ impl DoctorReport {
     /// `cli_version` must be the caller's own CLI version (see
     /// [`crate::envelope::Envelope::success`]).
     pub fn to_envelope(&self, cli_version: &str) -> Envelope<&Self> {
-        let hints = self
-            .checks
-            .iter()
-            .filter_map(|c| {
-                c.fix.as_ref().map(|fix| crate::envelope::HintEntry {
-                    command: fix.clone(),
-                    description: c.message.clone(),
-                })
-            })
-            .collect::<Vec<_>>();
-
-        let warnings = self
-            .checks
-            .iter()
-            .filter(|c| matches!(c.status, CheckStatus::Warn))
-            .map(|c| crate::envelope::Warning {
-                rule_name: c.name.clone(),
-                entity_id: None,
-                message: c.message.clone(),
-                suggested_remediation: c.fix.clone(),
-            })
-            .collect();
-
-        Envelope::success(cli_version, EnvelopeKind::Doctor, self, warnings, hints)
+        Envelope::success(
+            cli_version,
+            EnvelopeKind::Doctor,
+            self,
+            warnings_from(&self.checks),
+            hints_from(&self.checks),
+        )
     }
+}
+
+/// Envelope warnings for every check with `Warn` status.
+fn warnings_from(checks: &[CheckEntry]) -> Vec<crate::envelope::Warning> {
+    checks
+        .iter()
+        .filter(|c| matches!(c.status, CheckStatus::Warn))
+        .map(|c| crate::envelope::Warning {
+            rule_name: c.name.clone(),
+            entity_id: None,
+            message: c.message.clone(),
+            suggested_remediation: c.fix.clone(),
+        })
+        .collect()
+}
+
+/// Envelope hints for every check carrying a fix command.
+fn hints_from(checks: &[CheckEntry]) -> Vec<crate::envelope::HintEntry> {
+    checks
+        .iter()
+        .filter_map(|c| {
+            c.fix.as_ref().map(|fix| crate::envelope::HintEntry {
+                command: fix.clone(),
+                description: c.message.clone(),
+            })
+        })
+        .collect()
 }

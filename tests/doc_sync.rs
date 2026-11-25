@@ -12,15 +12,16 @@
 //!    added or renamed without traceability.
 //! 3. `version_pins_match_manifest` — install pins in README and the book
 //!    must track `Cargo.toml`'s version.
+//!
+//! `snippet_map_covers_tests`, the third drift guard, lives in
+//! `tests/doc_snippet_map.rs`.
 
 mod common;
 
-use common::TestUnwrap;
+use common::{TestUnwrap, project_file, read};
 
 use std::fs;
-use std::path::{Path, PathBuf};
-
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+use std::path::Path;
 
 /// The human-maintained source of the forbidden-API blocklist. Patterns live
 /// here as a markdown table so the removed-API history is readable (and
@@ -63,14 +64,6 @@ fn load_forbidden_patterns() -> Vec<(String, String)> {
         patterns.push((pattern.to_string(), reason.to_string()));
     }
     patterns
-}
-
-fn project_file(rel: &str) -> PathBuf {
-    Path::new(MANIFEST_DIR).join(rel)
-}
-
-fn read(rel: &str) -> String {
-    fs::read_to_string(project_file(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
 }
 
 /// Markdown files on the onboarding path (the mdBook source under docs/src,
@@ -119,7 +112,7 @@ fn doc_entry(path: &Path, out: &mut Vec<(String, String)>) {
 
 fn read_doc_file(path: &Path) -> (String, String) {
     let rel = path
-        .strip_prefix(MANIFEST_DIR)
+        .strip_prefix(env!("CARGO_MANIFEST_DIR"))
         .require("under manifest")
         .to_string_lossy()
         .into_owned();
@@ -165,142 +158,24 @@ fn forbidden_hits(path: &str, content: &str, forbidden: &[(String, String)]) -> 
     violations
 }
 
-/// Every `#[test]` fn in tests/doc_examples.rs must have a `→ docs/…` mapping
-/// entry, and every mapping entry must point at a file that exists.
-#[test]
-fn snippet_map_covers_tests() {
-    let source = read("tests/doc_examples.rs");
-
-    let test_fns = parse_test_fns(&source);
-    assert!(!test_fns.is_empty(), "no tests found in doc_examples.rs");
-
-    let (mapped_fns, mapped_paths) = parse_snippet_map(&source);
-    assert!(
-        !mapped_fns.is_empty(),
-        "no mapping entries found in doc_examples.rs header"
-    );
-
-    let problems = snippet_map_problems(&test_fns, &mapped_fns, &mapped_paths);
-    assert!(
-        problems.is_empty(),
-        "snippet map out of sync:\n{}",
-        problems.join("\n")
-    );
-}
-
-/// `#[test]` fn names in a source file, sorted.
-fn parse_test_fns(source: &str) -> Vec<String> {
-    let mut test_fns = Vec::new();
-    let lines: Vec<&str> = source.lines().collect();
-    for pair in lines.windows(2) {
-        let name = attr_fn_name(pair[0].trim(), pair[1].trim());
-        if let Some(name) = name {
-            test_fns.push(name);
-        }
-    }
-    test_fns.sort();
-    test_fns
-}
-
-/// Name of a `#[test]` fn when `prev` is its attribute and `line` its signature.
-fn attr_fn_name(prev: &str, line: &str) -> Option<String> {
-    if prev != "#[test]" || !line.starts_with("fn ") {
-        return None;
-    }
-    let name = line["fn ".len()..].split('(').next().unwrap_or("").trim();
-    if name.is_empty() {
-        return None;
-    }
-    Some(name.to_string())
-}
-
-/// Mapping entries from the `//!` header: `- `fn` → docs/<file>, <section>`.
-fn parse_snippet_map(source: &str) -> (Vec<String>, Vec<String>) {
-    let mut mapped_fns = Vec::new();
-    let mut mapped_paths = Vec::new();
-    for line in source.lines() {
-        let Some((fn_name, path)) = parse_mapping_line(line) else {
-            continue;
-        };
-        mapped_fns.push(fn_name);
-        mapped_paths.push(path);
-    }
-    (mapped_fns, mapped_paths)
-}
-
-fn parse_mapping_line(line: &str) -> Option<(String, String)> {
-    let line = line.trim().trim_start_matches("//!").trim();
-    let rest = line.strip_prefix("- `")?;
-    let (fn_name, target) = rest.split_once("` ")?;
-    // target is "` → docs/<file>, <section>" — drop the closing backtick,
-    // the arrow, and surrounding whitespace before extracting the path
-    let target = target
-        .trim()
-        .trim_start_matches('`')
-        .trim()
-        .trim_start_matches("→")
-        .trim();
-    let path = target.split(',').next().unwrap_or("").trim().to_string();
-    Some((fn_name.to_string(), path))
-}
-
-fn snippet_map_problems(
-    test_fns: &[String],
-    mapped_fns: &[String],
-    mapped_paths: &[String],
-) -> Vec<String> {
-    let mut problems = Vec::new();
-    problems.extend(mapping_coverage_problems(test_fns, mapped_fns));
-    problems.extend(mapping_target_problems(mapped_paths));
-    problems
-}
-
-/// Tests without a mapping entry, and entries for removed tests.
-fn mapping_coverage_problems(test_fns: &[String], mapped_fns: &[String]) -> Vec<String> {
-    let mut problems = Vec::new();
-    let missing: Vec<&String> = test_fns
-        .iter()
-        .filter(|f| !mapped_fns.contains(f))
-        .collect();
-    if !missing.is_empty() {
-        problems.push(format!(
-            "tests without a mapping entry: {missing:?} — add `//! - `<test>` → docs/<file>, <section>` to the header"
-        ));
-    }
-    let stale: Vec<&String> = mapped_fns
-        .iter()
-        .filter(|f| !test_fns.contains(f))
-        .collect();
-    if !stale.is_empty() {
-        problems.push(format!(
-            "mapping entries for tests that no longer exist: {stale:?}"
-        ));
-    }
-    problems
-}
-
-/// Mapping entries pointing at files that don't exist.
-fn mapping_target_problems(mapped_paths: &[String]) -> Vec<String> {
-    mapped_paths
-        .iter()
-        .filter(|p| !project_file(p).exists())
-        .map(|p| format!("mapping points at missing file: {p}"))
-        .collect()
-}
-
-/// Install pins in README and the book must track Cargo.toml's version.
-#[test]
-fn version_pins_match_manifest() {
+/// `version` value of the `[package]` section in Cargo.toml.
+fn manifest_version() -> String {
     let manifest = read("Cargo.toml");
     let version_line = manifest
         .lines()
         .find(|l| l.starts_with("version = "))
         .require("Cargo.toml has a version");
-    let full = version_line
+    version_line
         .split('"')
         .nth(1)
-        .require("version is quoted, e.g. \"0.6.0\"");
+        .require("version is quoted, e.g. \"0.6.0\"")
+        .to_string()
+}
 
+/// Install pins in README and the book must track Cargo.toml's version.
+#[test]
+fn version_pins_match_manifest() {
+    let full = manifest_version();
     let major_minor = full
         .rsplit_once('.')
         .require("version has at least major.minor.patch")
@@ -316,7 +191,7 @@ fn version_pins_match_manifest() {
         ("README.md", readme.as_str()),
         ("docs/src/getting-started.md", getting_started.as_str()),
     ] {
-        check_version_pin(path, content, &pin, full, &mut problems);
+        check_version_pin(path, content, &pin, &full, &mut problems);
     }
     // at least one of README/getting-started documents the git-tag variant
     if !readme.contains(&tag_pin) && !getting_started.contains(&tag_pin) {

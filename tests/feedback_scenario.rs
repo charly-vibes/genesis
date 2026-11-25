@@ -10,6 +10,25 @@ use genesis::feedback::scratch::{ErrorRecord, write_error_scratch};
 
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// Point `XDG_CACHE_HOME` at a fresh per-test temp dir, returning the
+/// directory and the previous value for restoration.
+fn set_xdg_cache() -> (std::path::PathBuf, Option<String>) {
+    let cache = std::env::temp_dir().join(format!("genesis-m3p-test-{}", std::process::id()));
+    std::fs::create_dir_all(&cache).require("create_dir_all");
+    let prev = std::env::var("XDG_CACHE_HOME").ok();
+    unsafe { std::env::set_var("XDG_CACHE_HOME", &cache) };
+    (cache, prev)
+}
+
+/// Restore `XDG_CACHE_HOME` to `prev` and drop the temp cache dir.
+fn restore_xdg(cache: &std::path::Path, prev: Option<String>) {
+    match prev {
+        Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
+        None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
+    }
+    std::fs::remove_dir_all(cache).ok();
+}
+
 fn bundle() -> ContextBundle {
     ContextBundle {
         tool_name: "my-tool".into(),
@@ -111,10 +130,7 @@ fn caller_supplied_fixtures_become_scenario_fixtures() {
 #[test]
 fn from_last_error_converts_scratch_record() {
     let _guard = ENV_LOCK.lock().require("lock");
-    let cache = std::env::temp_dir().join(format!("genesis-m3p-test-{}", std::process::id()));
-    std::fs::create_dir_all(&cache).require("create_dir_all");
-    let prev = std::env::var("XDG_CACHE_HOME").ok();
-    unsafe { std::env::set_var("XDG_CACHE_HOME", &cache) };
+    let (cache, prev) = set_xdg_cache();
 
     let record = ErrorRecord {
         ts: "2026-09-17T12:00:00Z".into(),
@@ -137,12 +153,7 @@ fn from_last_error_converts_scratch_record() {
         Err(genesis::feedback::ConversionError::NoScratchRecord(_))
     ));
 
-    // Restore env.
-    match prev {
-        Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
-        None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
-    }
-    std::fs::remove_dir_all(&cache).ok();
+    restore_xdg(&cache, prev);
 }
 
 // ── No-LLM / no-subprocess guarantee (task 4.4) ───────────────────────

@@ -65,10 +65,6 @@ impl StatusContributor for PassContributor {
     }
 }
 
-// ── StatusBuilder ─────────────────────────────────────────────────
-
-// ── StatusBuilder ─────────────────────────────────────────────────
-
 #[test]
 fn test_builder_empty() {
     let builder = StatusBuilder::new();
@@ -118,23 +114,38 @@ fn test_builder_unreachable_contributor() {
     assert!(report.sections[0].summary.contains("unreachable"));
 }
 
-// ── DoctorStatusBridge ────────────────────────────────────────────
+struct PassCheck;
+impl DoctorCheck for PassCheck {
+    fn name(&self) -> &'static str {
+        "pass"
+    }
+    fn description(&self) -> &'static str {
+        "passes"
+    }
+    fn run(&self, _: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        Ok(vec![])
+    }
+}
+
+struct FailCheck;
+impl DoctorCheck for FailCheck {
+    fn name(&self) -> &'static str {
+        "fail"
+    }
+    fn description(&self) -> &'static str {
+        "fails"
+    }
+    fn run(&self, _: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        Ok(vec![LintResult::with_fix(
+            "broken",
+            Severity::Error,
+            "fix it",
+        )])
+    }
+}
 
 #[test]
 fn test_doctor_bridge_healthy() {
-    struct PassCheck;
-    impl DoctorCheck for PassCheck {
-        fn name(&self) -> &'static str {
-            "pass"
-        }
-        fn description(&self) -> &'static str {
-            "passes"
-        }
-        fn run(&self, _: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
-            Ok(vec![])
-        }
-    }
-
     let dir = tempfile::tempdir().require("value");
     let runner = DoctorRunner::new(vec![Box::new(PassCheck)]);
     let bridge = DoctorStatusBridge::new("test-tool", runner);
@@ -145,23 +156,6 @@ fn test_doctor_bridge_healthy() {
 
 #[test]
 fn test_doctor_bridge_with_issues() {
-    struct FailCheck;
-    impl DoctorCheck for FailCheck {
-        fn name(&self) -> &'static str {
-            "fail"
-        }
-        fn description(&self) -> &'static str {
-            "fails"
-        }
-        fn run(&self, _: &Path) -> Result<Vec<LintResult>, Box<dyn std::error::Error>> {
-            Ok(vec![LintResult::with_fix(
-                "broken",
-                Severity::Error,
-                "fix it",
-            )])
-        }
-    }
-
     let dir = tempfile::tempdir().require("value");
     let runner = DoctorRunner::new(vec![Box::new(FailCheck)]);
     let bridge = DoctorStatusBridge::new("test-tool", runner);

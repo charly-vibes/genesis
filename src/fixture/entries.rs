@@ -70,6 +70,15 @@ pub(super) fn write_plain_files(root: &Path, files: &[FileEntry]) -> Result<(), 
     Ok(())
 }
 
+/// Run the config writes deferred from `with_config`, now that the fixture
+/// root exists.
+pub(super) fn write_configs(root: &Path, configs: Vec<ConfigEntry>) -> Result<(), FixtureError> {
+    for entry in configs {
+        (entry.write)(root)?;
+    }
+    Ok(())
+}
+
 /// Serialize and write the TOML files under `root`.
 pub(super) fn write_toml_files(root: &Path, tomls: &[TomlEntry]) -> Result<(), FixtureError> {
     for entry in tomls {

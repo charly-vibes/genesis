@@ -1,5 +1,6 @@
 //! Unit tests for `managed_block` (extracted from the inline `mod tests` to
-//! keep the app file under the pretender file-lines budget).
+//! keep the app file under the pretender file-lines budget). Provenance
+//! footer tests live in the [`provenance`] submodule.
 
 // pretender: role=test
 #![allow(unused_imports)]
@@ -8,6 +9,8 @@ use super::*;
 
 use crate::testutil::TestUnwrap;
 use tempfile::TempDir;
+
+mod provenance;
 
 fn tmp() -> TempDir {
     tempfile::tempdir().require("tempdir")
@@ -292,107 +295,4 @@ fn test_multiple_blocks_in_same_file() {
     assert!(content.contains("<!-- WAI:END -->"));
     assert!(content.contains("<!-- DONT:START -->"));
     assert!(content.contains("<!-- DONT:END -->"));
-}
-
-#[test]
-fn test_reregister_replaces_old_block() {
-    let mut reg = BlockRegistry::new();
-    reg.register(BlockDef::new("WAI"));
-    reg.register(BlockDef::new("WAI"));
-    assert_eq!(reg.names().len(), 1);
-}
-
-// ── Provenance footer (add-artifact-provenance §1) ─────────────────
-
-/// Extract the sha8 field from a provenance footer line.
-fn footer_sha(line: &str) -> &str {
-    let rest = line.split("sha=").nth(1).require("footer has sha=");
-    rest.split(' ').next().require("sha terminated by space")
-}
-
-/// RED 1.1: footer-less injection is byte-identical to pre-footer output.
-#[test]
-fn test_footerless_injection_byte_identical_to_golden() {
-    let dir = tmp();
-    let path = dir.path().join("golden.md");
-    let injector = test_injector();
-    injector
-        .inject(&path, "WAI", "\n# Content\n")
-        .require("value");
-    let content = std::fs::read_to_string(&path).require("value");
-    assert_eq!(content, "<!-- WAI:START -->\n# Content\n<!-- WAI:END -->");
-    assert!(!content.contains("provenance:"));
-}
-
-/// RED 1.2: opt-in provenance footer written inside the markers.
-#[test]
-fn test_provenance_footer_written_inside_markers() {
-    let dir = tmp();
-    let path = dir.path().join("prov.md");
-    let injector = BlockInjector::new(test_registry()).with_provenance("genesis");
-    injector
-        .inject(&path, "WAI", "\n# Content\n")
-        .require("value");
-    let content = std::fs::read_to_string(&path).require("value");
-
-    let footer = content
-        .lines()
-        .find(|l| l.contains("provenance:"))
-        .require("footer line present");
-    assert!(footer.starts_with("<!-- ") && footer.ends_with(" -->"));
-    assert!(footer.contains("genesis"));
-    assert!(footer.contains(env!("CARGO_PKG_VERSION")));
-    assert!(footer.contains("source=WAI"));
-    assert!(footer.contains(&format!("sha={}", content_sha8("\n# Content\n"))));
-
-    // Footer lives inside the markers.
-    let start = content.find("<!-- WAI:START -->").require("value");
-    let end = content.find("<!-- WAI:END -->").require("value");
-    let fpos = content.find("provenance:").require("value");
-    assert!(start < fpos && fpos < end);
-}
-
-/// RED 1.3a: footer round-trips through re-inject with updated hash.
-#[test]
-fn test_footer_round_trip_updates_hash() {
-    let dir = tmp();
-    let path = dir.path().join("rt.md");
-    let injector = BlockInjector::new(test_registry()).with_provenance("genesis");
-
-    injector.inject(&path, "WAI", "\n# Old\n").require("value");
-    let first = std::fs::read_to_string(&path).require("value");
-    let first_sha = footer_sha(
-        first
-            .lines()
-            .find(|l| l.contains("provenance:"))
-            .require("value"),
-    )
-    .to_string();
-
-    let result = injector.inject(&path, "WAI", "\n# New\n").require("value");
-    assert_eq!(result, InjectResult::Updated);
-
-    let content = std::fs::read_to_string(&path).require("value");
-    let second_sha = footer_sha(
-        content
-            .lines()
-            .find(|l| l.contains("provenance:"))
-            .require("value"),
-    );
-    assert_ne!(first_sha, second_sha);
-    assert_eq!(second_sha, content_sha8("\n# New\n"));
-    assert!(injector.has_block(&path, "WAI"));
-    assert_eq!(content.matches("provenance:").count(), 1);
-}
-
-/// RED 1.3b: content hash excludes the footer line itself — version
-/// changes do not move the hash for identical content.
-#[test]
-fn test_footer_hash_excludes_footer_line_and_version() {
-    let c = "\n# Same content\n";
-    let f_v1 = provenance_footer("genesis", "0.1.0", "WAI", c);
-    let f_v2 = provenance_footer("genesis", "9.9.9", "WAI", c);
-    assert_ne!(f_v1, f_v2, "footer text carries the version");
-    assert_eq!(footer_sha(&f_v1), footer_sha(&f_v2));
-    assert_eq!(footer_sha(&f_v1), content_sha8(c));
 }

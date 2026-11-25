@@ -19,7 +19,6 @@ use super::{StatusContributor, StatusItem, StatusLevel, StatusSection};
 ///
 /// let mut builder = StatusBuilder::new();
 ///
-/// // Register a tool's doctor as a status contributor
 /// let runner: DoctorRunner = DoctorRunner::new(vec![]);
 /// builder.register(Box::new(DoctorStatusBridge::new("my-tool", runner)));
 /// ```
@@ -45,26 +44,29 @@ impl StatusContributor for DoctorStatusBridge {
             .runner
             .run(repo_root, false)
             .map_err(|e| e.to_string())?;
-
-        let items: Vec<StatusItem> = report
-            .checks
-            .iter()
-            .filter(|check| check.status != crate::doctor::CheckStatus::Pass)
-            .map(|check| StatusItem {
-                label: check.name.clone(),
-                value: check.message.clone(),
-                level: bridge_level(check.status),
-            })
-            .collect();
         let summary = doctor_summary(&report);
-        let section = StatusSection::with_items(self.name, summary, items)
+        let section = StatusSection::with_items(self.name, summary, failing_items(&report))
             .with_fix_suggestions(&report.checks);
         Ok(section)
     }
 }
 
-/// Map a doctor check status to a dashboard status level (pass is filtered
-/// out before this is called).
+/// One dashboard item per non-passing doctor check.
+fn failing_items(report: &crate::doctor::DoctorReport) -> Vec<StatusItem> {
+    report
+        .checks
+        .iter()
+        .filter(|check| check.status != crate::doctor::CheckStatus::Pass)
+        .map(|check| StatusItem {
+            label: check.name.clone(),
+            value: check.message.clone(),
+            level: bridge_level(check.status),
+        })
+        .collect()
+}
+
+/// Map a doctor check status to a dashboard status level (only called for
+/// non-passing checks).
 fn bridge_level(status: crate::doctor::CheckStatus) -> StatusLevel {
     match status {
         crate::doctor::CheckStatus::Pass => StatusLevel::Healthy,

@@ -18,32 +18,11 @@
 
 mod common;
 
-use common::TestUnwrap;
+use common::{Streams, TestUnwrap};
 
 use genesis::cli::{maybe_print_version_json, maybe_print_version_json_from};
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
 use genesis::guide::{CliFormat, CliVerbosity, ErrorSink, Output, OutputFormat, Verbosity};
-
-/// Buffered stdout/stderr pair so tests don't write to the real terminal.
-struct Streams {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
-impl Streams {
-    fn new() -> Self {
-        Self {
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-        }
-    }
-    fn as_strings(&self) -> (String, String) {
-        (
-            String::from_utf8_lossy(&self.stdout).into_owned(),
-            String::from_utf8_lossy(&self.stderr).into_owned(),
-        )
-    }
-}
 
 /// docs/src/getting-started.md, Step 2 — structured output with a next step.
 #[test]
@@ -129,52 +108,39 @@ fn step4_version_json() {
 #[test]
 fn step4_version_json_from_args() {
     // `--version --json` → prints the version envelope to the writer, true
-    let mut out: Vec<u8> = Vec::new();
-    let printed = maybe_print_version_json_from(
-        "my-tool",
-        "1.2.3",
-        &[
-            "my-tool".to_string(),
-            "--version".to_string(),
-            "--json".to_string(),
-        ],
-        &mut out,
-    );
+    let (printed, out) = version_flag_case(&["--version", "--json"]);
     assert!(printed, "--version --json must report handled");
 
     let parsed: serde_json::Value =
-        serde_json::from_slice(&out).require("version envelope is valid JSON");
+        serde_json::from_str(&out).require("version envelope is valid JSON");
     assert_eq!(parsed["envelope_kind"], serde_json::json!("version"));
     assert_eq!(parsed["data"]["version"], serde_json::json!("1.2.3"));
 
     // `-V -j` short forms also trigger
-    let mut out: Vec<u8> = Vec::new();
-    let printed = maybe_print_version_json_from(
-        "my-tool",
-        "1.2.3",
-        &["my-tool".to_string(), "-V".to_string(), "-j".to_string()],
-        &mut out,
-    );
+    let (printed, out) = version_flag_case(&["-V", "-j"]);
     assert!(printed);
     assert!(!out.is_empty());
 
     // Plain `--version` (no --json) → left for clap, false, nothing printed
-    let mut out: Vec<u8> = Vec::new();
-    let printed = maybe_print_version_json_from(
-        "my-tool",
-        "1.2.3",
-        &["my-tool".to_string(), "--version".to_string()],
-        &mut out,
-    );
+    let (printed, out) = version_flag_case(&["--version"]);
     assert!(!printed, "plain --version is clap's job");
     assert!(out.is_empty());
 
     // No version flag at all → false
-    let mut out: Vec<u8> = Vec::new();
-    let printed =
-        maybe_print_version_json_from("my-tool", "1.2.3", &["my-tool".to_string()], &mut out);
+    let (printed, out) = version_flag_case(&[]);
     assert!(!printed);
     assert!(out.is_empty());
+}
+
+/// Run one argv tail through `maybe_print_version_json_from` with argv[0]
+/// `my-tool` and version 1.2.3; returns (handled, captured stdout).
+fn version_flag_case(args: &[&str]) -> (bool, String) {
+    let mut argv = vec!["my-tool".to_string()];
+    argv.extend(args.iter().map(|a| a.to_string()));
+
+    let mut out: Vec<u8> = Vec::new();
+    let printed = maybe_print_version_json_from("my-tool", "1.2.3", &argv, &mut out);
+    (printed, String::from_utf8_lossy(&out).into_owned())
 }
 
 /// docs/src/how-to/guide.md — "Format-dispatching with emit()".

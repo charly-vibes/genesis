@@ -19,6 +19,16 @@ fn run_ok(fixture: &Fixture, args: &[&str]) {
     assert!(out.success(), "{args:?} failed: {}", out.stderr);
 }
 
+/// Write `content` at `name` in the fixture and return its git blob hash
+/// (for forging index entries without a real merge).
+fn write_blob(fixture: &Fixture, name: &str, content: &str) -> String {
+    std::fs::write(fixture.path(name), content).require("write blob");
+    let out = fixture
+        .run(&["git", "hash-object", "-w", name])
+        .require("hash-object");
+    out.stdout.trim().to_string()
+}
+
 #[test]
 fn path_status_clean_committed_path_is_none() {
     let fixture = Fixture::new().with_git_init().build().require("fixture");
@@ -57,16 +67,8 @@ fn path_status_unmerged_maps_to_dirty() {
     let fixture = Fixture::new().with_git_init().build().require("fixture");
     // Forge unmerged index entries (stages 2 and 3) without a real merge:
     // `git status --porcelain` reports `UU` for the path.
-    std::fs::write(fixture.path("conflicted.txt"), "ours").require("write ours");
-    let out = fixture
-        .run(&["git", "hash-object", "-w", "conflicted.txt"])
-        .require("hash-object ours");
-    let ours = out.stdout.trim().to_string();
-    std::fs::write(fixture.path("conflicted.txt"), "theirs").require("write theirs");
-    let out = fixture
-        .run(&["git", "hash-object", "-w", "conflicted.txt"])
-        .require("hash-object theirs");
-    let theirs = out.stdout.trim().to_string();
+    let ours = write_blob(&fixture, "conflicted.txt", "ours");
+    let theirs = write_blob(&fixture, "conflicted.txt", "theirs");
     run_ok(
         &fixture,
         &[

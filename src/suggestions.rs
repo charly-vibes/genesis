@@ -35,14 +35,10 @@ impl CommandRegistry {
     ///
     /// Subsequent calls for the same tool replace the previous list.
     pub fn register(&mut self, tool: &str, commands: Vec<String>) {
-        // Remove old entries from flat list
         if let Some(old) = self.commands.remove(tool) {
             self.flat.retain(|c| !old.contains(c));
         }
-        // Add new entries
-        for cmd in &commands {
-            self.flat.push(cmd.clone());
-        }
+        self.flat.extend(commands.iter().cloned());
         self.commands.insert(tool.to_string(), commands);
     }
 
@@ -87,29 +83,11 @@ impl Suggestion {
     /// Format the suggestion as a human-readable message.
     pub fn message(&self) -> String {
         match self {
-            Suggestion::DidYouMean {
-                original,
-                suggestion,
-            } => {
-                format!(
-                    "Unknown command '{}'. Did you mean '{}'?",
-                    original, suggestion
-                )
-            }
-            Suggestion::WrongOrder { original, correct } => {
-                format!(
-                    "Invalid command '{}'. Did you mean '{}'?",
-                    original, correct
-                )
-            }
-            Suggestion::ContextHint { message, path } => match path {
-                Some(p) => format!("{}: {}", message, p),
-                None => message.clone(),
-            },
             Suggestion::Fix {
                 description,
                 command,
             } => fix_message(description, command.as_deref()),
+            other => other.guidance(),
         }
     }
 
@@ -124,9 +102,6 @@ impl Suggestion {
         })
     }
 
-    /// Format the suggestion as a \"→ Run: …\" footer string."}]
-    ///
-    /// Returns `None` if the suggestion doesn't have a runnable command.
     /// The bare runnable command this suggestion points at, without the
     /// human `→ Run: ` prefix (genesis-r13: JSON `HintEntry.command` must
     /// be executable, not display-formatted).
@@ -148,25 +123,11 @@ impl Suggestion {
             Suggestion::DidYouMean {
                 original,
                 suggestion,
-            } => {
-                format!(
-                    "Unknown command '{}'. Did you mean '{}'?",
-                    original, suggestion
-                )
-            }
+            } => miscommand_text("Unknown", original, suggestion),
             Suggestion::WrongOrder { original, correct } => {
-                format!(
-                    "Invalid command '{}'. Did you mean '{}'?",
-                    original, correct
-                )
+                miscommand_text("Invalid", original, correct)
             }
-            Suggestion::ContextHint { message, path } => {
-                if let Some(p) = path {
-                    format!("{}: {}", message, p)
-                } else {
-                    message.clone()
-                }
-            }
+            Suggestion::ContextHint { message, path } => hint_text(message, path.as_deref()),
             Suggestion::Fix { description, .. } => description.clone(),
         }
     }
@@ -261,6 +222,20 @@ fn fix_message(description: &str, command: Option<&str>) -> String {
     }
 }
 
+/// The "…command '<original>'. Did you mean '<suggestion>'?" sentence shared
+/// by `Suggestion::message` and `Suggestion::guidance`.
+fn miscommand_text(kind: &str, original: &str, suggestion: &str) -> String {
+    format!("{kind} command '{original}'. Did you mean '{suggestion}'?")
+}
+
+/// `"<message>: <path>"` when a path is attached, else the bare message.
+fn hint_text(message: &str, path: Option<&str>) -> String {
+    match path {
+        Some(p) => format!("{message}: {p}"),
+        None => message.to_string(),
+    }
+}
+
 /// Parse a conventional fix hint into a `Suggestion::Fix`.
 ///
 /// genesis-r13: hints are conventionally authored 'run: <cmd>' but the footer
@@ -292,7 +267,6 @@ fn parse_fix_hint(s: &str) -> Option<Suggestion> {
 fn trailing_command_hint(s: &str) -> Option<Suggestion> {
     let pos = s.rfind(" run: ")?;
     let cmd = &s[pos + " run: ".len()..];
-    // Commands are single lines; a multi-line or empty tail is prose.
     if cmd.contains('\n') || cmd.is_empty() {
         return None;
     }

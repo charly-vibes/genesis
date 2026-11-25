@@ -105,15 +105,14 @@ impl DoctorRunner {
         Ok(DoctorReport::new(&self.tool_name, entries))
     }
 
-    /// Run an auto-fixable check: pre-check, fix, post-check, verify.
+    /// Run an auto-fixable check: pre-check, then fix + verify if needed.
     fn run_fixable_check(
         &self,
         check: &dyn DoctorCheck,
         repo_root: &Path,
         entries: &mut Vec<CheckEntry>,
     ) {
-        // Run check first
-        let Some(pre_results) = self.try_run(check, repo_root, "pre-fix check failed", entries)
+        let Some(pre_results) = Self::try_run(check, repo_root, "pre-fix check failed", entries)
         else {
             return;
         };
@@ -123,13 +122,16 @@ impl DoctorRunner {
             return;
         }
 
-        // Apply fix
-        let Some(fix_results) = self.try_fix(check, repo_root, entries) else {
+        Self::fix_and_verify(check, repo_root, entries);
+    }
+
+    /// Apply the fix, re-run the check, and record the post-fix entry.
+    fn fix_and_verify(check: &dyn DoctorCheck, repo_root: &Path, entries: &mut Vec<CheckEntry>) {
+        let Some(fix_results) = Self::try_fix(check, repo_root, entries) else {
             return;
         };
 
-        // Run check again to verify fix
-        let Some(post_results) = self.try_run(check, repo_root, "post-fix check failed", entries)
+        let Some(post_results) = Self::try_run(check, repo_root, "post-fix check failed", entries)
         else {
             return;
         };
@@ -144,7 +146,7 @@ impl DoctorRunner {
         repo_root: &Path,
         entries: &mut Vec<CheckEntry>,
     ) {
-        let Some(results) = self.try_run(check, repo_root, "check failed", entries) else {
+        let Some(results) = Self::try_run(check, repo_root, "check failed", entries) else {
             return;
         };
 
@@ -169,7 +171,6 @@ impl DoctorRunner {
 
     /// Run a check, pushing a fail entry (named `err_context`) on error.
     fn try_run(
-        &self,
         check: &dyn DoctorCheck,
         repo_root: &Path,
         err_context: &str,
@@ -191,7 +192,6 @@ impl DoctorRunner {
 
     /// Apply a check's fix, pushing a fail entry on error.
     fn try_fix(
-        &self,
         check: &dyn DoctorCheck,
         repo_root: &Path,
         entries: &mut Vec<CheckEntry>,
@@ -220,28 +220,36 @@ fn verify_fix_entry(
     let still_has_issues = post_results
         .iter()
         .any(|r| r.severity != Severity::Advisory);
-
     if still_has_issues {
-        let fix = fix_results.first().and_then(|r| r.fix.clone());
-        CheckEntry::fail(
-            check.name(),
-            check.description(),
-            format!(
-                "fix applied but still has issues: {}",
-                failing_messages(post_results).join("; ")
-            ),
-            fix,
-        )
-    } else if fix_results.is_empty() {
-        CheckEntry::pass(check.name(), check.description(), "fixed".to_string())
+        failed_fix_entry(check, post_results, fix_results)
     } else {
-        // Use the fix result message if present
-        let msg = fix_results
-            .first()
-            .map(|r| format!("fixed: {}", r.message))
-            .unwrap_or_else(|| "fixed".to_string());
-        CheckEntry::pass(check.name(), check.description(), msg)
+        fixed_fix_entry(check, fix_results)
     }
+}
+
+/// Fail entry for a check still reporting issues after a fix was applied.
+fn failed_fix_entry(
+    check: &dyn DoctorCheck,
+    post_results: &[LintResult],
+    fix_results: &[LintResult],
+) -> CheckEntry {
+    let fix = fix_results.first().and_then(|r| r.fix.clone());
+    let messages = failing_messages(post_results).join("; ");
+    CheckEntry::fail(
+        check.name(),
+        check.description(),
+        format!("fix applied but still has issues: {messages}"),
+        fix,
+    )
+}
+
+/// Pass entry for a fixed check, using the fix result message when present.
+fn fixed_fix_entry(check: &dyn DoctorCheck, fix_results: &[LintResult]) -> CheckEntry {
+    let msg = fix_results
+        .first()
+        .map(|r| format!("fixed: {}", r.message))
+        .unwrap_or_else(|| "fixed".to_string());
+    CheckEntry::pass(check.name(), check.description(), msg)
 }
 
 /// Translate a lint result into a report entry for `check`.
