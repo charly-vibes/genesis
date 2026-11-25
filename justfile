@@ -153,7 +153,8 @@ record-capture:
     kaya publish
 
 # Lag gate: the record must not fall behind the repository (paths in the
-# script: src, docs, openspec, .wai). Warn on pull requests, fail on main.
+# script: src, docs, openspec, .wai). --mode warn exits 0 above the bound;
+# fail (the default) exits 1. CI runs fail mode on pushes and PRs alike.
 record-lag mode="fail" bound="60":
     python3 scripts/record-lag.py --mode {{mode}} --bound {{bound}}
 

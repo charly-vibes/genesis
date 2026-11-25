@@ -5,7 +5,9 @@ Purpose: catch a published page that points outside `docs/public/` before it
 ships (pattern: charly-vibes/kaya scripts/check-links.py @ v0.4.1, adapted to
 walk the kaya publication's markdown instead of the mdbook build's HTML).
 Responsibilities: walk `docs/public/**/*.md`, resolve every relative link
-target against its page, and fail naming each unresolved target.
+target against its page, and fail naming each unresolved target. Inline
+markdown links only — reference-style links and angle-bracket targets are
+not parsed (the kaya publication emits inline links).
 Rationale: the check is internal-only — no network access, no markdown parser
 dependency — and it judges exactly the tree `kaya publish` composes.
 """

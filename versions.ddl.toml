@@ -4,11 +4,12 @@
 # Update deliberately; the conformance test (dulce-de-leche
 # tests/standard_conformance.rs) requires this file to exist.
 #
-# §4 matrix row (genesis): a lib crate whose CI now consumes three family
-# tools for its research record and drift gates (kaya, sad, podras — wired
-# via justfile record-check/sad-check/brief-drift and the nightly Record
-# workflow). External: openspec (npm @fission-ai/openspec) is used for spec
-# authoring but not installed in CI.
+# §4 matrix row (genesis): a lib crate whose CI consumes two family tools for
+# its research record and prose gates (kaya, sad — wired via justfile
+# record-check/sad-check and the nightly Record workflow). podras is consumed
+# locally only: its brief-drift gate is opt-in/manual (`just brief-drift`),
+# so CI installs no podras. External: openspec (npm @fission-ai/openspec) is
+# used for spec authoring but not installed in CI.
 
 [tools]
 kaya = "0.4.1"

@@ -19,7 +19,7 @@ jobs:
   ci:
     name: Test & Build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -41,12 +41,13 @@ jobs:
         uses: taiki-e/install-action@mdbook
 
       # Fleet tooling consumed by `just ci`, pinned per versions.ddl.toml
-      # (Standardization §4: installs are pinned, never latest).
-      - name: Install fleet tools (kaya, sad, podras)
+      # (Standardization §4: installs are pinned, never latest). podras is not
+      # installed here: its brief-drift gate is opt-in/manual (`just
+      # brief-drift`), consumed locally only.
+      - name: Install fleet tools (kaya, sad)
         run: |
           cargo install --locked --git https://github.com/charly-vibes/kaya --tag v0.4.1 kaya-vibes
           cargo install --locked --git https://github.com/charly-vibes/sad --tag v0.2.0 sad-vibes
-          cargo install --locked --git https://github.com/charly-vibes/podras --tag v0.1.0 podras
 
       # DDL-43g: smoke our own live Pages URL — a 404'd book must fail this
       # repo's CI immediately, not wait for the next hub conformance run.

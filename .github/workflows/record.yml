@@ -24,7 +24,7 @@ jobs:
   snapshot:
     name: Capture record snapshot
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -50,19 +50,24 @@ jobs:
         run: just record-capture
 
       - name: Commit snapshot (skip when nothing was captured)
+        # Generated content only (ledger + compiled trees). Pre-commit gates
+        # are intentionally absent here: lefthook does not run in CI.
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "record-bot"
-            git config user.email "record-bot@users.noreply.github.com"
-            git add .kaya/ledger.jsonl docs/public
-            git commit -m "chore(record): nightly research snapshot"
-          else
+          git config user.name "record-bot"
+          git config user.email "record-bot@users.noreply.github.com"
+          git add .kaya/ledger.jsonl docs/public docs/research
+          if git diff --cached --quiet; then
             echo "nothing captured; skipping commit"
+          else
+            git commit -m "chore(record): nightly research snapshot"
           fi
 
       - name: Push with rebase retry
         run: |
           for attempt in 1 2 3 4 5; do
+            # A conflicted pull --rebase wedges the worktree; abort it so the
+            # next attempt starts clean instead of failing deterministically.
+            git rebase --abort 2>/dev/null || true
             if git pull --rebase origin main && git push origin main; then
               exit 0
             fi
