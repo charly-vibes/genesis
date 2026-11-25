@@ -24,12 +24,13 @@ pre-commit:
       run: kaya check --index
 # kaya:managed:end
 
-    # Committed-render drift gate (podras convention, outside the ddl:managed
-    # blocks so `ddl init --gates` never owns it). Compares BRIEF.md/BRIEF.json
-    # against a fresh render at the recorded evaluation date; exits 0 when the
-    # repo has no committed renders. Requires `podras` on PATH.
-    brief-drift:
-      run: scripts/guards/brief-drift.sh
+    # Opt-in committed-render drift gate (podras ships it commented out too):
+    # running it per-commit forces a render regeneration before EVERY commit
+    # (each new commit invalidates the committed renders). Run `just
+    # brief-drift` manually after regenerating renders instead. Requires
+    # `podras` on PATH, or set PODRAS_BIN in the hook environment.
+    # brief-drift:
+    #   run: scripts/guards/brief-drift.sh
     # ddl:managed:start (pre-commit)
     ddl-ah-check:
       run: ah check

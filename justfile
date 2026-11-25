@@ -64,7 +64,7 @@ docs:
 # === CI Pipeline ===
 
 # Full CI pipeline — mirrors .github/workflows/ci.yml exactly
-ci: fmt-check lint test docs build-release aix-check record-check sad-check brief-drift link-check
+ci: fmt-check lint test docs build-release aix-check record-check sad-check link-check
 
 # Validate specs (via espectacular)
 validate:

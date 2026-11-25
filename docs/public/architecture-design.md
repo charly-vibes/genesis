@@ -84,6 +84,7 @@ Reader question: how is it structured and why
 - genesis/Artifact/6884e00 — 6884e00eb12ccf7b8472a4a9f6eb4d4010d4d1b6
 - genesis/Artifact/6a6a1f1 — 6a6a1f1332b86f758b1d9be0b9fbb04be3a4f466
 - genesis/Artifact/6d6a8ec — 6d6a8ecb3df681099fcdfe4bc29bc7e8be1735f1
+- genesis/Artifact/6fc9540 — 6fc95401ee92c7443f6625c86946834c4515286c
 - genesis/Artifact/73a1a55 — 73a1a55c6b5cf39d6fc2365f067d05052e67d32e
 - genesis/Artifact/756c4e3 — 756c4e3b324f873d9a167bef72f5f6a1271bca29
 - genesis/Artifact/766c526 — 766c526ac9669c5f82a824a33214e4c87ec047f9
@@ -146,6 +147,6 @@ Reader question: how is it structured and why
 - genesis/Source/openspec-changes-fix-envelope-hint-channel-proposal.md@9988875 — openspec/changes/fix-envelope-hint-channel/proposal.md@9988875
 - genesis/Source/wai-projects-genesis-foundation-research-tool-craft.md@9988875 — .wai/projects/genesis-foundation/research/tool-craft.md@9988875
 
-_136 nodes from 139 events._
+_137 nodes from 140 events._
 
 <!-- kaya:end generated:publication.product.architecture-design -->

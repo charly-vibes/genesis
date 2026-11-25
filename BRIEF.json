@@ -6,19 +6,19 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-25",
-    "generated_at": "2026-11-25T18:19:52.579132642Z",
+    "generated_at": "2026-11-25T18:24:52.143791203Z",
     "sources": [
       {
         "name": "beads",
         "status": "present",
-        "observed_at": "2026-11-25T18:06:17Z",
+        "observed_at": "2026-11-25T18:20:14Z",
         "staleness": "fresh",
         "detail": null
       },
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-25T18:12:39Z",
+        "observed_at": "2026-11-25T18:22:17Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -300,6 +300,12 @@
     "needs_retriage": [],
     "recent": [
       {
+        "sha": "6fc95401ee92c7443f6625c86946834c4515286c",
+        "committed_at": "2026-11-25T18:22:17Z",
+        "subject": "chore(tools): adopt kaya, sad and podras fully - record, gates, publication",
+        "outcome": null
+      },
+      {
         "sha": "9988875e8fe6917ee640919dde29c94e995310c4",
         "committed_at": "2026-11-25T18:12:39Z",
         "subject": "chore(tools): init kaya research ledger and adopt the sad prose gate",
@@ -322,12 +328,6 @@
         "committed_at": "2026-11-25T17:20:13Z",
         "subject": "docs(openspec): apply the Rule-of-5 findings to the 7 proposals",
         "outcome": null
-      },
-      {
-        "sha": "4ef418e09dd743fb13033cb9fb81a9adee17cec3",
-        "committed_at": "2026-11-25T16:53:02Z",
-        "subject": "docs(openspec): propose 7 changes from the fleet adoption review",
-        "outcome": null
       }
     ],
     "health": {
@@ -336,7 +336,7 @@
       "signals": [
         {
           "kind": "orphan_commits",
-          "reason": "9 commits in the 14-day window link no tracker id or open work-item path: 04d06ef0374d88f8bf5396dc17533645af95069b (chore: dogfood podras — managed block, curation scaffold, committed brief); 0cd55585dfd831ad414187aa100077b3576dc7a2 (chore(dont): restore required subdirs and ignore runtime dirs); 4ef418e09dd743fb13033cb9fb81a9adee17cec3 (docs(openspec): propose 7 changes from the fleet adoption review); 5ea6213d9479695e0e8a6f912ae658e39f26a582 (fix(beads): normalize metadata.files to real JSON arrays on 32 issues); 756c4e3b324f873d9a167bef72f5f6a1271bca29 (docs: file README front-door and release tickets); 7933f4b49261a05bb46021d48ae6bf189923c17f (docs(openspec): apply the Rule-of-5 findings to the 7 proposals); 9988875e8fe6917ee640919dde29c94e995310c4 (chore(tools): init kaya research ledger and adopt the sad prose gate); a6a5150a622e165c1ccd14c2e72975ad2499caf0 (docs: apply issue-review fixes to README/release tickets); ac69ea1ac94caea8d87fba5ac8afb57116dd3056 (docs: apply issue-review fixes to README/release tickets)"
+          "reason": "10 commits in the 14-day window link no tracker id or open work-item path: 04d06ef0374d88f8bf5396dc17533645af95069b (chore: dogfood podras — managed block, curation scaffold, committed brief); 0cd55585dfd831ad414187aa100077b3576dc7a2 (chore(dont): restore required subdirs and ignore runtime dirs); 4ef418e09dd743fb13033cb9fb81a9adee17cec3 (docs(openspec): propose 7 changes from the fleet adoption review); 5ea6213d9479695e0e8a6f912ae658e39f26a582 (fix(beads): normalize metadata.files to real JSON arrays on 32 issues); 6fc95401ee92c7443f6625c86946834c4515286c (chore(tools): adopt kaya, sad and podras fully - record, gates, publication); 756c4e3b324f873d9a167bef72f5f6a1271bca29 (docs: file README front-door and release tickets); 7933f4b49261a05bb46021d48ae6bf189923c17f (docs(openspec): apply the Rule-of-5 findings to the 7 proposals); 9988875e8fe6917ee640919dde29c94e995310c4 (chore(tools): init kaya research ledger and adopt the sad prose gate); a6a5150a622e165c1ccd14c2e72975ad2499caf0 (docs: apply issue-review fixes to README/release tickets); ac69ea1ac94caea8d87fba5ac8afb57116dd3056 (docs: apply issue-review fixes to README/release tickets)"
         },
         {
           "kind": "spec_change_without_bead",
@@ -344,7 +344,7 @@
         }
       ],
       "owner": null,
-      "reason": "orphan_commits: 9 commits in the 14-day window link no tracker id or open work-item path: 04d06ef0374d88f8bf5396dc17533645af95069b (chore: dogfood podras — managed block, curation scaffold, committed brief); 0cd55585dfd831ad414187aa100077b3576dc7a2 (chore(dont): restore required subdirs and ignore runtime dirs); 4ef418e09dd743fb13033cb9fb81a9adee17cec3 (docs(openspec): propose 7 changes from the fleet adoption review); 5ea6213d9479695e0e8a6f912ae658e39f26a582 (fix(beads): normalize metadata.files to real JSON arrays on 32 issues); 756c4e3b324f873d9a167bef72f5f6a1271bca29 (docs: file README front-door and release tickets); 7933f4b49261a05bb46021d48ae6bf189923c17f (docs(openspec): apply the Rule-of-5 findings to the 7 proposals); 9988875e8fe6917ee640919dde29c94e995310c4 (chore(tools): init kaya research ledger and adopt the sad prose gate); a6a5150a622e165c1ccd14c2e72975ad2499caf0 (docs: apply issue-review fixes to README/release tickets); ac69ea1ac94caea8d87fba5ac8afb57116dd3056 (docs: apply issue-review fixes to README/release tickets); spec_change_without_bead: openspec changes link no tracker id: `add-envelope-conformance-kit` changed 0 days ago, `add-fleet-adoption-plan` changed 0 days ago, `add-fs-module` changed 0 days ago, `add-standard-doctor-checks` changed 0 days ago, `add-version-source-abstraction` changed 0 days ago, `document-agent-instruction-boundaries` changed 8 days ago, `document-fleet-adoption-review` changed 0 days ago, `fix-envelope-hint-channel` changed 0 days ago, `populate-tool-registry` changed 0 days ago"
+      "reason": "orphan_commits: 10 commits in the 14-day window link no tracker id or open work-item path: 04d06ef0374d88f8bf5396dc17533645af95069b (chore: dogfood podras — managed block, curation scaffold, committed brief); 0cd55585dfd831ad414187aa100077b3576dc7a2 (chore(dont): restore required subdirs and ignore runtime dirs); 4ef418e09dd743fb13033cb9fb81a9adee17cec3 (docs(openspec): propose 7 changes from the fleet adoption review); 5ea6213d9479695e0e8a6f912ae658e39f26a582 (fix(beads): normalize metadata.files to real JSON arrays on 32 issues); 6fc95401ee92c7443f6625c86946834c4515286c (chore(tools): adopt kaya, sad and podras fully - record, gates, publication); 756c4e3b324f873d9a167bef72f5f6a1271bca29 (docs: file README front-door and release tickets); 7933f4b49261a05bb46021d48ae6bf189923c17f (docs(openspec): apply the Rule-of-5 findings to the 7 proposals); 9988875e8fe6917ee640919dde29c94e995310c4 (chore(tools): init kaya research ledger and adopt the sad prose gate); a6a5150a622e165c1ccd14c2e72975ad2499caf0 (docs: apply issue-review fixes to README/release tickets); ac69ea1ac94caea8d87fba5ac8afb57116dd3056 (docs: apply issue-review fixes to README/release tickets); spec_change_without_bead: openspec changes link no tracker id: `add-envelope-conformance-kit` changed 0 days ago, `add-fleet-adoption-plan` changed 0 days ago, `add-fs-module` changed 0 days ago, `add-standard-doctor-checks` changed 0 days ago, `add-version-source-abstraction` changed 0 days ago, `document-agent-instruction-boundaries` changed 8 days ago, `document-fleet-adoption-review` changed 0 days ago, `fix-envelope-hint-channel` changed 0 days ago, `populate-tool-registry` changed 0 days ago"
     },
     "truncation": {
       "applied": true,
@@ -354,8 +354,8 @@
         "recent": 195
       }
     },
-    "head_sha": "9988875e8fe6917ee640919dde29c94e995310c4",
-    "source_hash": "33c733a456bbd629568c2b6170143ae68db69cfc8f67eef0be03d8b9d34c77b8",
+    "head_sha": "6fc95401ee92c7443f6625c86946834c4515286c",
+    "source_hash": "d368166f751e8e47d32a3321b5345f748c91537d4241671ddfd3bb3ca7fcc968",
     "warnings": []
   },
   "warnings": [],

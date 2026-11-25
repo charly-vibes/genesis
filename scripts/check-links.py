@@ -40,6 +40,21 @@ def resolve(page: Path, target: str, root: Path) -> Path | None:
     return resolved
 
 
+def broken_links(root: Path) -> tuple[list[str], int]:
+    """Unresolved relative links as `page: target` strings, plus checks run."""
+    broken: list[str] = []
+    checked = 0
+    for page in sorted(root.rglob("*.md")):
+        for target in LINK.findall(page.read_text(encoding="utf-8")):
+            if is_external(target):
+                continue
+            checked += 1
+            resolved = resolve(page, target, root)
+            if resolved is None or not resolved.exists():
+                broken.append(f"{page}: {target}")
+    return broken, checked
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -54,17 +69,7 @@ def main() -> int:
         print(f"link check: no published tree at {args.root}", file=sys.stderr)
         return 2
 
-    broken: list[str] = []
-    checked = 0
-    for page in sorted(args.root.rglob("*.md")):
-        for target in LINK.findall(page.read_text(encoding="utf-8")):
-            if is_external(target):
-                continue
-            checked += 1
-            resolved = resolve(page, target, args.root)
-            if resolved is None or not resolved.exists():
-                broken.append(f"{page}: {target}")
-
+    broken, checked = broken_links(args.root)
     if broken:
         print(f"link check: {len(broken)} unresolved link(s):", file=sys.stderr)
         for entry in broken:
