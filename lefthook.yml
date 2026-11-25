@@ -19,6 +19,17 @@ pre-commit:
     sad-check:
       run: sad check
 # sad:managed:end
+# kaya:managed:start
+    kaya-check:
+      run: kaya check --index
+# kaya:managed:end
+
+    # Committed-render drift gate (podras convention, outside the ddl:managed
+    # blocks so `ddl init --gates` never owns it). Compares BRIEF.md/BRIEF.json
+    # against a fresh render at the recorded evaluation date; exits 0 when the
+    # repo has no committed renders. Requires `podras` on PATH.
+    brief-drift:
+      run: scripts/guards/brief-drift.sh
     # ddl:managed:start (pre-commit)
     ddl-ah-check:
       run: ah check
@@ -44,6 +55,10 @@ pre-push:
     sad-check:
       run: sad check
 # sad:managed:end
+# kaya:managed:start
+    kaya-check:
+      run: kaya check
+# kaya:managed:end
     # ddl:managed:start (pre-push)
     ddl-ah-check:
       run: ah check

@@ -159,6 +159,15 @@ so orchestration tools like wai discover them without hardcoding.
 
 Published on crates.io (v0.3.0). All 6 Rust tools in the suite depend on genesis.
 
+## Research record
+
+This repository keeps a kaya research record: `.kaya/ledger.jsonl` captures
+observations from the wai tree and recent commits, and `docs/public/` is the
+compiled publication. `just record-capture` refreshes both (skipped on a dirty
+tree); the nightly Record workflow commits the snapshot. Gates: `kaya check`
+(projections vs ledger), `scripts/record-lag.py` (the record must not fall
+more than 60 record-relevant commits behind).
+
 ## Documentation provenance
 
 Rendered docs are generated artifacts; the repository sources are

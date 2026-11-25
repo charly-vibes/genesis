@@ -1,0 +1,72 @@
+# Nightly research-record snapshot (kaya 0.4.1).
+#
+# Runs `just record-capture` on a clean checkout and pushes the snapshot to
+# main as a `chore(record):` commit (excluded from future captures by the
+# import filter). The push uses a pull --rebase + retry loop: a bare cron git
+# push races interactive pushes and forced two rebases during the kaya repo's
+# v0.3.0 (pattern: charly-vibes/kaya record workflow @ v0.4.1).
+
+name: Record
+
+on:
+  schedule:
+    - cron: "37 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: Capture record snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # kaya import git reads repository history
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      # Standardization §4: installs are pinned, never latest.
+      - name: Install kaya
+        run: cargo install --locked --git https://github.com/charly-vibes/kaya --tag v0.4.1 kaya-vibes
+
+      - name: Capture record snapshot
+        run: just record-capture
+
+      - name: Commit snapshot (skip when nothing was captured)
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "record-bot"
+            git config user.email "record-bot@users.noreply.github.com"
+            git add .kaya/ledger.jsonl docs/public
+            git commit -m "chore(record): nightly research snapshot"
+          else
+            echo "nothing captured; skipping commit"
+          fi
+
+      - name: Push with rebase retry
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin main; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          echo "push failed after 5 attempts" >&2
+          exit 1

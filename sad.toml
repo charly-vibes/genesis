@@ -1,0 +1,9 @@
+# sad's configuration in this repository — the documentation-prose gate.
+# Defaults live in `sad/src/config.rs`; only intentional overrides belong here.
+#
+# Stance: every knob is intentionally at its default. `sad check --adopt` found
+# zero findings over the full tree when the gate was adopted (baseline:
+# sad-baseline.json), so nothing is excluded and no severity is overridden.
+# The `missing_header` Purpose/Responsibilities/Rationale check stays off for
+# now: this crate's module docs use `//!` prose headers rather than the header
+# trio; revisit when that convention lands fleet-wide.

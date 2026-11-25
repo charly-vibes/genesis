@@ -4,10 +4,13 @@
 # Update deliberately; the conformance test (dulce-de-leche
 # tests/standard_conformance.rs) requires this file to exist.
 #
-# §4 matrix row (genesis): genesis is a lib crate — its CI installs no
-# in-org family tools (just Rust toolchain + just + mdbook). This file is
-# maintained for fleet conformance; add rows if genesis's CI starts
-# consuming family tooling. External: openspec (npm @fission-ai/openspec)
-# is used for spec authoring but not installed in CI.
+# §4 matrix row (genesis): a lib crate whose CI now consumes three family
+# tools for its research record and drift gates (kaya, sad, podras — wired
+# via justfile record-check/sad-check/brief-drift and the nightly Record
+# workflow). External: openspec (npm @fission-ai/openspec) is used for spec
+# authoring but not installed in CI.
 
 [tools]
+kaya = "0.4.1"
+sad = "0.2.0"
+podras = "0.1.0"
