@@ -36,6 +36,9 @@ pub(super) fn fresh_cache_hit(
 
 /// Persist the fetch outcome under the default TTL, mapping it to an update
 /// when the fetched latest is newer than the installed version.
+///
+/// Backoff writes share the cache file the caller read, so a stale
+/// `cache_file` path must not be reused across check rounds.
 pub(super) fn persist_outcome(
     cache_file: &std::path::Path,
     crate_name: &str,

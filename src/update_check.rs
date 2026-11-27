@@ -142,7 +142,6 @@ pub fn check_with(
     if let Some(hit) = fresh_cache_hit(&cache_file, crate_name, current_version) {
         return hit;
     }
-    // 2./3. Fetch, persist, and map; backoff writes share the cache file this call reads.
     let outcome = fetch_latest(api_base, crate_name, &cache_file)?;
     persist_outcome(&cache_file, crate_name, current_version, outcome)
 }

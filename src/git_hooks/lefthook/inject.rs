@@ -57,7 +57,6 @@ fn wired_at_anchor(w: &Wiring, anchor: usize) -> Result<WiredOutcome, GitHooksEr
         }
         // `commands:` at another indent — refuse to guess.
         SectionShape::Mismatched { key_indent } => Err(commands_indent_error(w, key_indent)),
-        // Children but no `commands:` → wrapper at the stage's own children indent.
         SectionShape::ChildrenWithoutCommands { indent } => insert_wrapper(w, anchor, indent),
     }
 }
