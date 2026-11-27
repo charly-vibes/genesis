@@ -1,9 +1,6 @@
-//! Unit tests for `discovery` (extracted from the inline `mod tests` to
-//! keep the app file under the pretender file-lines budget).
+//! Unit tests for `discovery` (split out to keep the app file under the file-lines budget).
 
 // pretender: role=test
-#![allow(unused_imports)]
-
 use super::*;
 
 use crate::testutil::TestUnwrap;
@@ -31,8 +28,6 @@ fn seed_marker(dir: &TempDir, marker_path: &str, is_dir: bool) {
     }
 }
 
-// ── read_manifest ──────────────────────────────────────────────────
-
 #[test]
 fn test_read_manifest_nonexistent() {
     let dir = tmp();
@@ -46,26 +41,14 @@ fn test_read_manifest_nonexistent() {
 #[test]
 fn test_read_manifest_valid() {
     let dir = tmp();
-    seed_manifest(
-        &dir,
-        r#"[tools.wai]
-description = "Workflow manager"
-detector = { type = "directory", path = ".wai" }
-
-[tools.dont]
-description = "Conventions"
-detector = { type = "directory", path = ".dont" }
-"#,
-    );
+    seed_manifest(&dir, THREE_TOOLS);
 
     let manifest = read_manifest(dir.path()).require("value");
-    assert_eq!(manifest.tools.len(), 2);
+    assert_eq!(manifest.tools.len(), 3);
     assert!(manifest.tools.contains_key("wai"));
     assert!(manifest.tools.contains_key("dont"));
     assert_eq!(manifest.tools["wai"].detector.path, ".wai");
 }
-
-// ── scan ───────────────────────────────────────────────────────────
 
 #[test]
 fn test_scan_no_manifest() {
@@ -88,49 +71,43 @@ detector = {{ type = \"{dtype}\", path = \"{dpath}\" }}
     };
     let cases = [
         (
-            manifest("wai", "Workflow manager", "directory", ".wai"),
+            manifest("wai", "w", "directory", ".wai"),
             Some((".wai", true)),
             "wai",
             true,
-            "directory detector fires when the marker dir exists",
         ),
         (
-            manifest("wai", "Workflow manager", "directory", ".wai"),
+            manifest("wai", "w", "directory", ".wai"),
             None,
             "wai",
             false,
-            "directory detector stays silent when the marker dir is missing",
         ),
         (
-            manifest("testaruda", "Test harness", "file", "testaruda.toml"),
+            manifest("t", "t", "file", "testaruda.toml"),
             Some(("testaruda.toml", false)),
-            "testaruda",
+            "t",
             true,
-            "file detector fires when the marker file exists",
         ),
         (
-            manifest("foo", "Unknown detector", "magic", ".foo"),
+            manifest("foo", "f", "magic", ".foo"),
             Some((".foo", false)),
             "foo",
             false,
-            "unknown detector type is never detected",
         ),
     ];
-    for (toml, marker, name, detected, why) in cases {
+    for (i, (toml, marker, name, detected)) in cases.iter().enumerate() {
         let dir = tmp();
-        seed_manifest(&dir, &toml);
-        if let Some((marker_path, is_dir)) = marker {
+        seed_manifest(&dir, toml);
+        if let Some((marker_path, is_dir)) = *marker {
             seed_marker(&dir, marker_path, is_dir);
         }
 
         let tools = scan(dir.path());
-        assert_eq!(tools.len(), 1, "{why}");
-        assert_eq!(tools[0].name, name, "{why}");
-        assert_eq!(tools[0].detected, detected, "{why}");
+        assert_eq!(tools.len(), 1, "case {i}");
+        assert_eq!(tools[0].name, *name, "case {i}");
+        assert_eq!(tools[0].detected, *detected, "case {i}");
     }
 }
-
-// ── register ──────────────────────────────────────────────────────
 
 #[test]
 fn test_register_creates_manifest() {
@@ -169,8 +146,6 @@ fn test_register_updates_existing() {
     assert_eq!(manifest.tools["tool"].detector.detector_type, "file");
 }
 
-// ── unregister ────────────────────────────────────────────────────
-
 #[test]
 fn test_unregister_removes_entry() {
     let dir = tmp();
@@ -200,7 +175,7 @@ fn test_unregister_nonexistent_is_noop() {
     unregister(dir.path(), "ghost").require("unregister without manifest");
     assert!(
         !dir.path().join(MANIFEST_FILENAME).exists(),
-        "unregistering a ghost tool must not create a manifest"
+        "ghost tool must not create manifest"
     );
 }
 
@@ -266,4 +241,56 @@ detector = { type = "directory", path = ".absent" }
 
     let absent = tools.iter().find(|t| t.name == "absent").require("value");
     assert!(!absent.detected);
+}
+
+// ── byte-stability ────────────────────────────────────────────────
+
+/// 3-tool manifest in hand-written (unsorted) order. Descriptions omitted:
+/// ordering is what under test.
+const THREE_TOOLS: &str = r#"[tools.wai]
+detector = { type = "directory", path = ".wai" }
+
+[tools.dont]
+detector = { type = "directory", path = ".dont" }
+
+[tools.kaya]
+detector = { type = "directory", path = ".kaya" }
+"#;
+
+/// One read+write cycle; returns the bytes on disk after it.
+fn rewrite_cycle(dir: &TempDir) -> Vec<u8> {
+    let path = dir.path().join(MANIFEST_FILENAME);
+    let manifest = read_manifest(dir.path()).require("read manifest");
+    write_manifest(&path, &manifest).require("rewrite manifest");
+    std::fs::read(&path).require("read manifest back")
+}
+
+/// The `[tools.*]` table names, in serialized order.
+fn tool_table_order(bytes: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .filter_map(|l| l.strip_prefix("[tools.")?.strip_suffix(']'))
+        .filter(|name| !name.contains('.'))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Rewrite round-trips must be byte-identical: canonical order is fully
+/// sorted tool names (BTreeMap), so cycles never churn. The first rewrite
+/// may normalize hand-edited formatting; from then on bytes are stable.
+#[test]
+fn test_manifest_rewrite_is_byte_stable() {
+    let dir = tmp();
+    seed_manifest(&dir, THREE_TOOLS);
+
+    rewrite_cycle(&dir); // normalization pass
+    let second = rewrite_cycle(&dir);
+    let third = rewrite_cycle(&dir);
+
+    assert_eq!(second, third, "rewrite cycle changed the file bytes");
+    assert_eq!(
+        tool_table_order(&third),
+        ["dont", "kaya", "wai"],
+        "canonical sorted order"
+    );
 }

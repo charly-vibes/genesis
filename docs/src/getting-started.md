@@ -132,6 +132,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 > clap = { version = "4", features = ["derive"] }
 > ```
 
+> **Unknown arguments are never swallowed (genesis-7k6):** a line combining
+> `--version`/`-V` with `--json`/`-j` *and* any other argument gets clap's
+> standard usage error as an error envelope and exits 2 — the pre-parse never
+> silently ignores it. `--help`/`-h` are left to clap's own display handling.
+
 ## Recap & Next Steps
 
 You added genesis-vibes to your project, emitted structured CLI output, enabled TTY-aware format detection, and wired up `--version --json`. Next, explore:

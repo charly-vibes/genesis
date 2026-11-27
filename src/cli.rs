@@ -42,6 +42,10 @@ pub fn generate_completions(
 ///
 /// Returns `true` if the version was printed and the caller should exit.
 ///
+/// A line that combines `--version`/`-V` with `--json`/`-j` *and* any other
+/// argument is never swallowed: it gets clap's standard usage error as an
+/// error envelope and exits with clap's usage code (2) (genesis-7k6).
+///
 /// Reads from [`std::env::args`]. For a testable variant that takes explicit
 /// args and an output writer, see [`maybe_print_version_json_from`].
 ///
@@ -66,7 +70,12 @@ pub fn maybe_print_version_json(name: &str, version: &str) -> bool {
 /// Behavior is identical: returns `true` only when `--version` was combined
 /// with `--json`/`-j` (in which case the version envelope was written to
 /// `out`); plain `--version` and no-flag invocations return `false` and write
-/// nothing, leaving version handling to clap.
+/// nothing, leaving version handling to clap. A mixed line — `--version` and
+/// `--json` plus any other argument — is not swallowed either: it prints
+/// clap's usage error as an error envelope and exits 2 (genesis-7k6), so
+/// unlike the returning branches this path never comes back to the caller.
+/// `--help`/`-h` are excluded from that check: they are clap's display flags,
+/// and clap itself resolves their precedence against `--version`.
 ///
 /// # Example
 ///
@@ -86,19 +95,73 @@ pub fn maybe_print_version_json_from(
     args: &[String],
     out: &mut impl Write,
 ) -> bool {
-    let wants_version = args.iter().any(|a| a == "--version" || a == "-V");
-    if !wants_version {
+    let Some(scan) = scan_version_args(args) else {
         return false;
+    };
+    // EDGE-002: a mixed line must error, not be silently swallowed by clap's
+    // exit-0 `--version` action.
+    if let Some(bad) = scan.foreign.first() {
+        print_usage_error_envelope(name, version, bad, out);
+        std::process::exit(2);
     }
+    print_version_envelope(name, version, out);
+    true
+}
 
-    let wants_json = args.iter().any(|a| a == "--json" || a == "-j");
-    if wants_json {
-        print_version_envelope(name, version, out);
-        true
-    } else {
-        // Plain --version: let clap handle it
-        false
+/// Classification of the argv tail for the `--version --json` fast path.
+struct VersionScan<'a> {
+    wants_version: bool,
+    wants_json: bool,
+    foreign: Vec<&'a str>,
+}
+
+/// One pass over argv: collect version/json wants and any foreign args.
+/// `None` = defer to clap entirely (`--help`/`-h` present, no `--version`,
+/// or plain `--version` without `--json` — clap's own DisplayVersion action).
+fn scan_version_args(args: &[String]) -> Option<VersionScan<'_>> {
+    let mut scan = VersionScan {
+        wants_version: false,
+        wants_json: false,
+        foreign: Vec::new(),
+    };
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "--version" | "-V" => scan.wants_version = true,
+            "--json" | "-j" => scan.wants_json = true,
+            // Clap's display flags exist on every consumer CLI; their
+            // precedence against `--version` (first action wins) is clap's
+            // own job, so a line carrying them is left to clap entirely.
+            "--help" | "-h" => return None,
+            other => scan.foreign.push(other),
+        }
     }
+    scan.wants_version.then_some(scan).filter(|s| s.wants_json)
+}
+
+/// Emit clap's standard usage error for an unknown argument as one JSON
+/// error envelope on `out`.
+///
+/// The message mirrors clap's usage-error text and the exit is clap's
+/// usage-error code (2). The remediation entry keeps Invariant 3.2.5
+/// (errors always carry a suggested fix).
+fn print_usage_error_envelope(name: &str, version: &str, bad: &str, out: &mut impl Write) {
+    use crate::envelope::{Envelope, ErrorResult, RemediationEntry};
+    let err = ErrorResult::new(
+        "usage",
+        &format!("error: unexpected argument '{bad}' found"),
+        None,
+        None,
+        None,
+        vec![],
+        vec![RemediationEntry {
+            command: format!("{name} --help"),
+            description: "list this tool's valid arguments".to_string(),
+        }],
+    )
+    .expect("usage error envelope always carries remediation");
+    let envelope = Envelope::error(env!("CARGO_PKG_VERSION"), version, err, vec![]);
+    let json = serde_json::to_string(&envelope).expect("serialize usage error envelope");
+    writeln!(out, "{json}").expect("write usage error envelope");
 }
 
 /// Emit the version envelope as one JSON line on `out`.

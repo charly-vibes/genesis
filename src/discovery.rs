@@ -40,7 +40,9 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+// BTreeMap so [tools.*] serializes in fully sorted key order — byte-stable
+// across read+write cycles and diffs churn-free.
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -52,7 +54,7 @@ pub const MANIFEST_FILENAME: &str = ".genesis/tools.toml";
 pub struct Manifest {
     /// Map of tool name to tool definition.
     #[serde(default)]
-    pub tools: HashMap<String, ToolEntry>,
+    pub tools: BTreeMap<String, ToolEntry>,
 }
 
 /// A single tool entry in the manifest.
