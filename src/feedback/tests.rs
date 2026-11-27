@@ -1,5 +1,6 @@
 //! Tests for the feedback entry point and title/body partitioning.
 
+use super::content;
 use super::content::{apply_title_override, stdin_title_and_body};
 use super::*;
 use crate::evals::Scenario;
@@ -31,9 +32,13 @@ fn write_scratch(tool: &str, exit_code: i32) {
         exit: exit_code,
         footer: Some("run doctor".into()),
         kind: "error".into(),
+        message: Some(format!("{}: simulated failure", tool)),
     };
     scratch::write_scratch_best_effort(tool, &record);
 }
+
+#[path = "tests_message.rs"]
+mod tests_message;
 
 #[test]
 fn test_handle_feedback_dry_run() {

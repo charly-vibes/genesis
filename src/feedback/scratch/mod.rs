@@ -43,6 +43,9 @@ pub struct ErrorRecord {
     pub footer: Option<String>,
     /// Kind of error.
     pub kind: String,
+    /// The captured error message (miette text or stderr tail), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// Get the error scratch directory for a tool.

@@ -138,6 +138,7 @@ fn from_last_error_converts_scratch_record() {
         exit: 2,
         footer: Some("→ Run: my-tool repair".into()),
         kind: "sync-failure".into(),
+        message: Some("sync failed: stale artifact".into()),
     };
     write_error_scratch("m3p-tool", &record).require("scratch write");
 

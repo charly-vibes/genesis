@@ -18,6 +18,7 @@ fn record(ts: &str, exit: i32, kind: &str, argv: Vec<String>) -> ErrorRecord {
         exit,
         footer: None,
         kind: kind.into(),
+        message: None,
     }
 }
 
@@ -77,6 +78,26 @@ fn test_error_record_omits_footer_when_none() {
     let record = record("2026-07-28T00:00:00Z", 0, "Ok", vec!["genesis".into()]);
     let json = serde_json::to_string(&record).require("value");
     assert!(!json.contains("footer"));
+}
+
+/// Legacy records written before the `message` field existed must
+/// deserialize (serde default), yielding `message: None`.
+#[test]
+fn test_legacy_record_without_message_deserializes() {
+    let tool = "test-legacy-c9x";
+    cleanup_scratch(tool);
+    let path = scratch_path(tool);
+    std::fs::create_dir_all(scratch_dir(tool)).require("create scratch dir");
+    std::fs::write(
+        &path,
+        r#"{"ts":"2026-07-29T12:00:00Z","argv":["test","check"],"exit":1,"footer":"run doctor","kind":"error"}"#,
+    )
+    .require("write legacy jsonl");
+
+    let record = read_last_error(tool).require("legacy record should parse");
+    assert_eq!(record.exit, 1);
+    assert_eq!(record.message, None);
+    cleanup_scratch(tool);
 }
 
 /// Uses a per-pid tool name so parallel test runs cannot race on the scratch file.

@@ -71,7 +71,7 @@ impl ErrorSink {
         let _ = writeln!(stderr, "{}: {}", self.tool_name, message);
         self.print_footer(suggestion, stderr);
         self.print_feedback_hint(suggestion, stderr);
-        self.record_scratch(suggestion);
+        self.record_scratch(message, suggestion);
     }
 
     /// Feedback fallback: printed only when there is no suggestion at all
@@ -100,7 +100,7 @@ impl ErrorSink {
     }
 
     /// Write an error record to the scratch file when scratch is enabled.
-    fn record_scratch(&self, suggestion: Option<&Suggestion>) {
+    fn record_scratch(&self, message: &str, suggestion: Option<&Suggestion>) {
         if !self.scratch {
             return;
         }
@@ -110,6 +110,7 @@ impl ErrorSink {
             exit: 1,
             footer: suggestion.and_then(|s| s.footer()),
             kind: "error".into(),
+            message: Some(message.to_string()),
         };
         scratch_mod::write_scratch_best_effort(&self.tool_name, &record);
     }

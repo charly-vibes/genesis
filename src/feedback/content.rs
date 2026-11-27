@@ -36,6 +36,9 @@ fn title_and_body_from_error(kind: &str, tool_name: &str) -> Result<(String, Vec
     let mut body_parts = vec!["## Error\n\n".to_string()];
     body_parts.push(format!("**Command:** `{cmd_str}`\n\n"));
     body_parts.push(format!("**Exit code:** {}\n\n", record.exit));
+    if let Some(message) = &record.message {
+        body_parts.push(format!("```\n{message}\n```\n\n"));
+    }
     if let Some(footer) = &record.footer {
         body_parts.push(format!("**Suggestion:** {footer}\n\n"));
     }
