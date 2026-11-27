@@ -25,3 +25,19 @@ wai, and others — see each repo's README badge row.
   global/local shim scenarios.
 - API surface may grow; breaking changes go through a minor-version bump with
   consumer CI as the safety net (fleet conformance tests).
+## Distribution deviation (standard §1)
+
+Standardization v0.4 §1 requires a five-target binary release matrix and a
+README pointing at a prebuilt binary. **Genesis deviates:** it is a *library
+crate*, not a CLI binary, so there are no binary archives to publish. Its
+release slot is a tag-triggered `publish.yml` workflow (CI checks → crates.io).
+The substitute install path — and the only one — is a crates.io dependency:
+
+```toml
+[dependencies]
+genesis-vibes = "0.13"
+```
+
+This deviation is recorded here per §1 ("A repo that genuinely cannot meet
+this (library crate, npm-only package) MUST record the deviation and its
+substitute install path in docs/src/status.md").

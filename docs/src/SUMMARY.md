@@ -19,6 +19,7 @@
 
 # Reference
 
+- [FAQ & Troubleshooting](faq.md)
 - [Modules Overview](reference/modules.md)
 - [Eval Report Contract](reference/eval-report.md)
 
