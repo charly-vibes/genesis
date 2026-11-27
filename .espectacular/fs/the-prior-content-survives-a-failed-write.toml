@@ -1,0 +1,11 @@
+id = "the-prior-content-survives-a-failed-write"
+description = "a failed write leaves the prior target byte-for-byte intact and removes the staging file"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "failed_write_leaves_target_unchanged", timeout_seconds = 60 },
+]

@@ -1,0 +1,11 @@
+id = "staged-content-is-flushed-before-the-rename"
+description = "the staged bytes are flushed to the device before the rename, and the written content survives intact"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "reader_never_observes_partial_file", timeout_seconds = 60 },
+]

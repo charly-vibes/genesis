@@ -1,0 +1,11 @@
+id = "a-non-sharing-rename-failure-is-not-retried"
+description = "a rename failing for another reason is reported without retrying"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "non_sharing_failure_is_not_retried", timeout_seconds = 60 },
+]

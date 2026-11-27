@@ -52,11 +52,12 @@ fn append_line(path: &PathBuf, line: &str) -> std::io::Result<()> {
 
 /// Cap the scratch file to MAX_ENTRIES lines.
 ///
-/// Atomic via stage-then-rename (genesis-4xl): the tail is written to a
-/// sibling tmp file and `rename`d over the scratch file, so a concurrent
-/// reader sees either the old or the new complete file — never an empty or
-/// partial one. Once `genesis::fs::atomic_write` exists (genesis-mqt) this
-/// should delegate to it.
+/// Atomic via `genesis::fs::atomic_write` (genesis-4xl, genesis-mqt): the tail
+/// is written to a uniquely-named sibling tmp file, fsynced, and `rename`d over
+/// the scratch file, so a concurrent reader sees either the old or the new
+/// complete file — never an empty or partial one. The staging file lives in
+/// the scratch file's directory (same filesystem rename) and is removed on
+/// every failure path.
 ///
 /// Trade-off of the rename: appends that land between the snapshot read and
 /// the rename are replaced by it and dropped; append-mode writers recover on
@@ -71,12 +72,11 @@ pub(super) fn cap_scratch_file(path: &PathBuf) -> std::io::Result<()> {
         return Ok(());
     }
 
-    let trimmed = lines[lines.len() - MAX_ENTRIES..].join("\n");
-    let tmp = path.with_extension("jsonl.tmp");
-    std::fs::write(&tmp, trimmed + "\n")?;
-    if let Err(err) = std::fs::rename(&tmp, path) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(err);
+    let mut trimmed = lines[lines.len() - MAX_ENTRIES..].join("\n").into_bytes();
+    trimmed.push(b'\n');
+    match crate::fs::atomic_write(path, &trimmed) {
+        Ok(()) => Ok(()),
+        Err(crate::fs::FsError::Io(err)) => Err(err),
+        Err(other) => Err(std::io::Error::other(other.to_string())),
     }
-    Ok(())
 }

@@ -10,6 +10,7 @@
 //! - `envelope`      — structured CLI output envelope (port from dont)
 //! - `feedback`      — agent issue reporting (new)
 //! - `fixture`       — test scratch environments and runners (new)
+//! - `fs`            — atomic file replacement and JSON helpers (new)
 //! - `git`           — read-only git plumbing, subprocess-only (new)
 //! - `git_hooks`     — shared git hook primitives (ports from pretender/wai/espectacular)
 //! - `guide`         — CLI scaffold for building guiding tools (new)
@@ -29,6 +30,7 @@ pub mod envelope;
 pub mod evals;
 pub mod feedback;
 pub mod fixture;
+pub mod fs;
 pub mod git;
 pub mod git_hooks;
 pub mod guide;

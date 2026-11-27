@@ -1,6 +1,6 @@
 [package]
 name = "genesis-vibes"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2024"
 description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes tool suite"
 license = "Apache-2.0"
@@ -36,7 +36,7 @@ toml = "0.8"
 # Regex (feedback redactor)
 regex = "1"
 
-# Test fixtures
+# Test fixtures (also used at runtime by `fixture::temp_root`)
 tempfile = "3"
 
 # Update check (feature-gated; see `update-check` feature)

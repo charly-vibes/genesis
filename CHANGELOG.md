@@ -5,6 +5,24 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-27
+
+### Added
+
+- **`genesis::fs` — shared atomic-write primitives** (genesis-mqt,
+  openspec/changes/add-fs-module): `atomic_write` replaces a file via a
+  unique staging sibling in the target's own directory
+  (`.<name>.<pid>.<counter>.tmp`), fsyncs the file before rename and
+  best-effort fsyncs the parent directory after; the staging file is removed
+  on every failure path, so a failed write leaves the target byte-for-byte
+  unchanged and concurrent readers never observe empty or partial content.
+  `with_sharing_retry` wraps the rename with a bounded sharing-violation
+  retry (6 attempts, 100 ms doubling backoff); `read_json` / `atomic_write_json`
+  round-trip typed JSON through the same path. Ported from the strongest
+  existing implementation (dulce-de-leche `dot_ddl/persist.rs`); no new
+  runtime dependencies. Genesis's own feedback scratch capping
+  (`cap_scratch_file`) now delegates to it (genesis-mqt adoption audit).
+
 ### Changed
 
 - **Envelope hint channel contract** (genesis-jsu): on the error path,

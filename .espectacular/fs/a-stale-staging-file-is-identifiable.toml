@@ -1,0 +1,11 @@
+id = "a-stale-staging-file-is-identifiable"
+description = "a staging file name is recognizable as staging debris of the target"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "staging_name_is_identifiable_as_staging_file", timeout_seconds = 60 },
+]

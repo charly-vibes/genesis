@@ -1,0 +1,11 @@
+id = "repeated-writes-within-one-process-do-not-collide"
+description = "sequential writes in one process never reuse a staging name"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "sequential_writes_do_not_reuse_staging_name", timeout_seconds = 60 },
+]

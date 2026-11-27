@@ -1,0 +1,11 @@
+id = "a-transient-sharing-violation-is-retried"
+description = "a rename failing with a sharing violation is retried until it succeeds"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "sharing_violation_rename_is_retried", timeout_seconds = 60 },
+]

@@ -7,44 +7,44 @@ Meter: `just ci` (fmt, clippy, test, docs, build-release, aix-check) and
 
 ## 1. Module (genesis, no new dependencies)
 
-- [ ] 1.1 RED: `tests/fs_atomic_write.rs` — replace a file (content observed
+- [x] 1.1 RED: `tests/fs_atomic_write.rs` — replace a file (content observed
       whole by a concurrent reader); a failure before the rename leaves the
       target byte-for-byte unchanged and removes the staging file; the staging
       file is created in the target's directory, not a system temp dir.
-- [ ] 1.2 GREEN: `atomic_write` in `src/fs.rs` — unique staging name
+- [x] 1.2 GREEN: `atomic_write` in `src/fs.rs` — unique staging name
       (`.<name>.<pid>.<counter>.tmp` in the target's directory), write,
       flush, rename, remove staging on every failure path.
 - [ ] 1.2a Move `tempfile` from `[dependencies]` to `[dev-dependencies]` in
       `Cargo.toml` once the module confirms it is unused at runtime
       (`Cargo.toml:38-41` currently lists it as a regular dependency under a
       "# Test fixtures" comment).
-- [ ] 1.3 RED: `tests/fs_unique_names.rs` — two concurrent writers to the
+- [x] 1.3 RED: `tests/fs_unique_names.rs` — two concurrent writers to the
       same target use distinct staging names; two sequential writes in one
       process do not reuse a name; a leftover staging file never appears in
       the target directory after a successful write.
-- [ ] 1.4 GREEN: staging-name generation (pid + atomic counter), with the
+- [x] 1.4 GREEN: staging-name generation (pid + atomic counter), with the
       counter shared across calls in the process.
-- [ ] 1.5 RED: `tests/fs_windows_retry.rs` — a rename failing with a sharing
+- [x] 1.5 RED: `tests/fs_windows_retry.rs` — a rename failing with a sharing
       violation is retried and eventually succeeds; a rename failing for
       another reason is not retried and reports the failure; a rename that
       keeps failing with a sharing violation stops after a bounded number of
       attempts (or a bounded total time) and reports the failure.
-- [ ] 1.6 GREEN: `with_sharing_retry`-equivalent retry wrapper, ported from
+- [x] 1.6 GREEN: `with_sharing_retry`-equivalent retry wrapper, ported from
       `dulce-de-leche/src/dot_ddl/persist.rs:129`, with the retry bounded.
-- [ ] 1.7 RED: `tests/fs_json.rs` — JSON round-trip via `atomic_write_json` +
+- [x] 1.7 RED: `tests/fs_json.rs` — JSON round-trip via `atomic_write_json` +
       `read_json`; malformed JSON yields a typed error, not a panic.
-- [ ] 1.8 GREEN: `read_json` / `atomic_write_json` (serde_json), typed
+- [x] 1.8 GREEN: `read_json` / `atomic_write_json` (serde_json), typed
       `FsError`.
-- [ ] 1.9 `lib.rs`: `pub mod fs;`
+- [x] 1.9 `lib.rs`: `pub mod fs;`
 
 ## 2. Spec (this change)
 
-- [ ] 2.1 Spec delta `specs/fs/spec.md` — atomic replace, unique staging
+- [x] 2.1 Spec delta `specs/fs/spec.md` — atomic replace, unique staging
       names, durability, Windows retry, JSON helpers (done in this change).
-- [ ] 2.2 On archive: deploy `openspec/specs/fs/spec.md`.
-- [ ] 2.3 `.espectacular/fs/` contract TOMLs mapped to test flags (one per
+- [x] 2.2 On archive: deploy `openspec/specs/fs/spec.md`.
+- [x] 2.3 `.espectacular/fs/` contract TOMLs mapped to test flags (one per
       scenario).
-- [ ] 2.4 `ah check` green.
+- [x] 2.4 `ah check` green.
 
 ## 3. Downstream migrations (separate tickets, one per repo — filed at approval)
 
@@ -65,6 +65,6 @@ Meter: `just ci` (fmt, clippy, test, docs, build-release, aix-check) and
 
 ## 4. Tidy
 
-- [ ] 4.1 `just ci` green.
-- [ ] 4.2 `versions.ddl.toml` **minor** bump entry (new public module).
-- [ ] 4.3 CHANGELOG entry naming the durability guarantees.
+- [x] 4.1 `just ci` green.
+- [x] 4.2 `versions.ddl.toml` **minor** bump entry (new public module).
+- [x] 4.3 CHANGELOG entry naming the durability guarantees.

@@ -1,0 +1,11 @@
+id = "a-json-file-round-trips"
+description = "a value written with atomic_write_json reads back equal via read_json"
+archetype = "NR"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "json_round_trips", timeout_seconds = 60 },
+]
