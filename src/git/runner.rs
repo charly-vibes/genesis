@@ -63,6 +63,11 @@ pub fn run(root: &Path, policy: EnvPolicy, args: &[&str]) -> Result<GitOutput, G
 /// Stdin is drained on a thread: git answers incrementally, so a large
 /// batch can fill the child's stdout pipe while stdin is still being
 /// written — writing inline would deadlock there.
+///
+/// A broken pipe on the stdin write means git exited before consuming
+/// the input; the child's own exit status is the authoritative failure
+/// and maps through [`git_output`] to [`GitError::Git`]. Other stdin
+/// write failures still yield [`GitError::Io`].
 pub(super) fn run_with_stdin(
     root: &Path,
     policy: EnvPolicy,
@@ -74,14 +79,29 @@ pub(super) fn run_with_stdin(
     let output = child
         .wait_with_output()
         .map_err(|source| GitError::Spawn { source })?;
-    if let Err(source) = writer.join().expect("stdin writer thread panicked") {
-        return Err(GitError::Io {
+    let written = writer.join().expect("stdin writer thread panicked");
+    if let Some(err) = written
+        .err()
+        .and_then(|source| stdin_write_error(root, source))
+    {
+        return Err(err);
+    }
+    git_output(args, output, &[0, 1])
+}
+
+/// Classify a failed stdin write: a broken pipe means git exited before
+/// consuming the input (the child's exit status is authoritative —
+/// fall through to [`git_output`]); anything else is an [`GitError::Io`].
+fn stdin_write_error(root: &Path, source: std::io::Error) -> Option<GitError> {
+    if source.kind() == std::io::ErrorKind::BrokenPipe {
+        None
+    } else {
+        Some(GitError::Io {
             path: root.to_path_buf(),
             message: "failed to write git stdin".to_string(),
             source,
-        });
+        })
     }
-    git_output(args, output, &[0, 1])
 }
 
 /// Spawn git with piped stdio for [`run_with_stdin`].
