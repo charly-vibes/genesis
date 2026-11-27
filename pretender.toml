@@ -12,6 +12,33 @@ nesting_max = 2
 abc_max = 20
 unwrap_max = 0
 duplication_pct_max = 3
+# 0.12.0 default is 4; 7 clears the worst pre-existing offender (Envelope::new in
+# src/envelope.rs, params 7) plus the other param-5/6 functions on main.
+params_max = 7
+# 0.12.0 default is 0.30; 0.50 clears the pre-existing mutable-state offenders
+# (0.50 in src/status/model.rs, src/update_check/version.rs, src/aix/generate/mod.rs, src/feedback/context/mod.rs).
+mut_ratio_max = 0.5
+# 0.12.0 default is 10 (flags structs with >= 10 fields); 14 clears the
+# pre-existing offenders (13 fields in src/feedback/context/mod.rs, 10 in src/envelope.rs).
+excessive_fields_max = 14
+# 0.12.0 default is 3; 4 clears the pre-existing offender src/fixture.rs (4 void mutators).
+void_mutators_max = 4
+
+[thresholds.test]
+# 0.12.0 default is 2; 4 clears the pre-existing test helpers (install() in
+# src/git_hooks/tests/mod.rs, params 4) and keeps room for test builders.
+params_max = 4
+# 0.12.0 default is 5; 8 clears tests/evals_error_fixture.rs (8 mock uses).
+mock_count_max = 8
+# 0.12.0 default is 5; 8 clears tests/evals_error_fixture.rs (8 .unwrap() calls).
+unwrap_max = 8
+# 0.12.0 default is 3 (flags clusters of >= 3 look-alike tests); 6 clears the
+# 5-test look-alike cluster in tests/evals_hint_channel.rs.
+lazy_cluster_min = 6
+# 0.12.0 default is 10 - pinned.
+excessive_fields_max = 10
+# 0.12.0 default is 0 - pinned (void-mutator check stays off for the test role).
+void_mutators_max = 0
 
 [roles.test]
 paths = ["tests/**", "**/*_test.*", "spec/**"]
