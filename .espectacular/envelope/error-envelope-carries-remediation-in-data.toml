@@ -1,0 +1,11 @@
+id = "error-envelope-carries-remediation-in-data"
+description = "a tool-built error envelope carries its remediation under data.remediation"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "genesis_error_fixture_carries_remediation_under_data_remediation", timeout_seconds = 60 },
+]

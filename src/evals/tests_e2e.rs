@@ -2,23 +2,42 @@
 //! file-lines budget).
 
 use super::*;
+use crate::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry, UnmetClause};
 use crate::testutil::TestUnwrap;
 
 // -- End-to-end scenario --------------------------------------------------
 
 const MANAGED_BLOCK: &str = "<!-- my-tool:START -->\nmanaged\n<!-- my-tool:END -->\n";
 
+/// Genesis-built error envelope fixture (task 2.2): remediation lives in
+/// the error channel `data.remediation`, top-level `hints` is `None`.
 fn error_envelope_stdout(suggested: &str) -> String {
-    serde_json::json!({
-        "ok": false,
-        "data": {"code": "E_STATE", "message": "bad state"},
-        "hints": [{"command": suggested, "description": "suggested fix"}]
-    })
-    .to_string()
+    let err = ErrorResult::new(
+        "E_STATE",
+        "bad state",
+        None,
+        None,
+        None,
+        Vec::<UnmetClause>::new(),
+        vec![RemediationEntry {
+            command: suggested.to_string(),
+            description: "suggested fix".into(),
+        }],
+    )
+    .expect("remediation is non-empty");
+    serde_json::to_string(&Envelope::error("genesis/evals", err, Vec::new()))
+        .expect("error envelope serializes")
 }
 
 fn ok_envelope_stdout() -> String {
-    serde_json::json!({"ok": true}).to_string()
+    serde_json::to_string(&Envelope::success(
+        "genesis/evals",
+        EnvelopeKind::Ok,
+        serde_json::json!({}),
+        Vec::new(),
+        Vec::new(),
+    ))
+    .expect("success envelope serializes")
 }
 
 /// AgentStep builder keeping replay tables one line per step.

@@ -26,7 +26,11 @@ pub enum EnvelopeOutcome {
     Error {
         /// `data.code` from the error envelope, when present.
         code: Option<String>,
-        /// `command` of each hint entry, in order.
+        /// `command` of each hint entry, in order. The list is the union
+        /// of both hint channels — the error channel
+        /// (`data.remediation[]`) first, then the legacy top-level
+        /// `hints` array — so neither channel's command is discarded.
+        /// Entries may be objects carrying `command` or bare strings.
         hint_commands: Vec<String>,
     },
 }
@@ -34,7 +38,12 @@ pub enum EnvelopeOutcome {
 /// Parse a tool's captured stdout into an [`EnvelopeOutcome`].
 ///
 /// Lenient by design: only `ok` is required, so the assertion holds across
-/// envelope-version drift. Hints are read from the optional `hints` array.
+/// envelope-version drift. Hint commands are the union of both channels:
+/// the error channel (`data.remediation[]`) and the legacy top-level
+/// `hints` array. Each entry may be an object carrying a `command` field
+/// or a bare string naming the command. The union is stable —
+/// error-channel commands first, then legacy hints — and neither channel
+/// is discarded. Envelopes with neither channel yield zero commands.
 pub fn parse_envelope(stdout: &str) -> Result<EnvelopeOutcome, EvalsError> {
     let value: Value = serde_json::from_str(stdout).map_err(EvalsError::NotJson)?;
     let ok = value
@@ -58,19 +67,39 @@ fn error_code(value: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// `command` of each hint entry, in order; empty when `hints` is absent.
+/// Hint commands from an error envelope: the union of both channels —
+/// `data.remediation[]` first, then the legacy top-level `hints` array.
+/// Each entry may be an object carrying a `command` field or a bare
+/// string naming the command. Neither channel is discarded; an envelope
+/// with neither channel yields an empty vec.
 fn hint_commands(value: &Value) -> Vec<String> {
-    value
+    let error_channel = value
+        .pointer("/data/remediation")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let legacy_channel = value
         .get("hints")
         .and_then(Value::as_array)
-        .map(|hints| {
-            hints
-                .iter()
-                .filter_map(|h| h.get("command").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    error_channel
+        .iter()
+        .chain(legacy_channel)
+        .filter_map(hint_command)
+        .collect()
+}
+
+/// The command named by a hint/remediation entry: an object carrying
+/// `command` or a bare string.
+fn hint_command(entry: &Value) -> Option<String> {
+    match entry {
+        Value::String(command) => Some(command.clone()),
+        _ => entry
+            .get("command")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    }
 }
 
 // ---------------------------------------------------------------------------

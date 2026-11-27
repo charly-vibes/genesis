@@ -1,0 +1,11 @@
+id = "a-writer-reader-divergence-fails-the-suite"
+description = "if the constructors stop emitting a channel the reader reads, the hint-following scenario fails"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "scenario_error_hint_followed_end_to_end", timeout_seconds = 60 },
+]

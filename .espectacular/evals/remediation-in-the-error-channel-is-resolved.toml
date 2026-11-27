@@ -1,0 +1,11 @@
+id = "remediation-in-the-error-channel-is-resolved"
+description = "parse_envelope resolves the data.remediation command"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "remediation_in_error_channel_is_resolved", timeout_seconds = 60 },
+]

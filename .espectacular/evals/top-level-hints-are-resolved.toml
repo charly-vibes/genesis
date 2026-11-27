@@ -1,0 +1,11 @@
+id = "top-level-hints-are-resolved"
+description = "parse_envelope resolves a top-level hints command"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "top_level_hints_are_resolved", timeout_seconds = 60 },
+]

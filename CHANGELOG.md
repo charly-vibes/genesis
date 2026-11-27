@@ -3,6 +3,20 @@
 All notable changes to `genesis-vibes` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **Envelope hint channel contract** (genesis-jsu): on the error path,
+  remediation lives in the error result's `remediation` array
+  (`data.remediation`), and the top-level `hints` array is deprecated —
+  writers MUST NOT be required to emit it there (read-only tolerance for
+  tools that predate this change). `parse_envelope` now resolves hint
+  commands as the union of BOTH channels in a stable order —
+  `data.remediation[]` first, then top-level `hints[]` — with each entry
+  accepted as an object carrying `command` or a bare string. No public
+  signature change (reader behavior only).
+
 ## [0.13.4] — 2026-11-21
 
 ### Fixed

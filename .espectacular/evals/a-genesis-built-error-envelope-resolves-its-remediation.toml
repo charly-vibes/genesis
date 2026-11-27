@@ -1,0 +1,13 @@
+id = "a-genesis-built-error-envelope-resolves-its-remediation"
+description = "an envelope from the genesis constructors resolves its remediation channel"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "genesis_built_error_envelope_resolves_remediation", timeout_seconds = 60 },
+    { flags = "genesis_built_success_envelope_parses_as_ok", timeout_seconds = 60 },
+    { flags = "genesis_error_fixture_carries_remediation_under_data_remediation", timeout_seconds = 60 },
+]

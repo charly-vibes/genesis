@@ -1,0 +1,11 @@
+id = "a-genesis-built-success-envelope-parses-as-ok"
+description = "a fixture built with Envelope::success parses as the Ok outcome"
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "genesis_built_success_envelope_parses_as_ok", timeout_seconds = 60 },
+]

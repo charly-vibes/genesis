@@ -1,0 +1,11 @@
+id = "an-envelope-with-no-hint-channel-resolves-to-no-commands"
+description = "an envelope with neither channel yields zero hint commands and no error"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "envelope_with_neither_channel_yields_zero_commands", timeout_seconds = 60 },
+]

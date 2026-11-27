@@ -15,3 +15,11 @@
 kaya = "0.4.1"
 sad = "0.2.0"
 podras = "0.1.0"
+
+# Patch-bump ledger for genesis itself (Standardization §4): a patch bump
+# is a reader/consumer behavior change with no public signature change.
+# genesis-jsu: evals `parse_envelope` now unions both hint channels
+# (`data.remediation[]` first, then legacy top-level `hints[]`); writers
+# are no longer required to emit top-level hints on the error path.
+[packages]
+genesis = "0.13.5"

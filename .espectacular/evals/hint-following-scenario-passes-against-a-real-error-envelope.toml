@@ -1,0 +1,11 @@
+id = "hint-following-scenario-passes-against-a-real-error-envelope"
+description = "the hint-following scenario passes against a genesis-built error envelope"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "scenario_error_hint_followed_end_to_end", timeout_seconds = 60 },
+]

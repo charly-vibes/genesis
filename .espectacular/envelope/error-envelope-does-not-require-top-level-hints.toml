@@ -1,0 +1,11 @@
+id = "error-envelope-does-not-require-top-level-hints"
+description = "a reader finds remediation without any top-level hints array"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "remediation_in_error_channel_is_resolved", timeout_seconds = 60 },
+]

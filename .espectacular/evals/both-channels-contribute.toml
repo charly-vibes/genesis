@@ -1,0 +1,14 @@
+id = "both-channels-contribute"
+description = "parse_envelope unions data.remediation and top-level hints, error channel first"
+archetype = "CE"
+status = "active"
+superseded_by = ""
+authored_with = "0.3.0"
+
+[tests]
+cargo = [
+    { flags = "remediation_in_error_channel_is_resolved", timeout_seconds = 60 },
+    { flags = "top_level_hints_are_resolved", timeout_seconds = 60 },
+    { flags = "both_channels_union_with_error_channel_first", timeout_seconds = 60 },
+    { flags = "envelope_with_neither_channel_yields_zero_commands", timeout_seconds = 60 },
+]
