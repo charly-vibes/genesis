@@ -74,7 +74,14 @@ fn test_receipt_round_trip_preserves_all_fields() {
 
 #[test]
 fn test_envelope_without_receipt_has_no_receipt_key() {
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
+    let env = Envelope::success(
+        "0.1",
+        "my-tool/1.0.0",
+        EnvelopeKind::Ok,
+        "hello",
+        vec![],
+        vec![],
+    );
     let json = serde_json::to_string(&env).require("value");
     let parsed: serde_json::Value = serde_json::from_str(&json).require("value");
     assert!(parsed.get("receipt").is_none());
@@ -90,8 +97,15 @@ fn test_with_receipt_builder_round_trips_through_parse_envelope() {
         idempotency_key: Some("mutating-cmd".into()),
         evidence: Some("no file was written".into()),
     };
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![])
-        .with_receipt(receipt);
+    let env = Envelope::success(
+        "0.1",
+        "my-tool/1.0.0",
+        EnvelopeKind::Ok,
+        "hello",
+        vec![],
+        vec![],
+    )
+    .with_receipt(receipt);
     assert!(env.receipt.is_some());
 
     let json = serde_json::to_string(&env).require("value");

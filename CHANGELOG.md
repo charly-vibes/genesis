@@ -17,6 +17,97 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   accepted as an object carrying `command` or a bare string. No public
   signature change (reader behavior only).
 
+## [0.14.0] — 2026-11-27
+
+Review-remediation release across the shared modules (multi-pass review
+of 2026-11-27, epics genesis-ntg findings + adoption audits). Consumers
+MUST bump their `genesis-vibes` pin to `"0.14"`; several changes are
+breaking.
+
+### Breaking
+
+- **Envelope version is caller-supplied** (genesis-la4): `Envelope::success`,
+  `success_with_tx`, and `error` now take `envelope_version: &'static str`
+  as their first parameter — the per-tool protocol version, distinct from
+  `cli_version`. The hard-coded `ENVELOPE_VERSION` const is gone.
+  `current_author()` is now `pub` (tools sharing a process can observe
+  who owns envelope metadata; `set_author` unchanged, first call wins).
+- **Lenient envelope reader relocated** (genesis-0hx): `parse_envelope`,
+  `EnvelopeOutcome`, `EnvelopeParseError` moved from `genesis::evals` to
+  `genesis::envelope/outcome.rs`; re-exported from `genesis::envelope`
+  (and re-exported from `genesis::evals` for compatibility). The reader
+  now tolerates pre-envelope preamble output and reports per-channel
+  `malformed_hints` counts instead of faulting.
+- **Persisted provenance hash format changed** (genesis-qbu): managed-block
+  `content_sha8` is now pinned inline FNV-1a 64-bit truncated to 8 hex
+  digits (was `DefaultHasher`, which is not stable across builds).
+  Footers already persisted under the old hasher surface a one-time
+  drift report; regenerate with your tool's refresh/self-check flow.
+- **`ErrorRecord` construction** (genesis-xxx): `Default` derived and
+  `ErrorRecord::new(ts, argv, exit, kind)` added; exhaustive field-list
+  literals are deprecated (doc-comment contract). Legacy JSONL still
+  deserializes (`#[serde(default)]` on `message`).
+
+### Added
+
+- **genesis::git** (genesis-op3, r5j, jxg.1–.3): `staged_files`,
+  `tracked_paths`, `ignored_paths` (batched, one spawn), `worktree_facts`
+  (`WorktreeFacts { git_dir, common_dir, is_linked_worktree }`),
+  `current_branch`, `remote_url`, and `remote_key` (relocated from
+  `feedback::redactor`, which re-exports it as `reduce_git_remote_url`).
+  Changed paths now unquote `core.quotePath` output (non-ASCII names
+  round-trip identically from `ls-files`/`diff` and porcelain);
+  `tracked`/`is_ignored`/`path_status` pass caller paths as literal
+  pathspecs (a file named `a[1].txt` matches itself; `check-ignore` is
+  fed pathnames over stdin since it supports no pathspec magic);
+  `tracked(root, root)` reports the whole repo tracked instead of
+  erroring.
+- **genesis::git_hooks** (genesis-5sm.1/.2/.3): `query_hooks_path` maps
+  only exit 1 to "unset" — other exits become typed
+  `GitHooksError::NotARepository`/`ConfigParseFailed { path, message }`;
+  `ensure_wired` refuses unbalanced start/end markers
+  (`UnbalancedLefthookMarkers`) and commands-keys at the wrong indent
+  (`UnanchorableLefthookConfig`), and validates that markers are
+  comment-prefixed (bare `<!-- AH:START -->` makes lefthook.yml
+  unparseable YAML); `apply_marker` preserves shebang-only scripts;
+  non-UTF-8 foreign hooks classify as `ForeignHook`, not `Io`;
+  `HookName::Other` rejects ParentDir/RootDir components.
+- **fixture isolation** (genesis-352): seeded repos read both host git
+  config scopes through an empty file (`GIT_CONFIG_GLOBAL`/`_SYSTEM`),
+  pin `init.defaultBranch` (with pre-2.28 fallback) and a deterministic
+  local identity, force unsigned commits — host config can no longer
+  alter what a fixture contains. Failed builds clean the temp root
+  (`Drop` guard) and return `Err` instead of panicking.
+- **update_check hardening** (genesis-3i5): backoff cache is written on
+  serde failure and empty-registry paths (previously naked `None` =
+  per-run network hit); CI detection now covers `CI`, `TF_BUILD`,
+  `GITHUB_ACTIONS`, `GITLAB_CI` (any non-empty value); v-prefixed
+  calendar versions (e.g. `v2026.10.4`) compare correctly; `check_with`
+  gains a `user_agent: Option<&str>` override (default
+  `genesis-vibes/<version>`).
+- **feedback** (genesis-xxx, 4xl, ase): message capture threads the
+  scratch record's `message`/`command`/`exit_code` into the issue body
+  context bundle (mirrors wai's wiring); `## Error` fences are hardened
+  (4000-char cap, fence sized to the longest backtick run); `guide`
+  consumers thread `IssueContent` instead of a `(title, body)` tuple.
+
+### Fixed
+
+- managed-block `block_span` no longer splices a file that quotes the
+  block markers before the real block; the end marker is only searched
+  after the start marker (genesis-qbu). The managed-block registry
+  rejects two blocks sharing a start or end marker (genesis-qbu).
+- suite_linter drift gate refresh wiring re-checked; `block_l` span
+  marks use the stable hash (genesis-qbu).
+- evals: `tests_report.rs` is wired into the module tree (genesis-b6g);
+  receipt-drift hardening — receipt payload is deserialized through
+  `ReceiptMeta` so renamed/reshaped fields fault, `Failure`/`ok:true`
+  and `Timeout` polarities are validated (genesis-0hx).
+- `docs/src/reference/modules.md` documents the `check_with` signature
+  with `user_agent` (genesis-3i5).
+- fixture `git commit` uses a config override *before* the subcommand
+  (`git -c commit.gpgsign=false commit`), fixing seeded-repo commits.
+
 ## [0.13.4] — 2026-11-21
 
 ### Fixed

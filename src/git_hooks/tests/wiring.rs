@@ -159,6 +159,93 @@ fn ensure_wired_errors_unmodified_on_quoted_stage_key() {
 }
 
 #[test]
+fn ensure_wired_refuses_unbalanced_markers_unmodified() {
+    // genesis-5sm: per-stage blocks legitimately appear once per stage
+    // section, so balance is count equality file-wide, not presence —
+    // differing start/end counts are an unknown state, refuse rather
+    // than guess (same discipline as ensure_command_wired's
+    // marker_outcome).
+    let config = format!(
+        "pre-commit:\n  commands:\n    lint:\n      run: lint\n{}\n",
+        ah_block().start_marker
+    );
+    let fixture = config_fixture(&config);
+    let err = lefthook::ensure_wired(
+        fixture.root(),
+        lefthook::Stage::PreCommit,
+        &ah_block(),
+        ah_content(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, GitHooksError::UnbalancedLefthookMarkers { .. }),
+        "got: {err}"
+    );
+    assert_eq!(
+        wired_config(fixture.root()),
+        config,
+        "config must not be modified"
+    );
+}
+
+/// genesis-5sm: children at indent 6 but `commands:` at indent 2 —
+/// splicing after that key would nest the block at the wrong level;
+/// same UnanchorableLefthookConfig refusal as ensure_command_wired.
+#[test]
+fn ensure_wired_refuses_indent_mismatched_commands_key_unmodified() {
+    let config = "pre-commit:\n      parallel: true\n  commands:\n    lint:\n      run: lint\n";
+    let fixture = config_fixture(config);
+    let err = lefthook::ensure_wired(
+        fixture.root(),
+        lefthook::Stage::PreCommit,
+        &ah_block(),
+        ah_content(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, GitHooksError::UnanchorableLefthookConfig { .. }),
+        "got: {err}"
+    );
+    assert!(
+        err.to_string().contains("commands key is at indent"),
+        "error should explain the refusal: {err}"
+    );
+    assert_eq!(
+        wired_config(fixture.root()),
+        config,
+        "config must not be modified"
+    );
+}
+
+#[test]
+fn ensure_wired_refuses_bare_html_comment_markers_unmodified() {
+    // genesis-5sm: `<!-- AH:START -->` markers (BlockDef::new's default)
+    // emitted into the config produce unparseable YAML — validate and
+    // refuse; callers declare comment-prefixed markers instead.
+    let fixture = config_fixture(basic_config());
+    let err = lefthook::ensure_wired(
+        fixture.root(),
+        lefthook::Stage::PreCommit,
+        &crate::managed_block::BlockDef::new("AH"),
+        ah_content(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, GitHooksError::UnanchorableLefthookConfig { .. }),
+        "got: {err}"
+    );
+    assert!(
+        err.to_string().contains("unparseable YAML"),
+        "error should name the problem: {err}"
+    );
+    assert_eq!(
+        wired_config(fixture.root()),
+        basic_config(),
+        "config must not be modified"
+    );
+}
+
+#[test]
 fn ensure_wired_anchors_past_comment_lines_mentioning_the_stage() {
     // GH#28 item 1: comments mentioning `pre-commit` before the real
     // column-0 key must not trip the contains-refusal (D6) — the
@@ -169,7 +256,7 @@ fn ensure_wired_anchors_past_comment_lines_mentioning_the_stage() {
     let after = wired_config(fixture.root());
     assert!(after.contains("AH:START"), "block should be wired");
     assert!(
-        after.starts_with("# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n<!--"),
+        after.starts_with("# pre-commit hooks are managed by ah\npre-commit:\n  commands:\n# <!--"),
         "block must nest inside commands:, comment preserved\n---\n{after}"
     );
 }
@@ -200,50 +287,5 @@ fn injected_block_is_recognized_by_managed_block_reader() {
     assert!(read.contains("run: ah check"));
 }
 
-#[test]
-fn is_wired_true_when_command_in_target_stage() {
-    let fixture = config_fixture(
-        "pre-commit:\n  commands:\n    ah:\n      run: ah check\npre-push:\n  commands:\n    test:\n      run: test\n",
-    );
-    assert!(lefthook::is_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        "ah check"
-    ));
-    assert!(!lefthook::is_wired(
-        fixture.root(),
-        lefthook::Stage::PrePush,
-        "ah check"
-    ));
-}
-
-#[test]
-fn is_wired_false_when_stage_missing_or_no_config() {
-    let fixture = config_fixture(basic_config());
-    assert!(!lefthook::is_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        "ah check"
-    ));
-    let empty = built_fixture();
-    assert!(!lefthook::is_wired(
-        empty.root(),
-        lefthook::Stage::PreCommit,
-        "ah check"
-    ));
-}
-
-#[test]
-fn is_wired_command_in_wrong_stage_is_not_wired() {
-    let fixture = config_fixture("pre-push:\n  commands:\n    ah:\n      run: ah check\n");
-    assert!(lefthook::is_wired(
-        fixture.root(),
-        lefthook::Stage::PrePush,
-        "ah check"
-    ));
-    assert!(!lefthook::is_wired(
-        fixture.root(),
-        lefthook::Stage::PreCommit,
-        "ah check"
-    ));
-}
+#[path = "wiring/is_wired.rs"]
+mod is_wired;

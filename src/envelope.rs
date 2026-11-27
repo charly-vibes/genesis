@@ -4,52 +4,51 @@
 //!
 //! ## Changes from dont
 //!
-//! - `EnvelopeKind` was generalized: dont-specific variants removed
-//!   (`Claim`, `Claims`, `Term`, `TermList`, `All`, `Events`, `Rule`,
-//!   `RuleList`, `RuleResult`, `EvidenceCheck`, `Prime`, `Why`, `DontExplain`,
-//!   `DontCompletions`, `EvalExport`). Replaced with generic: `Ok`, `Error`,
-//!   `Empty`, `List`, `Check`, `Doctor`, `Version`, `Stats`, `Info`, `Warning`.
-//! - `data` is generic over `T: Serialize` (already was in dont).
-//! - `ENVELOPE_VERSION` reset to `"0.1"` for genesis's own versioning.
-//! - `cli_version` is caller-supplied at construction — downstream tools pass their own
-//!   CLI version, not genesis-vibes' package version.
+//! - `EnvelopeKind` was generalized: 15 dont-specific variants removed,
+//!   replaced with generic `Ok`/`Error`/`Empty`/`List`/`Check`/`Doctor`/
+//!   `Version`/`Stats`/`Info`/`Warning`. `data` is generic over `T: Serialize`.
+//! - `envelope_version` is caller-supplied at construction (genesis-la4):
+//!   each tool passes its own protocol version (per-tool `&'static str`),
+//!   so downstream tools no longer fork the whole envelope module to bump
+//!   or read their own version. `cli_version` is likewise caller-supplied.
 //!
 //! ## Design notes (carried verbatim from dont-2j6o)
 //!
-//! - The envelope is the **single** output format for all CLI commands.
-//!   Every command returns an `Envelope<T>`. Callers check `ok` first.
-//! - `EnvelopeKind` is a closed enum — adding a new variant requires a
-//!   deliberate decision and a conformance test update.
+//! - The envelope is the **single** output format for all CLI commands:
+//!   every command returns an `Envelope<T>`, callers check `ok` first.
+//! - `EnvelopeKind` is a closed enum — adding a variant is a deliberate
+//!   decision plus a conformance test update.
 //! - `ErrorResult` enforces Invariant 3.2.5: `remediation` must be non-empty
 //!   (constructor returns `Err` if empty). A bare error message without a
 //!   suggested fix is never emitted.
-//! - `Meta` carries observability data: duration, transaction id, request id,
-//!   and the current author (set once at startup via `set_author`).
-//! - `Warnings` are always collected; even on success, warnings may be present.
-//! - `Hints` are optional — they are "next-step" suggestions for the user.
-//! - `ephemeral` flag indicates the envelope should not be persisted/logged.
+//! - `Meta` carries observability data (duration, tx id, request id, current
+//!   author via `set_author`). `Warnings` always collected; `Hints` optional
+//!   next-step suggestions; `ephemeral` marks envelopes never persisted/logged.
 
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
 mod notice;
+mod outcome;
 mod receipt;
 
 pub use notice::{HintEntry, RemediationEntry, UnmetClause, Warning};
+pub use outcome::{EnvelopeOutcome, EnvelopeParseError, parse_envelope, parse_envelope_value};
 pub use receipt::{ReceiptMeta, TerminalOutcome};
 
 static CURRENT_AUTHOR: OnceLock<String> = OnceLock::new();
 
-/// Set the global author for envelope metadata.
-///
-/// Must be called once at startup. Subsequent calls are silently ignored
-/// (the first call wins). If two tools share the same process, the first
-/// tool to call `set_author` sets the author for all subsequent envelopes.
+/// Set the global author for envelope metadata. Must be called once at
+/// startup; subsequent calls are silently ignored (the first call wins).
+/// If two tools share a process, the first caller owns all envelopes.
 pub fn set_author(author: String) {
     let _ = CURRENT_AUTHOR.set(author);
 }
 
-fn current_author() -> Option<String> {
+/// The author previously installed via [`set_author`], if any. Public so
+/// tools sharing a process can observe (and test) who owns envelope
+/// metadata without forking the envelope module (genesis-la4).
+pub fn current_author() -> Option<String> {
     CURRENT_AUTHOR.get().cloned()
 }
 
@@ -59,10 +58,6 @@ fn current_author() -> Option<String> {
 fn ok_for(kind: EnvelopeKind) -> bool {
     !matches!(kind, EnvelopeKind::Error)
 }
-
-/// Envelope protocol version — bump when the envelope shape changes. This
-/// is distinct from `cli_version`, which identifies the emitting tool.
-pub const ENVELOPE_VERSION: &str = "0.1";
 
 /// Discriminator for the kind of data carried in the envelope.
 ///
@@ -190,23 +185,42 @@ pub struct Envelope<T: Serialize> {
 impl<T: Serialize> Envelope<T> {
     /// Create a success envelope.
     ///
-    /// `cli_version` must be the caller's own CLI version (e.g., from `env!("CARGO_PKG_VERSION")`
-    /// in the downstream tool's crate). Do **not** pass genesis-vibes' version — this field
-    /// identifies the emitting tool, not the genesis library.
+    /// `envelope_version` is the caller's own envelope protocol version —
+    /// bump it when the caller's envelope shape changes (genesis-la4). It
+    /// is distinct from `cli_version`, which identifies the emitting tool.
+    /// Both must describe the caller, not genesis-vibes.
     ///
-    /// Correct: `Envelope::success(env!("CARGO_PKG_VERSION"), …)` in your own crate.
-    /// Wrong: hardcoding `"0.5.0"` or anything derived from genesis-vibes' `Cargo.toml`.
+    /// Correct: `Envelope::success(env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_VERSION"), …)`
+    /// in your own crate (or a distinct protocol version when the tool
+    /// versions its envelope independently).
+    /// Wrong: hardcoding another tool's version or anything derived from
+    /// genesis-vibes' `Cargo.toml` when you are not genesis.
     pub fn success(
+        envelope_version: &'static str,
         cli_version: &str,
         kind: EnvelopeKind,
         data: T,
         warnings: Vec<Warning>,
         hints: Vec<HintEntry>,
     ) -> Self {
+        Self::success_with_tx(
+            envelope_version,
+            cli_version,
+            kind,
+            data,
+            warnings,
+            hints,
+            None,
+        )
+    }
+
+    /// Envelope shell for the success constructors: every field except
+    /// the caller-stamped versions, blank here and never escaping.
+    fn shell(kind: EnvelopeKind, data: T, warnings: Vec<Warning>, hints: Vec<HintEntry>) -> Self {
         Self {
             ok: ok_for(kind),
-            envelope_version: ENVELOPE_VERSION.to_string(),
-            cli_version: cli_version.to_string(),
+            envelope_version: String::new(),
+            cli_version: String::new(),
             envelope_kind: kind,
             data,
             warnings,
@@ -219,8 +233,9 @@ impl<T: Serialize> Envelope<T> {
 
     /// Create a success envelope with a transaction id.
     ///
-    /// `cli_version` must be the caller's own CLI version. See [`Envelope::success`].
+    /// `envelope_version` and `cli_version` must be the caller's own. See [`Envelope::success`].
     pub fn success_with_tx(
+        envelope_version: &'static str,
         cli_version: &str,
         kind: EnvelopeKind,
         data: T,
@@ -228,11 +243,11 @@ impl<T: Serialize> Envelope<T> {
         hints: Vec<HintEntry>,
         tx: Option<u64>,
     ) -> Self {
-        let env = Self::success(cli_version, kind, data, warnings, hints);
-        Self {
-            meta: Meta { tx, ..env.meta },
-            ..env
-        }
+        let mut envelope = Self::shell(kind, data, warnings, hints);
+        envelope.envelope_version = envelope_version.to_string();
+        envelope.cli_version = cli_version.to_string();
+        envelope.meta.tx = tx;
+        envelope
     }
 
     /// Attach receipt metadata (builder style, consumes and returns `self`).
@@ -240,7 +255,7 @@ impl<T: Serialize> Envelope<T> {
     /// ```
     /// use genesis::envelope::{Envelope, EnvelopeKind, ReceiptMeta, TerminalOutcome};
     ///
-    /// let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "done", vec![], vec![])
+    /// let env = Envelope::success(env!("CARGO_PKG_VERSION"), "my-tool/1.0.0", EnvelopeKind::Ok, "done", vec![], vec![])
     ///     .with_receipt(ReceiptMeta {
     ///         terminal_outcome: TerminalOutcome::Success,
     ///         attempt: 1,
@@ -258,11 +273,16 @@ impl<T: Serialize> Envelope<T> {
 impl Envelope<ErrorResult> {
     /// Create an error envelope.
     ///
-    /// `cli_version` must be the caller's own CLI version. See [`Envelope::success`].
-    pub fn error(cli_version: &str, err: ErrorResult, warnings: Vec<Warning>) -> Self {
+    /// `envelope_version` and `cli_version` must be the caller's own. See [`Envelope::success`].
+    pub fn error(
+        envelope_version: &'static str,
+        cli_version: &str,
+        err: ErrorResult,
+        warnings: Vec<Warning>,
+    ) -> Self {
         Self {
             ok: false,
-            envelope_version: ENVELOPE_VERSION.to_string(),
+            envelope_version: envelope_version.to_string(),
             cli_version: cli_version.to_string(),
             envelope_kind: EnvelopeKind::Error,
             data: err,

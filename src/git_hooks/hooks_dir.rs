@@ -123,18 +123,45 @@ fn scope_hooks_dir(value: String, root: &Path, scope: HooksDirScope) -> Effectiv
 }
 
 /// Query `core.hooksPath` at one config scope; `Ok(None)` when unset.
+///
+/// Every exit other than 0 or 1 is an environment failure, never
+/// "unset": exit 128 occurs both outside a repository and with a
+/// corrupt `.git/config` — walking on to global/system would silently
+/// install hooks into the wrong directory (genesis-5sm).
 fn query_hooks_path(
     root: &Path,
     scope_args: &[&str],
     envs: &[(String, String)],
 ) -> Result<Option<String>, GitHooksError> {
     let output = run_hooks_path_query(root, scope_args, envs)?;
-    // Non-zero exit means the config is unset at this scope.
-    Ok(if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    match output.status.code() {
+        Some(0) => Ok(Some(
+            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        )),
+        // Exit 1 is git's only "key unset at this scope" signal — the
+        // sole non-error that lets the scope walk continue.
+        Some(1) => Ok(None),
+        Some(_) => Err(classify_config_failure(root, &output)),
+        // Killed by a signal — not an unset signal either.
+        None => Err(classify_config_failure(root, &output)),
+    }
+}
+
+/// Classify a failed `git config` scope query by its stderr: exit 128
+/// outside a repository is [`GitHooksError::NotARepository`], any other
+/// failure (corrupt config, …) is [`GitHooksError::ConfigParseFailed`].
+fn classify_config_failure(root: &Path, output: &std::process::Output) -> GitHooksError {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("inside a git repository") || stderr.contains("not a git repository") {
+        GitHooksError::NotARepository {
+            path: root.to_path_buf(),
+        }
     } else {
-        None
-    })
+        GitHooksError::ConfigParseFailed {
+            path: root.to_path_buf(),
+            message: stderr.trim().to_string(),
+        }
+    }
 }
 
 /// Spawn the scope query, surfacing spawn failures as `Io` at `root`.

@@ -76,7 +76,9 @@ pub(super) const TEST_MARKER: &str = "# Installed by test-tool.";
 pub(super) const TEST_SCRIPT: &str = "#!/usr/bin/env sh\nexec true\n";
 
 pub(super) fn ah_block() -> BlockDef {
-    BlockDef::new("AH")
+    // genesis-5sm: comment-prefixed markers (the YAML convention) — bare
+    // HTML-comment markers are refused by ensure_wired as unparseable YAML.
+    BlockDef::with_markers("AH", "# <!-- AH:START -->", "# <!-- AH:END -->")
 }
 
 fn ah_content() -> &'static str {

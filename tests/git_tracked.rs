@@ -45,6 +45,51 @@ fn tracked_lists_files_known_to_git() {
 }
 
 #[test]
+fn tracked_whole_repo_root_reports_tracked() {
+    // path == root relativizes to "" which `ls-files --error-unmatch`
+    // rejects with exit 128; the root itself must mean "the whole repo".
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    std::fs::write(fixture.path("committed.txt"), "content").require("write file");
+    for args in [
+        &(["git", "add", "committed.txt"])[..],
+        &(["git", "commit", "-m", "seed"])[..],
+    ] {
+        let out = fixture.run(args).require("run git");
+        assert!(out.success(), "{args:?} failed: {}", out.stderr);
+    }
+
+    assert!(
+        git::tracked(fixture.root(), fixture.root()).require("tracked root"),
+        "the repository root in a committed repo must report tracked"
+    );
+}
+
+#[test]
+fn tracked_glob_special_filename_matches_itself() {
+    // Pathspec globs would make `a[1].txt` match `a1.txt`; callers pass
+    // literal filenames, so the name must match itself only.
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    std::fs::write(fixture.path("a[1].txt"), "bracketed").require("write bracketed file");
+    std::fs::write(fixture.path("a1.txt"), "plain").require("write plain file");
+    for args in [
+        &(["git", "add", "."])[..],
+        &(["git", "commit", "-m", "seed"])[..],
+    ] {
+        let out = fixture.run(args).require("run git");
+        assert!(out.success(), "{args:?} failed: {}", out.stderr);
+    }
+
+    assert!(
+        git::tracked(fixture.root(), &fixture.path("a[1].txt")).require("tracked"),
+        "a tracked file named a[1].txt must report tracked"
+    );
+    assert!(
+        !git::is_ignored(fixture.root(), &fixture.path("a[1].txt")).require("is_ignored"),
+        "a non-ignored file named a[1].txt must report not-ignored"
+    );
+}
+
+#[test]
 fn content_hash_is_deterministic() {
     let fixture = Fixture::new().with_git_init().build().require("fixture");
     std::fs::write(fixture.path("blob.txt"), "deterministic content\n").require("write file");

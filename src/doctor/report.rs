@@ -181,6 +181,7 @@ impl DoctorReport {
     /// [`crate::envelope::Envelope::success`]).
     pub fn to_envelope(&self, cli_version: &str) -> Envelope<&Self> {
         Envelope::success(
+            env!("CARGO_PKG_VERSION"),
             cli_version,
             EnvelopeKind::Doctor,
             self,

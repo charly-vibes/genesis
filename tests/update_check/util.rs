@@ -144,13 +144,7 @@ pub fn now_secs() -> u64 {
 
 pub const TTL_SECS: u64 = 7 * 24 * 60 * 60;
 
-pub fn write_cache(
-    dir: &std::path::Path,
-    crate_name: &str,
-    checked_at: u64,
-    latest: Option<&str>,
-    ttl: u64,
-) {
+pub fn write_cache(dir: &std::path::Path, crate_name: &str, checked_at: u64, latest: Option<&str>) {
     let cache_file = dir.join(format!("{crate_name}.json"));
     let latest_json = match latest {
         Some(v) => format!("\"{v}\""),
@@ -159,7 +153,7 @@ pub fn write_cache(
     std::fs::write(
         cache_file,
         format!(
-            r#"{{"checked_at":{checked_at},"latest":{latest_json},"published_at":null,"ttl_secs":{ttl}}}"#
+            r#"{{"checked_at":{checked_at},"latest":{latest_json},"published_at":null,"ttl_secs":{TTL_SECS}}}"#
         ),
     )
     .require("write cache");

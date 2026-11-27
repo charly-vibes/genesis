@@ -3,9 +3,9 @@
 
 use std::path::Path;
 
-use crate::managed_block::content_sha8;
+use crate::managed_block::split_provenance_footer;
 
-use crate::managed_block::BlockDef;
+use crate::managed_block::{BlockDef, content_sha8};
 
 use super::{LintCheck, LintResult, Severity};
 
@@ -58,38 +58,6 @@ impl ManagedBlockDrift {
     pub fn new(targets: Vec<DriftTarget>) -> Self {
         Self { targets }
     }
-}
-
-/// Split the provenance footer off block-internal content.
-///
-/// Returns the footer-free body and, when the last line is a provenance
-/// footer, its `sha=` value. Matches the inject format
-/// `{content}\n{footer}\n` — the separating newline is dropped too, so the
-/// body hashes byte-identically to the generator's content.
-fn split_provenance_footer(inner: &str) -> (&str, Option<&str>) {
-    let trimmed = inner.trim_end_matches('\n');
-    let last_line = match trimmed.rfind('\n') {
-        Some(idx) => &trimmed[idx + 1..],
-        None if !trimmed.is_empty() => trimmed,
-        None => return (inner, None),
-    };
-    match parse_footer_sha(last_line) {
-        Some(sha) => {
-            let cut = trimmed.len() - last_line.len();
-            (&trimmed[..cut.saturating_sub(1)], Some(sha))
-        }
-        None => (inner, None),
-    }
-}
-
-/// Extract `sha=<value>` from a provenance footer line, if it is one.
-fn parse_footer_sha(line: &str) -> Option<&str> {
-    let rest = line
-        .strip_prefix("<!-- provenance: ")?
-        .strip_suffix(" -->")?;
-    let idx = rest.find("sha=")?;
-    let sha = &rest[idx + 4..];
-    Some(sha.split_whitespace().next().unwrap_or(sha))
 }
 
 impl LintCheck for ManagedBlockDrift {

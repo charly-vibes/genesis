@@ -30,7 +30,7 @@ pub mod gh;
 pub mod redactor;
 pub mod scratch;
 
-use content::{apply_title_override, issue_title_and_body};
+use content::{IssueContent, apply_title_override, issue_title_and_body};
 mod content;
 
 use crate::suggestions::{CommandRegistry, SuggestionEngine};
@@ -101,16 +101,32 @@ pub fn handle_feedback(
 ) -> Result<gh::GhResult, String> {
     validate_kind(&args.kind)?;
 
-    let (mut title, mut body_parts) = issue_title_and_body(args, tool_name)?;
-    title = apply_title_override(&args.kind, &title, args.title.as_deref());
-    body_parts.push(context_bundle_section(
+    let content = assembled_content(args, tool_name, tool_version, project_root)?;
+    let redacted = redact_body(&content.body_parts, repo);
+
+    file_issue(args, repo, content.title, redacted)
+}
+
+/// Assemble the issue content: title/body from the args' content source,
+/// the title override applied, and the context bundle appended to the
+/// body parts.
+fn assembled_content(
+    args: &FeedbackArgs,
+    tool_name: &str,
+    tool_version: &str,
+    project_root: &Path,
+) -> Result<IssueContent, String> {
+    let mut content = issue_title_and_body(args, tool_name)?;
+    content.title = apply_title_override(&args.kind, &content.title, args.title.as_deref());
+    content.body_parts.push(context_bundle_section(
         tool_name,
         tool_version,
         project_root,
+        content.command.take(),
+        content.exit_code,
+        content.suggestion_footer.take(),
     ));
-    let redacted = redact_body(&body_parts, repo);
-
-    file_issue(args, repo, title, redacted)
+    Ok(content)
 }
 
 /// Validate the issue kind, with a typo suggestion when close to a valid one.
@@ -136,8 +152,25 @@ fn validate_kind(kind: &str) -> Result<(), String> {
 }
 
 /// Gather the context bundle and format it as the trailing body section.
-fn context_bundle_section(tool_name: &str, tool_version: &str, project_root: &Path) -> String {
-    let bundle = context::gather_context(tool_name, tool_version, None, None, None, project_root);
+/// `command`, `exit_code`, and `suggestion_footer` come from the scratch
+/// record when one backed the body (wai reference wiring), so the
+/// `## Environment` section matches the reported failure.
+fn context_bundle_section(
+    tool_name: &str,
+    tool_version: &str,
+    project_root: &Path,
+    command: Option<String>,
+    exit_code: Option<i32>,
+    suggestion_footer: Option<String>,
+) -> String {
+    let bundle = context::gather_context(
+        tool_name,
+        tool_version,
+        command,
+        exit_code,
+        suggestion_footer,
+        project_root,
+    );
     context::format_context_bundle(&bundle)
 }
 

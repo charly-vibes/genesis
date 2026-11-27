@@ -105,6 +105,7 @@ pub fn maybe_print_version_json_from(
 fn print_version_envelope(name: &str, version: &str, out: &mut impl Write) {
     use crate::envelope::{Envelope, EnvelopeKind};
     let envelope = Envelope::success(
+        env!("CARGO_PKG_VERSION"),
         version,
         EnvelopeKind::Version,
         serde_json::json!({

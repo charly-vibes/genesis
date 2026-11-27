@@ -237,6 +237,7 @@ fn envelope_error_result() {
 #[test]
 fn envelope_read_envelope() {
     let env: Envelope<&str> = Envelope::success(
+        "0.1",
         "0.0.0-test",
         EnvelopeKind::Ok,
         "operation completed",
@@ -271,7 +272,7 @@ fn envelope_read_error_envelope() {
     )
     .require("non-empty remediation");
 
-    let env: Envelope<ErrorResult> = Envelope::error("0.0.0-test", err, vec![]);
+    let env: Envelope<ErrorResult> = Envelope::error("0.1", "0.0.0-test", err, vec![]);
     assert!(!env.ok);
     assert_eq!(env.data.code, "E_CONFIG_NOT_FOUND");
 

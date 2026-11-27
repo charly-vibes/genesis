@@ -1,7 +1,6 @@
 //! Tests for the feedback entry point and title/body partitioning.
 
 use super::content;
-use super::content::{apply_title_override, stdin_title_and_body};
 use super::*;
 use crate::evals::Scenario;
 use scratch::ErrorRecord;
@@ -26,19 +25,22 @@ fn test_tool(label: &str) -> String {
 }
 
 fn write_scratch(tool: &str, exit_code: i32) {
-    let record = ErrorRecord {
-        ts: "2026-07-29T12:00:00Z".into(),
-        argv: vec![tool.to_string(), "check".into()],
-        exit: exit_code,
-        footer: Some("run doctor".into()),
-        kind: "error".into(),
-        message: Some(format!("{}: simulated failure", tool)),
-    };
+    let mut record = ErrorRecord::new(
+        "2026-07-29T12:00:00Z",
+        vec![tool.to_string(), "check".into()],
+        exit_code,
+        "error",
+    );
+    record.footer = Some("run doctor".into());
+    record.message = Some(format!("{}: simulated failure", tool));
     scratch::write_scratch_best_effort(tool, &record);
 }
 
 #[path = "tests_message.rs"]
 mod tests_message;
+
+#[path = "tests_title_body.rs"]
+mod tests_title_body;
 
 #[test]
 fn test_handle_feedback_dry_run() {
@@ -138,87 +140,6 @@ fn test_dry_run_prints_to_stderr() {
     }
 }
 
-// --- stdin title/body partitioning (genesis-gle, genesis-og6) ---
-
-#[test]
-fn stdin_single_line_keeps_generic_title() {
-    let (title, body) = stdin_title_and_body("bug", "summary line");
-    assert_eq!(title, "[bug] feedback report");
-    assert!(body.contains("summary line"), "body must carry the input");
-}
-
-#[test]
-fn stdin_trailing_newline_is_still_single_line() {
-    // `echo "x" | tool feedback bug` produces "x\n" — must keep the
-    // generic title, not treat the trailing newline as a second line.
-    let (title, body) = stdin_title_and_body("bug", "summary line\n");
-    assert_eq!(title, "[bug] feedback report");
-    assert!(body.contains("summary line"));
-}
-
-#[test]
-fn stdin_multiline_promotes_first_line_to_title() {
-    let input = "Bare row-id references fail when intent id has a dot\n\nThe resolution algorithm is undocumented. Details follow.\n";
-    let (title, body) = stdin_title_and_body("bug", input);
-    assert_eq!(
-        title,
-        "[bug] Bare row-id references fail when intent id has a dot"
-    );
-    assert!(body.contains("The resolution algorithm is undocumented."));
-    assert!(
-        !body.contains("Bare row-id references"),
-        "first line must not be duplicated into the body"
-    );
-    assert!(body.starts_with("## Description"));
-}
-
-#[test]
-fn stdin_multiline_blank_lines_around_single_line_is_still_single() {
-    // A title line followed by blank lines trims to one line — the
-    // echo-compat rule wins over title promotion.
-    let (title, body) = stdin_title_and_body("feature", "add a flag\n\n");
-    assert_eq!(title, "[feature] feedback report");
-    assert!(body.contains("add a flag"));
-}
-
-#[test]
-fn stdin_multiline_title_plus_body_omits_first_line_from_body() {
-    let (title, body) = stdin_title_and_body("feature", "add a flag\n\nbody text\n");
-    assert_eq!(title, "[feature] add a flag");
-    assert!(body.contains("body text"));
-    assert!(!body.contains("add a flag"));
-}
-
-#[test]
-fn title_override_wins_over_derived_and_first_line() {
-    assert_eq!(
-        apply_title_override("bug", "[bug] feedback report", Some("My title")),
-        "[bug] My title"
-    );
-    assert_eq!(
-        apply_title_override(
-            "bug",
-            "[bug] auto-reported error: ah check",
-            Some("My title")
-        ),
-        "[bug] My title"
-    );
-    assert_eq!(
-        apply_title_override("bug", "[bug] feedback report", None),
-        "[bug] feedback report",
-        "no override keeps the derived title"
-    );
-}
-
-#[test]
-fn with_title_builder_sets_override() {
-    let args = FeedbackArgs::new("bug", true, false).with_title("My title");
-    assert_eq!(args.title.as_deref(), Some("My title"));
-    // ::new keeps the 3-arg signature — no override by default.
-    let plain = FeedbackArgs::new("bug", true, false);
-    assert_eq!(plain.title, None);
-}
-
 // -- aix-gap kind (add-artifact-provenance §5) ------------------------
 
 #[test]
@@ -294,4 +215,54 @@ fn stale_artifact_step() -> crate::evals::AgentStep {
         exit_code: 1,
         executed: true,
     }
+}
+
+// genesis-ase: the unified path must not drop command/exit/footer from the
+// `## Environment` section (wai reference wiring, wai/src/commands/feedback.rs).
+
+fn context_bundle_for_scratch(tool: &str, dir: &Path) -> String {
+    let args = FeedbackArgs::new("bug", true, true);
+    let issue = content::issue_title_and_body(&args, tool).expect("body builds from scratch");
+    context_bundle_section(
+        tool,
+        "0.1.0",
+        dir,
+        issue.command,
+        issue.exit_code,
+        issue.suggestion_footer,
+    )
+}
+
+#[test]
+fn handle_feedback_body_threads_record_fields_into_environment() {
+    let dir = tmp();
+    let tool = test_tool("env-fields");
+    write_scratch(&tool, 1);
+    let env = context_bundle_for_scratch(&tool, dir.path());
+    assert!(
+        env.contains(&format!("command: {tool} check")),
+        "env: {env}"
+    );
+    assert!(env.contains("exit_code: 1"), "env: {env}");
+    assert!(env.contains("suggestion: run doctor"), "env: {env}");
+    assert!(env.contains("repro_hash:"), "env: {env}");
+}
+
+#[test]
+fn record_repro_hash_delegates_to_context_scheme() {
+    let record = ErrorRecord::new(
+        "2026-07-29T12:00:00Z",
+        vec!["tool".into(), "check".into()],
+        1,
+        "error",
+    );
+    let via_delegate = scenario::record_repro_hash(&record);
+    let via_context = context::repro_hash("error", "2026-07-29T12:00:00Z", &None, None);
+    assert_eq!(via_delegate, via_context);
+    // Distinct records (different ts) hash differently — dedup still works.
+    let other = ErrorRecord {
+        ts: "2026-07-29T13:00:00Z".into(),
+        ..record.clone()
+    };
+    assert_ne!(scenario::record_repro_hash(&other), via_delegate);
 }

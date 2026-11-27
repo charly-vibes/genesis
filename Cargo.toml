@@ -1,6 +1,6 @@
 [package]
 name = "genesis-vibes"
-version = "0.13.4"
+version = "0.14.0"
 edition = "2024"
 description = "Shared crate for cross-cutting CLI/AIX/self-healing infrastructure in the charly-vibes tool suite"
 license = "Apache-2.0"
@@ -20,7 +20,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Error handling
-miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 
 # CLI argument parsing

@@ -12,7 +12,19 @@ fn untracked_files_with_policy(root: &Path, policy: EnvPolicy) -> Result<Vec<Str
         policy,
         &["ls-files", "--others", "--exclude-standard"],
     )?;
-    Ok(lines_of(&out.stdout))
+    Ok(lines_of(&out.stdout).into_iter().map(path_of).collect())
+}
+
+/// Decode one path line of git output: `core.quotePath` C-style-quoted
+/// lines (surrounding double quotes) are unquoted, plain lines pass
+/// through. Keeps enumeration output (`ls-files`, `diff --name-only`)
+/// symmetric with [`parse_porcelain`].
+pub(super) fn path_of(line: String) -> String {
+    if line.len() >= 2 && line.starts_with('"') && line.ends_with('"') {
+        unquote_c_style(&line[1..line.len() - 1])
+    } else {
+        line
+    }
 }
 
 /// Files with tracked changes against `HEAD` (staged or unstaged).
@@ -29,10 +41,35 @@ pub fn changed_files(root: &Path) -> Result<Vec<String>, GitError> {
 /// variant; see [`run`] for what the policy controls).
 pub fn changed_files_with_policy(root: &Path, policy: EnvPolicy) -> Result<Vec<String>, GitError> {
     match run(root, policy, &["diff", "--name-only", "HEAD"]) {
-        Ok(out) => Ok(lines_of(&out.stdout)),
+        Ok(out) => Ok(lines_of(&out.stdout).into_iter().map(path_of).collect()),
         Err(GitError::Git {
             code: 128, stderr, ..
         }) if is_unborn_head(&stderr) => untracked_files_with_policy(root, policy),
+        Err(other) => Err(other),
+    }
+}
+
+/// Files staged in the index relative to `HEAD`
+/// (`git diff --cached --name-only HEAD`).
+///
+/// A repository with no commits (unborn HEAD, where `git diff --cached
+/// HEAD` exits 128) has nothing staged relative to a commit, so this
+/// falls back to an empty list — unlike [`changed_files`], whose
+/// unborn-HEAD fallback enumerates untracked files. Paths are unquoted
+/// like [`uncommitted_files`], so quoted/non-ASCII names match across
+/// both enumerations.
+pub fn staged_files(root: &Path) -> Result<Vec<String>, GitError> {
+    staged_files_with_policy(root, EnvPolicy::Inherit)
+}
+
+/// [`staged_files`] with an explicit environment policy (policy-aware
+/// variant; see [`run`] for what the policy controls).
+pub fn staged_files_with_policy(root: &Path, policy: EnvPolicy) -> Result<Vec<String>, GitError> {
+    match run(root, policy, &["diff", "--cached", "--name-only", "HEAD"]) {
+        Ok(out) => Ok(lines_of(&out.stdout).into_iter().map(path_of).collect()),
+        Err(GitError::Git {
+            code: 128, stderr, ..
+        }) if is_unborn_head(&stderr) => Ok(Vec::new()),
         Err(other) => Err(other),
     }
 }
@@ -51,7 +88,7 @@ pub fn changed_files_between_with_policy(
     policy: EnvPolicy,
 ) -> Result<Vec<String>, GitError> {
     let out = run(root, policy, &["diff", "--name-only", base, head])?;
-    Ok(lines_of(&out.stdout))
+    Ok(lines_of(&out.stdout).into_iter().map(path_of).collect())
 }
 
 /// Every entry of `git status --porcelain` (v1): staged, unstaged,

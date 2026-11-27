@@ -23,6 +23,7 @@ mod command;
 mod entries;
 mod error;
 mod git_init;
+mod temp_root;
 
 pub use command::CommandOutput;
 pub use error::FixtureError;
@@ -34,6 +35,7 @@ use entries::{
     write_toml_files,
 };
 use git_init::git_init_repo;
+use temp_root::create_root;
 
 /// A scratch fixture: a temporary directory with test resources.
 ///
@@ -75,7 +77,7 @@ impl Fixture {
     }
 
     /// Assert that a file exists at the given relative path.
-    pub fn assert_file_exists(&self, relative: &str) {
+    pub fn assert_file_exists(&self, relative: &str) -> PathBuf {
         let path = self.path(relative);
         assert!(path.exists(), "expected file to exist: {}", path.display());
         assert!(
@@ -83,13 +85,14 @@ impl Fixture {
             "expected path to be a file: {}",
             path.display()
         );
+        path
     }
 
     /// Assert that a file contains the given substring.
-    pub fn assert_file_contains(&self, relative: &str, pattern: &str) {
-        self.assert_file_exists(relative);
-        let content =
-            std::fs::read_to_string(self.path(relative)).unwrap_or_else(|_| String::new());
+    pub fn assert_file_contains(&self, relative: &str, pattern: &str) -> String {
+        let path = self.assert_file_exists(relative);
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("failed to read fixture file '{}': {e}", path.display()));
         assert!(
             content.contains(pattern),
             "expected file '{}' to contain '{}', got: {:?}",
@@ -97,6 +100,7 @@ impl Fixture {
             pattern,
             content
         );
+        content
     }
 
     /// Assert that a marker directory exists.
@@ -135,25 +139,6 @@ impl Fixture {
         };
         let output = command::spawn_in(program, cmd_args, &self.root)?;
         Ok(CommandOutput::from_process(&output))
-    }
-}
-
-/// Create the fixture root as an owned temp directory.
-///
-/// `TempDir::keep()` consumes the `TempDir`, leaving the directory on disk
-/// and transferring deletion responsibility to [`Fixture::drop`].
-fn create_root() -> Result<PathBuf, FixtureError> {
-    tempfile::tempdir()
-        .map_err(|e| FixtureError::Io {
-            path: PathBuf::from("<tempdir>"),
-            message: e.to_string(),
-        })
-        .map(tempfile::TempDir::keep)
-}
-
-impl Default for Fixture {
-    fn default() -> Self {
-        Self::new().build().expect("default fixture build")
     }
 }
 
@@ -252,17 +237,38 @@ impl FixtureBuilder {
     /// Build the fixture, creating all directories and files.
     ///
     /// Returns `Err` on any I/O, config, or git failure rather than panicking.
+    /// On error the partially-built temp root is removed; on success it is
+    /// owned (and later removed) by the returned [`Fixture`].
     pub fn build(self) -> Result<Fixture, FixtureError> {
         let root = create_root()?;
-        create_markers(&root, &self.markers)?;
-        write_plain_files(&root, &self.files)?;
-        write_toml_files(&root, &self.tomls)?;
-        write_configs(&root, self.configs)?;
-        if self.git_init {
-            git_init_repo(&root)?;
+        let outcome = materialize(&root, self);
+        match outcome {
+            Ok(()) => Ok(Fixture {
+                root: root.into_path(),
+            }),
+            Err(e) => Err(e),
         }
-        Ok(Fixture { root })
     }
+}
+
+/// Apply the builder's accumulated entries inside a new temp root,
+/// rolling up errors from every write step.
+fn materialize(root: &Path, builder: FixtureBuilder) -> Result<(), FixtureError> {
+    let FixtureBuilder {
+        markers,
+        files,
+        tomls,
+        configs,
+        git_init,
+    } = builder;
+    create_markers(root, &markers)?;
+    write_plain_files(root, &files)?;
+    write_toml_files(root, &tomls)?;
+    write_configs(root, configs)?;
+    if git_init {
+        git_init_repo(root)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -17,14 +17,14 @@ Add genesis-vibes to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-genesis-vibes = "0.13"
+genesis-vibes = "0.14"
 ```
 
 If you want the bleeding-edge version from the repository instead of the crates.io release:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.13.4" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.14.0" }
 ```
 
 ## Step 2: Emit structured output

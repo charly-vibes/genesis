@@ -79,14 +79,14 @@ crate's dependencies:
 
 ```toml
 [dependencies]
-genesis-vibes = "0.13"
+genesis-vibes = "0.14"
 ```
 
 Or use a git dependency for bleeding-edge changes:
 
 ```toml
 [dependencies]
-genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.13.4" }
+genesis-vibes = { git = "git@cv:charly-vibes/genesis.git", tag = "v0.14.0" }
 ```
 
 ## Quick start

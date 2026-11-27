@@ -3,6 +3,10 @@
 
 use std::io::Write;
 use std::path::Path;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use super::store::cap_scratch_file;
 use super::{
@@ -10,16 +14,9 @@ use super::{
 };
 use crate::testutil::TestUnwrap;
 
-/// Build a minimal `ErrorRecord` for tests.
+/// Build a minimal `ErrorRecord` for tests (via `ErrorRecord::new`).
 fn record(ts: &str, exit: i32, kind: &str, argv: Vec<String>) -> ErrorRecord {
-    ErrorRecord {
-        ts: ts.into(),
-        argv,
-        exit,
-        footer: None,
-        kind: kind.into(),
-        message: None,
-    }
+    ErrorRecord::new(ts, argv, exit, kind)
 }
 
 /// Serialize `record` to JSON and append it to `path` as one JSONL line.
@@ -93,11 +90,44 @@ fn test_legacy_record_without_message_deserializes() {
         r#"{"ts":"2026-07-29T12:00:00Z","argv":["test","check"],"exit":1,"footer":"run doctor","kind":"error"}"#,
     )
     .require("write legacy jsonl");
-
     let record = read_last_error(tool).require("legacy record should parse");
     assert_eq!(record.exit, 1);
     assert_eq!(record.message, None);
     cleanup_scratch(tool);
+}
+
+/// genesis-xxx: `ErrorRecord::new` defaults the optional fields, and
+/// `..Default::default()` literals let field lists lag new fields.
+#[test]
+fn test_error_record_new_and_default() {
+    let r = ErrorRecord::new("2026-07-28T00:00:00Z", vec!["genesis".into()], 1, "Fix");
+    assert_eq!(r.ts, "2026-07-28T00:00:00Z");
+    assert_eq!(r.argv, vec!["genesis".to_string()]);
+    assert_eq!(r.exit, 1);
+    assert_eq!(r.kind, "Fix");
+    assert_eq!(r.footer, None);
+    assert_eq!(r.message, None);
+    assert_default_literal_shape();
+}
+
+/// Partial literal closed by Default (the documented construction shape),
+/// and a Default-built record still round-trips through JSONL.
+fn assert_default_literal_shape() {
+    let partial = ErrorRecord {
+        ts: "t".into(),
+        argv: vec![],
+        exit: 2,
+        kind: "bug".into(),
+        ..ErrorRecord::default()
+    };
+    assert_eq!(partial.footer, None);
+    assert_eq!(partial.message, None);
+    let json = serde_json::to_string(&partial).require("serialize");
+    let back: ErrorRecord = serde_json::from_str(&json).require("deserialize");
+    assert_eq!(back.ts, "t");
+    assert_eq!(back.exit, 2);
+    assert_eq!(back.kind, "bug");
+    assert_eq!((back.footer, back.message), (None, None));
 }
 
 /// Uses a per-pid tool name so parallel test runs cannot race on the scratch file.
@@ -105,14 +135,11 @@ fn test_legacy_record_without_message_deserializes() {
 fn test_write_and_read_last_error() {
     let tool = format!("_test_gs_{}", std::process::id());
     cleanup_scratch(&tool);
-
-    let record = record("2026-07-28T00:00:00Z", 1, "Test", vec!["test".into()]);
-    write_scratch_best_effort(&tool, &record);
+    let rec = record("2026-07-28T00:00:00Z", 1, "Test", vec!["test".into()]);
+    write_scratch_best_effort(&tool, &rec);
     let last = read_last_error(&tool);
     assert!(last.is_some());
     assert_eq!(last.require("value").exit, 1);
-
-    // Cleanup
     cleanup_scratch(&tool);
 }
 
@@ -137,7 +164,6 @@ fn test_read_all_errors() {
     assert_eq!(all.len(), 3);
     assert_eq!(all[0].exit, 0);
     assert_eq!(all[2].exit, 2);
-    // dir is cleaned up on drop
 }
 
 #[test]
@@ -145,94 +171,130 @@ fn test_cap_scratch_file() {
     let dir = tempfile::tempdir().require("tempdir");
     let path = dir.path().join("errors.jsonl");
 
-    // Write MAX_ENTRIES + 10 lines
     for i in 0..MAX_ENTRIES + 10 {
         append_simple_record(&path, &format!("2026-07-28T00:00:0{}Z", i % 10), i as i32);
     }
-    // Cap
     cap_scratch_file(&path).require("value");
     let content = std::fs::read_to_string(&path).require("value");
     assert_eq!(content.lines().count(), MAX_ENTRIES);
-    // dir is cleaned up on drop
+}
+
+/// genesis-4xl: cap must stay correct while another writer appends — the
+/// reader never observes an empty or partial file, every surviving line
+/// parses, the file stays bounded, and no tmp staging file lingers.
+#[test]
+fn test_cap_scratch_file_concurrent_append() {
+    let dir = tempfile::tempdir().require("tempdir");
+    let path = dir.path().join("errors.jsonl");
+
+    // Seed over the cap so every cap call performs a stage+rename rewrite.
+    append_test_records(&path, MAX_ENTRIES + 5);
+
+    let done = Arc::new(AtomicBool::new(false));
+    let writer = spawn_concurrent_writer(&path, done.clone());
+    while !done.load(Ordering::Acquire) {
+        cap_scratch_file(&path).require("cap under concurrent append");
+        assert_reader_never_saw_empty_partial(&path);
+    }
+    writer.join().expect("writer thread");
+    assert_final_scratch_state(dir.path(), &path);
+}
+
+/// Append 300 records on a side thread, flipping `done` (Release) when finished.
+fn spawn_concurrent_writer(path: &Path, done: Arc<AtomicBool>) -> std::thread::JoinHandle<()> {
+    let writer_path = path.to_owned();
+    std::thread::spawn(move || {
+        for i in 0..300u32 {
+            let ts = format!("2026-07-28T00:00:{:02}Z", i % 60);
+            let rec = record(
+                &ts,
+                i as i32,
+                "Concurrent",
+                vec!["test".into(), i.to_string()],
+            );
+            append_record(&writer_path, &rec);
+        }
+        done.store(true, Ordering::Release);
+    })
+}
+
+/// At least one line parses as an `ErrorRecord`.
+fn any_record_parses(content: &str) -> bool {
+    content
+        .lines()
+        .any(|l| serde_json::from_str::<ErrorRecord>(l).is_ok())
+}
+
+/// A non-empty file must always carry at least one parseable record (never empty-partial).
+fn assert_reader_never_saw_empty_partial(path: &Path) {
+    if let Ok(content) = std::fs::read_to_string(path) {
+        assert!(
+            any_record_parses(&content),
+            "reader saw empty/partial content during cap: {content:?}"
+        );
+    }
+}
+
+/// Final state: bounded, parseable, no tmp staging siblings.
+fn assert_final_scratch_state(dir_path: &Path, path: &std::path::PathBuf) {
+    cap_scratch_file(path).require("final cap");
+    let content = std::fs::read_to_string(path).require("value");
+    assert!(
+        any_record_parses(&content),
+        "final file must keep at least one record"
+    );
+    let lines = content.lines().count();
+    assert!(
+        lines <= MAX_ENTRIES,
+        "cap must keep the file bounded, got {lines} lines"
+    );
+    assert_no_staging_siblings(dir_path, path);
+}
+
+/// No tmp staging file may linger next to the scratch file.
+fn assert_no_staging_siblings(dir_path: &Path, path: &Path) {
+    let siblings: Vec<_> = std::fs::read_dir(dir_path)
+        .require("read dir")
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| *p != path)
+        .collect();
+    assert!(
+        siblings.is_empty(),
+        "tmp staging files must not linger: {siblings:?}"
+    );
 }
 
 #[test]
-fn test_timestamp_format() {
-    let ts = timestamp();
-    // ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
-    assert_eq!(ts.len(), 20, "expected ISO 8601 length, got: {}", ts);
-    assert!(ts.ends_with('Z'), "expected UTC timezone marker");
-    assert_eq!(&ts[4..5], "-", "expected dash after year");
-    assert_eq!(&ts[7..8], "-", "expected dash after month");
-    assert_eq!(&ts[10..11], "T", "expected T separator");
+fn test_error_sink_record_carries_message() {
+    let tool = format!("_test_sink_{}", std::process::id());
+    cleanup_scratch(&tool);
+    run_error_sink(&tool);
+    assert_sink_record_carries_message(&tool);
+    cleanup_scratch(&tool);
 }
 
-#[test]
-fn test_scratch_dir_uses_xdg() {
-    let prev = std::env::var("XDG_CACHE_HOME").ok();
-    unsafe { std::env::set_var("XDG_CACHE_HOME", "/custom/cache") };
-    let dir = scratch_dir("test-tool");
-    assert_eq!(dir, std::path::PathBuf::from("/custom/cache/test-tool"));
-    match prev {
-        Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
-        None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
-    }
+/// Feed one io::Error through the genesis-owned capture site.
+fn run_error_sink(tool: &str) {
+    let sink = crate::guide::ErrorSink::new(tool);
+    let err = std::io::Error::other("something broke badly");
+    let mut stderr = Vec::new();
+    sink.handle(&err, &mut stderr);
 }
 
-/// Generate an ISO 8601 timestamp for the current time.
-fn timestamp() -> String {
-    // Simple timestamp without external dependency
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    // Format as ISO 8601 date-time (UTC)
-    let time_secs = secs % 86400;
-    let hours = time_secs / 3600;
-    let minutes = (time_secs % 3600) / 60;
-    let seconds = time_secs % 60;
-
-    let (y, m, d) = civil_from_days_since_epoch(secs / 86400);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y, m, d, hours, minutes, seconds
-    )
+/// genesis-xxx: the genesis-owned capture site (`guide::ErrorSink`) must
+/// persist a scratch record carrying the rendered error message.
+fn assert_sink_record_carries_message(tool: &str) {
+    let record = read_last_error(tool).require("scratch record");
+    assert_eq!(record.message.as_deref(), Some("something broke badly"));
+    assert_eq!(record.kind, "error");
+    assert_eq!(record.exit, 1);
+    assert_eq!(record.argv, vec![tool.to_string()]);
+    assert!(
+        record.ts.ends_with('Z'),
+        "ts must be ISO 8601: {}",
+        record.ts
+    );
 }
 
-/// Compute `(year, month, day)` from whole days since 1970-01-01.
-/// Simple algorithm, exact for dates after 2000.
-fn civil_from_days_since_epoch(days: u64) -> (i64, usize, u8) {
-    let mut y = 1970i64;
-    let mut remaining = days as i64;
-    loop {
-        let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if remaining < days_in_year {
-            break;
-        }
-        remaining -= days_in_year;
-        y += 1;
-    }
-    let m = month_for_remaining(remaining as u64, is_leap(y));
-    let d = (remaining + 1) as u8;
-    (y, m, d)
-}
-
-/// 1-based month number given days remaining within the year.
-fn month_for_remaining(mut remaining: u64, leap: bool) -> usize {
-    let month_days = if leap {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    for (i, &md) in month_days.iter().enumerate() {
-        if remaining < md as u64 {
-            return i + 1;
-        }
-        remaining -= md as u64;
-    }
-    12
-}
-
-fn is_leap(year: i64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
+mod paths;

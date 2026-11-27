@@ -103,6 +103,7 @@ fn test_parse_envelope_error_with_hints() {
         EnvelopeOutcome::Error {
             code,
             hint_commands,
+            ..
         } => {
             assert_eq!(code.as_deref(), Some("E_CHECK"));
             assert_eq!(hint_commands, vec!["my-tool fix".to_string()]);
@@ -118,6 +119,7 @@ fn test_parse_envelope_error_without_hints() {
         EnvelopeOutcome::Error {
             code,
             hint_commands,
+            ..
         } => {
             assert_eq!(code, None);
             assert!(hint_commands.is_empty());
@@ -136,4 +138,61 @@ fn test_parse_envelope_rejects_non_json() {
 fn test_parse_envelope_rejects_missing_ok() {
     let err = parse_envelope(r#"{"status": "fine"}"#).unwrap_err();
     assert!(matches!(err, EvalsError::NoOkField));
+}
+
+// -- genesis-la4/0hx acceptance -------------------------------------------
+
+/// Preamble-bearing stdout parses via the moved (now preamble-tolerant)
+/// lenient reader — the property genesis-0zh's delegation relies on.
+#[test]
+fn test_parse_envelope_tolerates_preamble() {
+    let out = parse_envelope("Using default project name: wai\n{\"ok\": false, \"data\": {}}")
+        .require("value");
+    assert!(
+        matches!(out, EnvelopeOutcome::Error { .. }),
+        "preamble before the envelope must not block parsing"
+    );
+}
+
+/// `parse_envelope_value` consumes a `Value` with no string round-trip.
+#[test]
+fn test_parse_envelope_value_parses_without_round_trip() {
+    let value: serde_json::Value = serde_json::from_str(
+        r#"{"ok": false, "data": {"code": "E_CHECK"}, "hints": [{"command": "my-tool fix"}]}"#,
+    )
+    .require("value");
+    let out = parse_envelope_value(&value).require("value");
+    match out {
+        EnvelopeOutcome::Error {
+            code,
+            hint_commands,
+            ..
+        } => {
+            assert_eq!(code.as_deref(), Some("E_CHECK"));
+            assert_eq!(hint_commands, vec!["my-tool fix".to_string()]);
+        }
+        other => panic!("expected error envelope, got {other:?}"),
+    }
+}
+
+/// Malformed hint entries (naming no command) are counted in the outcome,
+/// not dropped silently.
+#[test]
+fn test_parse_envelope_counts_malformed_hints() {
+    let out = parse_envelope(
+        r#"{"ok": false, "data": {"code": "E_M",
+                "remediation": [{"command": "a fix"}, {"description": "no command"}]}}"#,
+    )
+    .require("value");
+    match out {
+        EnvelopeOutcome::Error {
+            hint_commands,
+            malformed_hints,
+            ..
+        } => {
+            assert_eq!(hint_commands, vec!["a fix".to_string()]);
+            assert_eq!(malformed_hints, 1);
+        }
+        other => panic!("expected error envelope, got {other:?}"),
+    }
 }

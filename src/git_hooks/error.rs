@@ -21,6 +21,31 @@ pub enum GitHooksError {
         /// Operation being performed: `overwrite` or `remove`.
         action: &'static str,
     },
+    /// `git config` reports the queried directory is not a git repository
+    /// (exit 128). Scope queries must surface this instead of treating it
+    /// as "unset" and walking on to global/system config (genesis-5sm).
+    #[error("not a git repository: {}", path.display())]
+    NotARepository {
+        /// The directory the `git config` query was anchored at.
+        path: PathBuf,
+    },
+    /// `git config` could not parse the repository config (exit 128, e.g.
+    /// a corrupt `.git/config`) — the effective `core.hooksPath` is
+    /// unknowable, so scope queries refuse to guess (genesis-5sm).
+    #[error("git config failed at {}: {}", path.display(), message)]
+    ConfigParseFailed {
+        /// The directory the `git config` query was anchored at.
+        path: PathBuf,
+        /// git's stderr explaining the failure.
+        message: String,
+    },
+    /// A `HookName::Other` name carried path components (`..`, a root) —
+    /// refused rather than joined into the hooks directory (genesis-5sm).
+    #[error("invalid hook name {name:?}: expected a plain hook file name, not a path")]
+    InvalidHookName {
+        /// The refused name.
+        name: String,
+    },
     /// A managed-block marker is present but its pair is not — the
     /// config is in an unknown state and wiring refuses to guess; the
     /// file is left unmodified.

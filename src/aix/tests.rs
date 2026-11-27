@@ -3,9 +3,8 @@
 
 // pretender: role=test
 use super::generate::*;
-use super::meta::{ModuleEntry, ProjectMeta, estimate_token_cost};
+use super::meta::{ModuleEntry, ProjectMeta};
 use super::sections::{LlmSection, authorship_section, commands_section, modules_section};
-use crate::managed_block::content_sha8;
 use crate::testutil::TestUnwrap;
 use tempfile::TempDir;
 

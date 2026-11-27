@@ -2,6 +2,7 @@
 
 use serde_json::Value;
 
+use crate::envelope::{ReceiptMeta, TerminalOutcome};
 use crate::evals::{
     AgentStep, CheckOutcome, Distractor, DistractorKind, EnvelopeOutcome, ErrorTaxonomy,
     EvalsError, ScenarioResult, parse_envelope,
@@ -44,32 +45,49 @@ fn error_envelope_check(step: usize, suggested: &str, s: &AgentStep) -> CheckOut
     hint_envelope_fault(step, suggested, parse_envelope(&s.stdout))
 }
 
-/// Envelope-side classification for [`error_envelope_with_hint`]: pass
-/// only when an error envelope carries `suggested` among its hints.
+/// Envelope-side classification for [`error_envelope_with_hint`]: pass only when an error envelope carries `suggested` among its hints.
+///
+/// Malformed hint entries (naming no command) are dropped from the union; the fault says how many, so silent data loss in the tool's channels is visible (genesis-0hx).
 fn hint_envelope_fault(
     step: usize,
     suggested: &str,
     envelope: Result<EnvelopeOutcome, EvalsError>,
 ) -> CheckOutcome {
     match envelope {
-        Ok(EnvelopeOutcome::Error { hint_commands, .. })
-            if hint_commands.iter().any(|c| c == suggested) =>
-        {
-            CheckOutcome::pass()
-        }
-        Ok(EnvelopeOutcome::Error { hint_commands, .. }) => CheckOutcome::tool_fault(format!(
-            "step {step} error envelope lacks hint `{suggested}` (hints: {hint_commands:?})"
-        )),
         Ok(EnvelopeOutcome::Ok) => CheckOutcome::tool_fault(format!("step {step} emitted ok:true")),
+        Ok(EnvelopeOutcome::Error {
+            hint_commands,
+            malformed_hints,
+            ..
+        }) => error_envelope_hints(step, suggested, &hint_commands, malformed_hints),
         Err(e) => CheckOutcome::tool_fault(format!("step {step}: {e}")),
     }
 }
 
+/// Classify a parsed error envelope against the suggested fix command: pass when its hint union carries `suggested`, tool fault otherwise.
+fn error_envelope_hints(
+    step: usize,
+    suggested: &str,
+    hint_commands: &[String],
+    malformed_hints: usize,
+) -> CheckOutcome {
+    if hint_commands.iter().any(|c| c == suggested) {
+        return CheckOutcome::pass();
+    }
+    let dropped = if malformed_hints > 0 {
+        format!("; {malformed_hints} malformed hint entries dropped")
+    } else {
+        Default::default()
+    };
+    CheckOutcome::tool_fault(format!(
+        "step {step} error envelope lacks hint `{suggested}` (hints: {hint_commands:?}{dropped})"
+    ))
+}
+
 /// Assert `steps[i]` exited 0 with an `ok:true` envelope — the graceful
-/// recovery. Tool fault if the recovery envelope still fails: the agent
-/// may have followed the hint and the fix itself was ineffective, so this
-/// is *not* an agent-fault signal. Hint-blindness is classified by
-/// [`agent_followed_hint`].
+/// recovery. Tool fault if the recovery envelope still fails: the agent may
+/// have followed the hint and the fix itself was ineffective, so this is
+/// *not* an agent-fault signal; hint-blindness is [`agent_followed_hint`].
 pub fn ok_envelope(step: usize) -> impl Fn(&ScenarioResult) -> CheckOutcome {
     move |result| match replay_step(result, step) {
         Ok(s) => ok_envelope_check(step, s),
@@ -87,8 +105,7 @@ fn ok_envelope_check(step: usize, s: &AgentStep) -> CheckOutcome {
             s.exit_code
         )),
         Ok(EnvelopeOutcome::Error { code, .. }) => CheckOutcome::tool_fault(format!(
-            "step {step} still failed (code {:?}); the suggested fix was issued but ineffective",
-            code
+            "step {step} still failed (code {code:?}); the suggested fix was issued but ineffective"
         )),
         Err(e) => CheckOutcome::tool_fault(format!("step {step}: {e}")),
     }
@@ -96,14 +113,15 @@ fn ok_envelope_check(step: usize, s: &AgentStep) -> CheckOutcome {
 
 /// Assert the step's final envelope records a receipt whose
 /// `terminal_outcome` is consistent with the envelope (add-artifact-provenance §4).
+/// Tool fault when: the receipt is missing entirely (the tool owns receipt
+/// emission on mutating steps); it does not deserialize as [`ReceiptMeta`]
+/// (schema drift becomes a named fault, genesis-0hx); a `success` receipt
+/// rides `ok: false` or a `failure` receipt rides `ok: true` — the lies the
+/// envelope exists to catch. `Timeout` is `ok`-independent by contract: a
+/// delivered result with a timed-out follow-up is representable.
 ///
-/// Passes when the envelope carries `receipt.terminal_outcome` and that
-/// outcome does not contradict the envelope's `ok` field. Tool fault when
-/// the receipt is missing entirely (the tool owns receipt emission on
-/// mutating steps) or when a `success` receipt rides an `ok: false`
-/// envelope — the lie the envelope exists to catch. The check itself does
-/// not know which runs are mutating: the caller scopes it to steps it has
-/// marked as mutating, mirroring the envelope contract.
+/// The check does not know which runs are mutating: the caller scopes it to
+/// steps it marked as mutating, mirroring the envelope contract.
 pub fn receipt_records_terminal_outcome(step: usize) -> impl Fn(&ScenarioResult) -> CheckOutcome {
     move |result| match replay_step(result, step) {
         Ok(s) => receipt_envelope_check(step, &s.stdout),
@@ -111,36 +129,54 @@ pub fn receipt_records_terminal_outcome(step: usize) -> impl Fn(&ScenarioResult)
     }
 }
 
-/// Envelope-side classification for [`receipt_records_terminal_outcome`]:
-/// the stdout JSON must carry `receipt.terminal_outcome` consistent with
-/// the envelope's `ok` field.
+const NOT_JSON_FAULT: &str = "envelope not JSON";
+const NO_RECEIPT_FAULT: &str =
+    "mutating step ran without a receipt — envelope carries no receipt.terminal_outcome";
+const SCHEMA_FAULT: &str = "receipt does not match ReceiptMeta schema";
+const SUCCESS_OK_CONTRADICTION: &str =
+    "receipt records terminal_outcome=success but the envelope has ok:false — contradiction";
+const FAILURE_OK_CONTRADICTION: &str =
+    "receipt records terminal_outcome=failure but the envelope has ok:true — contradiction";
+/// Deserialize the envelope's `receipt` through [`ReceiptMeta`] so renamed
+/// or reshaped fields fault by name (genesis-0hx) instead of reading
+/// `terminal_outcome` as a raw string matching only the literal "success".
+/// Envelope-side classification for [`receipt_records_terminal_outcome`].
 fn receipt_envelope_check(step: usize, stdout: &str) -> CheckOutcome {
-    let value: Value = match serde_json::from_str(stdout) {
+    let fault = |message: String| CheckOutcome::tool_fault(format!("step {step}: {message}"));
+    let mut value: Value = match serde_json::from_str(stdout) {
         Ok(v) => v,
-        Err(e) => return CheckOutcome::tool_fault(format!("step {step}: envelope not JSON: {e}")),
+        Err(e) => return fault(format!("{NOT_JSON_FAULT}: {e}")),
     };
-    match value
-        .pointer("/receipt/terminal_outcome")
-        .and_then(Value::as_str)
-    {
-        None => CheckOutcome::tool_fault(format!(
-            "step {step}: mutating step ran without a receipt — envelope carries no receipt.terminal_outcome"
-        )),
-        Some("success") if value.get("ok").and_then(Value::as_bool) == Some(false) => {
-            CheckOutcome::tool_fault(format!(
-                "step {step}: receipt records terminal_outcome=success but the envelope has ok:false — contradiction"
-            ))
-        }
-        Some(_) => CheckOutcome::pass(),
+    let Some(receipt_value) = value.get_mut("receipt").map(Value::take) else {
+        return fault(NO_RECEIPT_FAULT.to_string());
+    };
+    let receipt: ReceiptMeta = match serde_json::from_value(receipt_value) {
+        Ok(receipt) => receipt,
+        Err(e) => return fault(format!("{SCHEMA_FAULT}: {e}")),
+    };
+    receipt_ok_consistency(
+        step,
+        receipt.terminal_outcome,
+        value.get("ok").and_then(Value::as_bool),
+    )
+}
+
+/// `receipt.terminal_outcome` must agree with the envelope's `ok` field;
+/// Timeout/Cancelled never assert against `ok`.
+fn receipt_ok_consistency(step: usize, outcome: TerminalOutcome, ok: Option<bool>) -> CheckOutcome {
+    let fault = |message: &str| CheckOutcome::tool_fault(format!("step {step}: {message}"));
+    match (outcome, ok) {
+        (TerminalOutcome::Success, Some(false)) => fault(SUCCESS_OK_CONTRADICTION),
+        (TerminalOutcome::Failure, Some(true)) => fault(FAILURE_OK_CONTRADICTION),
+        _ => CheckOutcome::pass(),
     }
 }
 
 /// Assert the agent's step at `recovery_index` actually ran the suggested
-/// fix command. Agent fault (`ERR_ENVELOPE_HINT_BLINDNESS`) if a
-/// different command was issued. Exact match counts, and so does the
-/// suggested command as the word prefix: a recorded agent that followed
-/// the hint but appended flags/args still followed it (mirrors
-/// [`doc_drift_blindness`] matching; evallerina-2rr).
+/// fix command; agent fault (`ERR_ENVELOPE_HINT_BLINDNESS`) otherwise.
+/// Exact match counts, and so does the suggestion as a word prefix: an
+/// agent that followed the hint but appended flags/args still followed it
+/// (mirrors [`doc_drift_blindness`] matching; evallerina-2rr).
 pub fn agent_followed_hint(
     recovery_index: usize,
     suggested_command: impl Into<String>,

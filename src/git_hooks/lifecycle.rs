@@ -18,17 +18,20 @@ enum HookOwnership {
 }
 
 /// Read a hook file and classify its ownership by `marker`.
+///
+/// A non-UTF-8 hook cannot be parsed as text, but it still classifies
+/// by marker presence (lossy) — an unreadable-as-UTF-8 foreign hook is
+/// Foreign, not an Io error (genesis-5sm).
 fn read_hook_ownership(path: &Path, marker: &str) -> Result<HookOwnership, GitHooksError> {
     if !path.exists() {
         return Ok(HookOwnership::Missing);
     }
-    let contents = std::fs::read_to_string(path).map_err(|source| GitHooksError::Io {
+    let bytes = std::fs::read(path).map_err(|source| GitHooksError::Io {
         path: path.to_path_buf(),
         message: "failed to read hook".to_string(),
         source,
     })?;
-    let owned = contents.contains(marker);
-    if owned {
+    if String::from_utf8_lossy(&bytes).contains(marker) {
         Ok(HookOwnership::Owned)
     } else {
         Ok(HookOwnership::Foreign)
@@ -38,12 +41,15 @@ fn read_hook_ownership(path: &Path, marker: &str) -> Result<HookOwnership, GitHo
 /// Insert the marker after the script's shebang line (pretender's
 /// convention) so the file stays executable-compatible; prepend when the
 /// script has no shebang.
+///
+/// genesis-5sm: a shebang-only script (no trailing newline) must keep
+/// its shebang on line 1 with the marker after it — prepending the
+/// marker would clobber the interpreter line and the hook would not
+/// exec.
 fn apply_marker(script: &str, marker: &str) -> String {
-    match script
-        .strip_prefix("#!")
-        .and_then(|rest| rest.split_once('\n'))
-    {
-        Some((shebang, body)) => format!("#!{shebang}\n{marker}\n{body}"),
+    match script.strip_prefix("#!").map(|rest| rest.split_once('\n')) {
+        Some(Some((shebang, body))) => format!("#!{shebang}\n{marker}\n{body}"),
+        Some(None) => format!("{script}\n{marker}\n"),
         None => format!("{marker}\n{script}"),
     }
 }

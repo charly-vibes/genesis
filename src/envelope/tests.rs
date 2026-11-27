@@ -13,7 +13,14 @@ use serde_json;
 
 #[test]
 fn test_success_envelope_has_required_fields() {
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
+    let env = Envelope::success(
+        "0.1",
+        "my-tool/1.0.0",
+        EnvelopeKind::Ok,
+        "hello",
+        vec![],
+        vec![],
+    );
 
     assert!(env.ok, "success envelope must have ok=true");
     assert_eq!(env.envelope_version, "0.1");
@@ -44,7 +51,7 @@ fn test_error_envelope_has_required_fields() {
     )
     .require("value");
 
-    let env = Envelope::error("my-tool/1.0.0", err, vec![]);
+    let env = Envelope::error("0.1", "my-tool/1.0.0", err, vec![]);
 
     assert!(!env.ok, "error envelope must have ok=false");
     assert_eq!(env.envelope_kind, EnvelopeKind::Error);
@@ -60,7 +67,14 @@ fn test_error_envelope_has_required_fields() {
 // machine consumers.
 #[test]
 fn test_error_kind_carries_ok_false() {
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Error, "oops", vec![], vec![]);
+    let env = Envelope::success(
+        "0.1",
+        "my-tool/1.0.0",
+        EnvelopeKind::Error,
+        "oops",
+        vec![],
+        vec![],
+    );
     assert!(!env.ok, "envelope with kind=Error must have ok=false");
     let json = serde_json::to_string(&env).require("value");
     assert!(
@@ -71,7 +85,14 @@ fn test_error_kind_carries_ok_false() {
 
 #[test]
 fn test_envelope_serializes_to_json() {
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
+    let env = Envelope::success(
+        "0.1",
+        "my-tool/1.0.0",
+        EnvelopeKind::Ok,
+        "hello",
+        vec![],
+        vec![],
+    );
 
     let json = serde_json::to_string(&env).require("value");
     let parsed: serde_json::Value = serde_json::from_str(&json).require("value");
@@ -104,7 +125,7 @@ fn test_error_envelope_serializes_properly() {
     )
     .require("value");
 
-    let env = Envelope::error("my-tool/1.0.0", err, vec![]);
+    let env = Envelope::error("0.1", "my-tool/1.0.0", err, vec![]);
     let json = serde_json::to_string_pretty(&env).require("value");
 
     assert!(json.contains("E001"));
@@ -167,7 +188,7 @@ fn test_envelope_kind_variants_serialize_snake_case() {
 #[test]
 fn test_set_author_appears_in_meta() {
     set_author("test-user".into());
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, (), vec![], vec![]);
+    let env = Envelope::success("0.1", "my-tool/1.0.0", EnvelopeKind::Ok, (), vec![], vec![]);
     assert_eq!(env.meta.author.as_deref(), Some("test-user"));
 }
 
@@ -176,6 +197,7 @@ fn test_set_author_appears_in_meta() {
 #[test]
 fn test_success_with_tx_includes_tx_in_meta() {
     let env = Envelope::success_with_tx(
+        "0.1",
         "my-tool/1.0.0",
         EnvelopeKind::Ok,
         (),
@@ -188,67 +210,38 @@ fn test_success_with_tx_includes_tx_in_meta() {
 
 #[test]
 fn test_success_with_tx_none_omits_tx() {
-    let env =
-        Envelope::success_with_tx("my-tool/1.0.0", EnvelopeKind::Ok, (), vec![], vec![], None);
-    assert!(env.meta.tx.is_none());
-}
-
-// ── Caller-supplied CLI version ──────────────────────────────────
-
-#[test]
-fn test_success_preserves_caller_cli_version() {
-    let env = Envelope::success(
-        "downstream-tool/2.0.0",
-        EnvelopeKind::Ok,
-        "data",
-        vec![],
-        vec![],
-    );
-    assert_eq!(env.cli_version, "downstream-tool/2.0.0");
-}
-
-#[test]
-fn test_error_preserves_caller_cli_version() {
-    let err = ErrorResult::new(
-        "E001",
-        "msg",
-        None,
-        None,
-        None,
-        vec![],
-        vec![RemediationEntry {
-            command: "fix".into(),
-            description: "run fix".into(),
-        }],
-    )
-    .require("value");
-    let env = Envelope::error("downstream-tool/2.0.0", err, vec![]);
-    assert_eq!(env.cli_version, "downstream-tool/2.0.0");
-}
-
-#[test]
-fn test_success_with_tx_preserves_caller_cli_version() {
     let env = Envelope::success_with_tx(
-        "downstream/3.0.0",
+        "0.1",
+        "my-tool/1.0.0",
         EnvelopeKind::Ok,
         (),
         vec![],
         vec![],
-        Some(1),
+        None,
     );
-    assert_eq!(env.cli_version, "downstream/3.0.0");
+    assert!(env.meta.tx.is_none());
 }
 
-mod receipt;
+#[cfg(test)]
+#[path = "tests/receipt.rs"]
+mod receipt_tests;
 
+#[cfg(test)]
+#[path = "tests/outcome.rs"]
+mod outcome_tests;
+
+#[cfg(test)]
+#[path = "tests/version.rs"]
+mod version_tests;
+
+// ── Author tracking (genesis-la4) ────────────────────────────────
+
+/// `current_author` is public (genesis-la4): tools sharing a process can
+/// observe who owns envelope metadata without forking the module.
+/// Uses the same sentinel as `test_set_author_appears_in_meta` because
+/// `set_author` is first-wins per process and tests run in parallel.
 #[test]
-fn test_cli_version_is_not_genesis_package_version() {
-    // Verify that a caller-supplied version is distinct from what
-    // genesis-vibes' own CARGO_PKG_VERSION would be.
-    let caller_version = "my-custom-tool/0.1.0";
-    let env = Envelope::success(caller_version, EnvelopeKind::Ok, (), vec![], vec![]);
-    assert_eq!(env.cli_version, caller_version);
-    // genesis-vibes' own package version is something like "0.5.0"
-    // — the caller's version should not equal that.
-    assert_ne!(env.cli_version, env!("CARGO_PKG_VERSION"));
+fn test_current_author_is_public() {
+    set_author("test-user".into());
+    assert_eq!(current_author(), Some("test-user".to_string()));
 }

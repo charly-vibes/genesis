@@ -39,6 +39,7 @@ fn remediation_in_error_channel_is_resolved() {
         EnvelopeOutcome::Error {
             code: Some("ERR_TEST".to_string()),
             hint_commands: vec!["my-tool fix".to_string()],
+            malformed_hints: 0,
         },
         "the data.remediation command must be resolved from the error channel"
     );
@@ -61,6 +62,7 @@ fn top_level_hints_are_resolved() {
         EnvelopeOutcome::Error {
             code: Some("ERR_TEST".to_string()),
             hint_commands: vec!["a".to_string()],
+            malformed_hints: 0,
         }
     );
 }
@@ -84,6 +86,7 @@ fn both_channels_union_with_error_channel_first() {
         EnvelopeOutcome::Error {
             code: Some("ERR_TEST".to_string()),
             hint_commands: vec!["my-tool fix".to_string(), "a".to_string()],
+            malformed_hints: 0,
         },
         "both channels contribute; the error-channel command comes first and neither is discarded"
     );
@@ -108,6 +111,7 @@ fn bare_string_entries_are_tolerated_in_both_channels() {
         EnvelopeOutcome::Error {
             code: Some("ERR_TEST".to_string()),
             hint_commands: vec!["cmd-x".to_string(), "cmd-y".to_string()],
+            malformed_hints: 0,
         }
     );
 }
@@ -122,6 +126,7 @@ fn envelope_with_neither_channel_yields_zero_commands() {
         EnvelopeOutcome::Error {
             code: None,
             hint_commands: vec![],
+            malformed_hints: 0,
         },
         "no channels means zero hint commands and no error"
     );

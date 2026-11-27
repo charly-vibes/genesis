@@ -223,13 +223,7 @@ fn append_missing_stage(w: &Wiring) -> Result<WiredOutcome, GitHooksError> {
 
 /// Error for a `commands:` key at an unexpected indent (refuse to guess).
 fn commands_indent_error(w: &Wiring, ki: usize) -> GitHooksError {
-    GitHooksError::UnanchorableLefthookConfig {
-        path: w.path.to_path_buf(),
-        stage: w.stage.key().to_string(),
-        message: format!(
-            "commands key is at indent {ki}, which differs from the stage's children indentation — unrecognized structure"
-        ),
-    }
+    super::stage::commands_indent_error(w.path, w.stage, ki)
 }
 
 /// Insert the marker-guarded entry inside the existing `commands:` mapping,

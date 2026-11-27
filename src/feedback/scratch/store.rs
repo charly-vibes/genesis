@@ -36,17 +36,33 @@ pub fn write_scratch_best_effort(tool_name: &str, record: &ErrorRecord) {
 }
 
 /// Open `path` in create+append mode and write one line.
+///
+/// The formatted line is flushed with a single `write_all` so concurrent
+/// readers see whole lines (or skip the torn tail — the reader documents
+/// interleaved-line tolerance), never interleaved fragments.
 fn append_line(path: &PathBuf, line: &str) -> std::io::Result<()> {
+    let mut buf = line.as_bytes().to_vec();
+    buf.push(b'\n');
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)?;
-    writeln!(file, "{}", line)
+    file.write_all(&buf)
 }
 
 /// Cap the scratch file to MAX_ENTRIES lines.
 ///
-/// Reads the file, keeps only the last MAX_ENTRIES lines, and writes back.
+/// Atomic via stage-then-rename (genesis-4xl): the tail is written to a
+/// sibling tmp file and `rename`d over the scratch file, so a concurrent
+/// reader sees either the old or the new complete file — never an empty or
+/// partial one. Once `genesis::fs::atomic_write` exists (genesis-mqt) this
+/// should delegate to it.
+///
+/// Trade-off of the rename: appends that land between the snapshot read and
+/// the rename are replaced by it and dropped; append-mode writers recover on
+/// the next record. Capping is best-effort housekeeping, so that window is
+/// accepted over the old truncate-to-write window that could lose *every*
+/// concurrent record and present readers an empty file.
 pub(super) fn cap_scratch_file(path: &PathBuf) -> std::io::Result<()> {
     let content = std::fs::read_to_string(path)?;
     let lines: Vec<&str> = content.lines().collect();
@@ -56,6 +72,11 @@ pub(super) fn cap_scratch_file(path: &PathBuf) -> std::io::Result<()> {
     }
 
     let trimmed = lines[lines.len() - MAX_ENTRIES..].join("\n");
-    std::fs::write(path, trimmed + "\n")?;
+    let tmp = path.with_extension("jsonl.tmp");
+    std::fs::write(&tmp, trimmed + "\n")?;
+    if let Err(err) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
     Ok(())
 }

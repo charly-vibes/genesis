@@ -12,7 +12,14 @@ use std::path::PathBuf;
 
 #[test]
 fn envelope_without_receipt_serializes_byte_identically() {
-    let env = Envelope::success("my-tool/1.0.0", EnvelopeKind::Ok, "hello", vec![], vec![]);
+    let env = Envelope::success(
+        "0.1",
+        "my-tool/1.0.0",
+        EnvelopeKind::Ok,
+        "hello",
+        vec![],
+        vec![],
+    );
     let actual = serde_json::to_string_pretty(&env).unwrap() + "\n";
 
     let golden_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

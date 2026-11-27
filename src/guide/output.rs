@@ -130,6 +130,7 @@ impl<T: Debug> Output<T> {
     {
         let hints = self.envelope_hints();
         crate::envelope::Envelope::success(
+            env!("CARGO_PKG_VERSION"),
             cli_version,
             self.envelope_kind(),
             &self.data,

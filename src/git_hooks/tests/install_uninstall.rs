@@ -142,6 +142,82 @@ fn install_marker_follows_shebang() {
     assert_eq!(lines.next(), Some(TEST_MARKER));
 }
 
+#[test]
+fn install_shebang_only_script_still_execs() {
+    // genesis-5sm: a shebang-only script has no trailing newline — the
+    // marker must follow the shebang line, never replace it as line 1
+    // (the kernel would exec the marker comment as interpreter).
+    let fixture = install_fixture();
+    let path = install(
+        fixture.root(),
+        HookName::PreCommit,
+        TEST_MARKER,
+        "#!/bin/sh",
+    )
+    .require("value");
+    let contents = std::fs::read_to_string(&path).require("value");
+    let mut lines = contents.lines();
+    assert_eq!(lines.next(), Some("#!/bin/sh"), "shebang stays line 1");
+    assert_eq!(lines.next(), Some(TEST_MARKER));
+    // And the hook still execs: the interpreter line is intact. `sh`
+    // with an empty body reads stdin — pin it closed so the test cannot
+    // block.
+    let status = std::process::Command::new(&path)
+        .stdin(std::process::Stdio::null())
+        .status()
+        .require("spawn installed hook");
+    assert!(status.success(), "shebang-only hook must exec: {status}");
+}
+
+#[test]
+fn install_refuses_non_utf8_foreign_hook_as_foreign() {
+    // genesis-5sm: a hook that is not valid UTF-8 carries no readable
+    // marker — it is foreign, not an Io error.
+    let fixture = install_fixture();
+    let hook_path = fixture.root().join(".git/hooks/pre-commit");
+    std::fs::write(&hook_path, [0xFFu8, 0xFE, 0x00]).require("value");
+    let err = install(
+        fixture.root(),
+        HookName::PreCommit,
+        TEST_MARKER,
+        TEST_SCRIPT,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, GitHooksError::ForeignHook { .. }),
+        "got: {err}"
+    );
+    assert_eq!(
+        std::fs::read(&hook_path).require("value"),
+        vec![0xFFu8, 0xFE, 0x00],
+        "file must not be modified"
+    );
+}
+
+#[test]
+fn install_rejects_path_like_hook_names() {
+    // genesis-5sm: HookName::Other names carrying ParentDir/RootDir
+    // components would escape the hooks directory on join — refuse.
+    let fixture = install_fixture();
+    for name in ["../crontab", "/etc/passwd", "..", "sub/../pre-commit"] {
+        let err = install(
+            fixture.root(),
+            HookName::Other(name.to_string()),
+            TEST_MARKER,
+            TEST_SCRIPT,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, GitHooksError::InvalidHookName { .. }),
+            "{name}: got {err}"
+        );
+    }
+    assert!(
+        !fixture.root().join(".git/hooks/pre-commit").exists(),
+        "no hook may be written for a rejected name"
+    );
+}
+
 // -- Uninstall -------------------------------------------------------
 
 #[test]

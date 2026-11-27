@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use super::GitHooksError;
 use super::hooks_dir::resolve_hooks_dir_with_env;
@@ -34,6 +34,16 @@ pub(super) fn hook_path_with_env(
     hook_name: &HookName,
     envs: &[(String, String)],
 ) -> Result<PathBuf, GitHooksError> {
+    if let HookName::Other(name) = hook_name {
+        // genesis-5sm: refuse names that escape the hooks directory
+        // before joining (`../crontab`, `/etc/passwd`).
+        if Path::new(name)
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::RootDir))
+        {
+            return Err(GitHooksError::InvalidHookName { name: name.clone() });
+        }
+    }
     Ok(resolve_hooks_dir_with_env(root, envs)?.join(hook_name.file_name()))
 }
 

@@ -29,13 +29,16 @@ mod runner;
 
 pub use changes::{
     changed_files, changed_files_between, changed_files_between_with_policy, changed_files_lossy,
-    changed_files_with_policy, parse_porcelain, uncommitted_files, uncommitted_files_lossy,
-    uncommitted_files_with_policy,
+    changed_files_with_policy, parse_porcelain, staged_files, staged_files_with_policy,
+    uncommitted_files, uncommitted_files_lossy, uncommitted_files_with_policy,
 };
 pub use error::GitError;
 pub use query::{
-    PathStatus, committed_content_hash, committed_content_hash_with_policy, content_hash,
-    content_hash_with_policy, is_ignored, is_ignored_with_policy, path_status,
-    path_status_with_policy, tracked, tracked_with_policy,
+    PathStatus, WorktreeFacts, committed_content_hash, committed_content_hash_with_policy,
+    content_hash, content_hash_with_policy, current_branch, current_branch_with_policy,
+    ignored_paths, ignored_paths_with_policy, is_ignored, is_ignored_with_policy, path_status,
+    path_status_with_policy, remote_key, remote_url, remote_url_with_policy, tracked,
+    tracked_paths, tracked_paths_with_policy, tracked_with_policy, worktree_facts,
+    worktree_facts_with_policy,
 };
 pub use runner::{EnvPolicy, GitOutput, repo_root, repo_root_from, run};

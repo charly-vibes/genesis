@@ -12,7 +12,8 @@
 //!   block meaningfully (2s connect / 5s total), and never produce
 //!   user-facing errors. Set `GENESIS_UPDATE_CHECK_DEBUG=1` to get one
 //!   stderr line per skip/fail reason while wiring a dependent.
-//! - **CI-aware.** `CI=true` or `GENESIS_NO_UPDATE_CHECK=<non-empty>` skips
+//! - **CI-aware.** A non-empty `CI`, `TF_BUILD`, `GITHUB_ACTIONS`, or
+//!   `GITLAB_CI` env var, or a non-empty `GENESIS_NO_UPDATE_CHECK`, skips
 //!   the check entirely, before any IO.
 //! - **Rate-limit polite.** crates.io 403/429 responses double the cache TTL
 //!   and send a descriptive `User-Agent`.
@@ -97,10 +98,12 @@ pub fn cache_path(crate_name: &str) -> Option<PathBuf> {
 
 /// Check whether a newer stable version of `crate_name` exists on crates.io.
 ///
-/// Skips entirely (returns `None`, no IO) when `CI=true` or
-/// `GENESIS_NO_UPDATE_CHECK` is set to a non-empty value. Otherwise behaves
-/// exactly like [`check_with`] against [`CRATES_IO_API`] with the default
-/// cache location.
+/// Skips entirely (returns `None`, no IO) when any of `CI`, `TF_BUILD`,
+/// `GITHUB_ACTIONS`, or `GITLAB_CI` is set to a non-empty value, or when
+/// `GENESIS_NO_UPDATE_CHECK` is set to a non-empty value. A non-empty value
+/// is honored regardless of spelling: CI vendors set `CI=true`, `CI=1`,
+/// `CI=True`, `CI=yes`, … (genesis-3i5). Otherwise behaves exactly like
+/// [`check_with`] against [`CRATES_IO_API`] with the default cache location.
 ///
 /// `current_version` is the caller's own installed version
 /// (`env!("CARGO_PKG_VERSION")` for a binary wiring its own crate).
@@ -111,17 +114,24 @@ pub fn check(crate_name: &str, current_version: &str) -> Option<UpdateInfo> {
     {
         return None;
     }
-    let ci = std::env::var("CI")
-        .ok()
-        .is_some_and(|v| v == "true" || v == "1");
-    if ci {
+    // Any non-empty value counts: CI vendors disagree on spelling
+    // (`true`/`1`/`True`/`yes`/…), and absence of the var is the only
+    // "not CI" signal we can trust (genesis-3i5).
+    let ci_skip = ["CI", "TF_BUILD", "GITHUB_ACTIONS", "GITLAB_CI"]
+        .iter()
+        .any(|key| std::env::var(key).ok().is_some_and(|v| !v.is_empty()));
+    if ci_skip {
         return None;
     }
     let cache_dir = cache_path(crate_name)?.parent()?.to_path_buf();
-    check_with(crate_name, current_version, &cache_dir, CRATES_IO_API)
+    check_with(crate_name, current_version, &cache_dir, CRATES_IO_API, None)
 }
 
-/// Like [`check`], but with explicit cache directory and API base URL.
+/// Like [`check`], but with explicit cache directory, API base URL, and an
+/// optional `User-Agent` override.
+///
+/// `user_agent` defaults to the genesis-vibes UA when `None`; pass `Some(_)`
+/// to identify your own binary to crates.io (rate-limit politeness).
 ///
 /// Hidden from docs: this is the hermetic-test and advanced-wiring entry
 /// point. It performs NO env-var skipping — callers manage that themselves
@@ -132,6 +142,7 @@ pub fn check_with(
     current_version: &str,
     cache_dir: &std::path::Path,
     api_base: &str,
+    user_agent: Option<&str>,
 ) -> Option<UpdateInfo> {
     if !is_valid_crate_name(crate_name) {
         debug_emit("rejecting invalid crate name");
@@ -142,7 +153,7 @@ pub fn check_with(
     if let Some(hit) = fresh_cache_hit(&cache_file, crate_name, current_version) {
         return hit;
     }
-    let outcome = fetch_latest(api_base, crate_name, &cache_file)?;
+    let outcome = fetch_latest(api_base, crate_name, &cache_file, user_agent)?;
     persist_outcome(&cache_file, crate_name, current_version, outcome)
 }
 

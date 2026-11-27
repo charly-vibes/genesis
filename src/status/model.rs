@@ -178,8 +178,21 @@ impl MultiToolStatus {
     /// `cli_version` must be the caller's own CLI version (see
     /// [`crate::envelope::Envelope::success`]).
     pub fn to_envelope(&self, cli_version: &str) -> Envelope<&Self> {
-        let warnings: Vec<Warning> = self
-            .sections
+        let warnings = self.warning_entries();
+        Envelope::success(
+            env!("CARGO_PKG_VERSION"),
+            cli_version,
+            EnvelopeKind::Ok,
+            self,
+            warnings,
+            vec![],
+        )
+    }
+
+    /// Warnings for the sections at the warning level: each tool's first
+    /// suggestion is the suggested remediation.
+    fn warning_entries(&self) -> Vec<Warning> {
+        self.sections
             .iter()
             .filter(|s| s.level == StatusLevel::Warning)
             .map(|s| Warning {
@@ -188,9 +201,7 @@ impl MultiToolStatus {
                 message: s.summary.clone(),
                 suggested_remediation: s.suggestions.first().cloned(),
             })
-            .collect();
-
-        Envelope::success(cli_version, EnvelopeKind::Ok, self, warnings, vec![])
+            .collect()
     }
 }
 

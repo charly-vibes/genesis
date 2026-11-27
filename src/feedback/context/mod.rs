@@ -117,7 +117,10 @@ fn probe_git(cwd: &Path) -> GitProbe {
 }
 
 /// Build a repro hash from tool + command + exit_code.
-fn repro_hash(
+///
+/// The single repro-hash implementation for the feedback crate: scenario
+/// conversion delegates to it so one hashing scheme dedups failures.
+pub(crate) fn repro_hash(
     tool_name: &str,
     tool_version: &str,
     command: &Option<String>,

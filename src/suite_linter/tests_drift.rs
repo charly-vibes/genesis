@@ -26,7 +26,7 @@ fn write_repo(files: &[(&str, &str)]) -> PathBuf {
 fn inject_block(root: &Path, content: &str) {
     let mut reg = BlockRegistry::new();
     reg.register(BlockDef::new("WAI"));
-    let injector = BlockInjector::new(reg).with_provenance("genesis");
+    let injector = BlockInjector::new(reg).with_provenance("genesis", "1.0.0");
     injector
         .inject(&root.join("AGENTS.md"), "WAI", content)
         .require("value");

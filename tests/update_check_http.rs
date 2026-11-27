@@ -32,10 +32,36 @@ fn calendar_versions_compare_without_semver_assumptions() {
     );
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "2026.9.28", &dir, &server.url);
+    let result = check_with("mytool", "2026.9.28", &dir, &server.url, None);
 
     let info = result.require("calendar-version update should surface");
     assert_eq!(info.latest, "2026.10.12");
+}
+
+/// genesis-3i5: a leading `v`/`V` must be stripped before the calendar
+/// comparison, so v-prefixed calendar versions still rank (and never
+/// surface as a downgrade).
+#[test]
+fn v_prefixed_calendar_versions_compare_correctly() {
+    let server = TestServer::spawn(
+        "HTTP/1.1 200 OK",
+        crates_io_payload(&[("v2026.10.4", false)]),
+    );
+    let dir = temp_cache_dir();
+
+    let newer = check_with("mytool", "v2026.7.28", &dir, &server.url, None);
+    let info = newer.require("v2026.10.4 > v2026.7.28 must surface as an update");
+    assert_eq!(info.latest, "v2026.10.4");
+
+    let older_server = TestServer::spawn(
+        "HTTP/1.1 200 OK",
+        crates_io_payload(&[("v2026.7.28", false)]),
+    );
+    let older = check_with("mytool", "v2026.10.4", &dir, &older_server.url, None);
+    assert!(
+        older.is_none(),
+        "v2026.7.28 < v2026.10.4 must not surface as a (downgrade) update"
+    );
 }
 
 #[test]
@@ -44,10 +70,10 @@ fn rate_limit_response_extends_ttl() {
     let server = TestServer::spawn("HTTP/1.1 429 Too Many Requests", "{}");
     let dir = temp_cache_dir();
 
-    let first = check_with("mytool", "1.0.0", &dir, &server.url);
+    let first = check_with("mytool", "1.0.0", &dir, &server.url, None);
     assert!(first.is_none());
 
-    let second = check_with("mytool", "1.0.0", &dir, &server.url);
+    let second = check_with("mytool", "1.0.0", &dir, &server.url, None);
     assert!(second.is_none());
     assert_eq!(
         server.request_count(),
@@ -72,7 +98,7 @@ fn equal_timestamps_select_the_first_element() {
     );
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("first stable version must be selected");
     assert_eq!(info.latest, "2.0.0", "must select the FIRST (newest) entry");
@@ -89,7 +115,7 @@ fn invalid_crate_name_returns_none_without_http() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool/../evil", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool/../evil", "1.0.0", &dir, &server.url, None);
 
     assert!(
         result.is_none(),
@@ -111,7 +137,7 @@ fn empty_crate_name_returns_none_without_http() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
 
-    let result = check_with("", "1.0.0", &dir, &server.url);
+    let result = check_with("", "1.0.0", &dir, &server.url, None);
 
     assert!(result.is_none());
     assert_eq!(server.request_count(), 0);
@@ -123,15 +149,9 @@ fn transport_backoff_preserves_known_good_latest() {
     // the backoff entry keeps the stale-but-real version. CORR-003.
     let server = TestServer::spawn("HTTP/1.1 500 Internal Server Error", "{}");
     let dir = temp_cache_dir();
-    write_cache(
-        &dir,
-        "mytool",
-        now_secs() - TTL_SECS - 1,
-        Some("1.5.0"),
-        TTL_SECS,
-    );
+    write_cache(&dir, "mytool", now_secs() - TTL_SECS - 1, Some("1.5.0"));
 
-    let first = check_with("mytool", "1.0.0", &dir, &server.url);
+    let first = check_with("mytool", "1.0.0", &dir, &server.url, None);
     assert!(first.is_none(), "transport failure must stay fail-silent");
 
     let cache: serde_json::Value =
@@ -148,7 +168,7 @@ fn transport_backoff_preserves_known_good_latest() {
     );
 
     // The preserved latest stays usable inside the backoff window: zero HTTP.
-    let second = check_with("mytool", "1.0.0", &dir, &server.url);
+    let second = check_with("mytool", "1.0.0", &dir, &server.url, None);
     let info = second.require("preserved latest must surface within backoff");
     assert_eq!(info.latest, "1.5.0");
     assert_eq!(
@@ -164,9 +184,9 @@ fn future_checked_at_is_treated_as_stale() {
     // fresh — now < checked_at counts as stale and forces a refetch. EDGE-002.
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
-    write_cache(&dir, "mytool", now_secs() + 3600, Some("1.0.0"), TTL_SECS);
+    write_cache(&dir, "mytool", now_secs() + 3600, Some("1.0.0"));
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("future-dated cache must be refetched, not trusted");
     assert_eq!(info.latest, "2.0.0");
@@ -186,7 +206,7 @@ fn slow_response_within_the_total_budget_still_succeeds() {
     });
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("a 3s response must fit the total timeout budget");
     assert_eq!(info.latest, "2.0.0");
@@ -199,67 +219,12 @@ fn request_path_is_the_crate_endpoint() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
 
-    let _ = check_with("mytool", "1.0.0", &dir, &server.url);
+    let _ = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let raw = server.last_request();
     assert!(
         raw.starts_with("GET /mytool HTTP/1.1"),
         "request must be GET /<crate_name>, got: {raw}"
-    );
-}
-
-#[test]
-fn debug_signal_child() {
-    // Child of debug_signal_emits_one_stderr_line: a failed fetch under
-    // GENESIS_UPDATE_CHECK_DEBUG prints one stderr line with the reason.
-    // Harmless standalone: 404 stays fail-silent. EXCL-002.
-    let server = TestServer::spawn(
-        "HTTP/1.1 404 Not Found",
-        "{\"errors\":[{\"detail\":\"crate `mytool` does not exist\"}]}",
-    );
-    let dir = temp_cache_dir();
-
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
-
-    assert!(result.is_none());
-    assert_eq!(server.request_count(), 1);
-}
-
-#[test]
-fn debug_signal_emits_one_stderr_line() {
-    // Runs debug_signal_child as a subprocess with the debug env var set and
-    // --nocapture so the eprintln reaches the piped stderr, then asserts the
-    // line names update-check and the failure reason (HTTP 404). EXCL-002.
-    let exe = std::env::current_exe().require("locate test binary");
-    let output = std::process::Command::new(exe)
-        .args(["--exact", "debug_signal_child", "--nocapture"])
-        .env("GENESIS_UPDATE_CHECK_DEBUG", "1")
-        .stderr(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .output()
-        .require("spawn child test");
-    assert!(output.status.success(), "child test must pass");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("update-check"),
-        "debug line must identify the update-check mechanism, got: {stderr}"
-    );
-    assert!(
-        stderr.contains("404"),
-        "debug line must carry the failure reason, got: {stderr}"
-    );
-}
-
-#[test]
-fn request_carries_genesis_user_agent() {
-    let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
-    let dir = temp_cache_dir();
-
-    let _ = check_with("mytool", "1.0.0", &dir, &server.url);
-
-    assert!(
-        server.last_request_contains("genesis"),
-        "crates.io requires a descriptive User-Agent; request must identify genesis"
     );
 }
 

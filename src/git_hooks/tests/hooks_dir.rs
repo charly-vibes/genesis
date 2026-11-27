@@ -173,6 +173,43 @@ fn effective_hooks_dir_surfaces_disabled_for_empty_string() {
 }
 
 #[test]
+fn query_errors_not_a_repository_outside_a_repo() {
+    // genesis-5sm: `git config --local` exits 128 outside a repository —
+    // a typed error, never "unset" walking on to global/system.
+    let fixture = match Fixture::new().build() {
+        Ok(f) => f,
+        Err(e) => panic!("fixture build failed: {e}"),
+    };
+    let err = resolve_hooks_dir(fixture.root()).unwrap_err();
+    assert!(
+        matches!(err, GitHooksError::NotARepository { .. }),
+        "got: {err}"
+    );
+    assert!(err.to_string().contains("not a git repository"));
+}
+
+#[test]
+fn query_errors_typed_on_corrupt_config() {
+    // genesis-5sm: a corrupt `.git/config` also exits 128 — refuse with
+    // a typed error instead of reporting HooksDirScope::Default.
+    let fixture = match Fixture::new().with_git_init().build() {
+        Ok(f) => f,
+        Err(e) => panic!("fixture build failed: {e}"),
+    };
+    let config = fixture.root().join(".git/config");
+    let mut contents = std::fs::read_to_string(&config).require("value");
+    contents.push_str("not [valid config\n");
+    std::fs::write(&config, contents).require("value");
+    let err =
+        effective_hooks_dir_with_env(fixture.root(), &isolated_env(fixture.root())).unwrap_err();
+    assert!(
+        matches!(err, GitHooksError::ConfigParseFailed { .. }),
+        "got: {err}"
+    );
+    assert!(err.to_string().contains("git config failed"));
+}
+
+#[test]
 fn hook_name_file_name_mapping() {
     assert_eq!(HookName::PreCommit.file_name(), "pre-commit");
     assert_eq!(HookName::PrePush.file_name(), "pre-push");

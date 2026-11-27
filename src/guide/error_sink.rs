@@ -100,18 +100,21 @@ impl ErrorSink {
     }
 
     /// Write an error record to the scratch file when scratch is enabled.
+    ///
+    /// The record carries the rendered error message (genesis-c9x/xxx) so
+    /// `--from-last-error` reports can quote what actually went wrong.
     fn record_scratch(&self, message: &str, suggestion: Option<&Suggestion>) {
         if !self.scratch {
             return;
         }
-        let record = scratch_mod::ErrorRecord {
-            ts: chrono_now(),
-            argv: vec![self.tool_name.clone()],
-            exit: 1,
-            footer: suggestion.and_then(|s| s.footer()),
-            kind: "error".into(),
-            message: Some(message.to_string()),
-        };
+        let mut record = scratch_mod::ErrorRecord::new(
+            scratch_mod::now_iso(),
+            vec![self.tool_name.clone()],
+            1,
+            "error",
+        );
+        record.footer = suggestion.and_then(|s| s.footer());
+        record.message = Some(message.to_string());
         scratch_mod::write_scratch_best_effort(&self.tool_name, &record);
     }
 
@@ -138,70 +141,4 @@ impl ErrorSink {
         self.feedback_subcommand = name.map(|s| s.to_string());
         self
     }
-}
-
-/// Get an ISO 8601 timestamp without pulling in chrono.
-fn chrono_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let dur = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = dur.as_secs();
-    let time_secs = secs % 86400;
-    let hours = time_secs / 3600;
-    let minutes = (time_secs % 3600) / 60;
-    let seconds = time_secs % 60;
-
-    let (y, m, d) = civil_date(secs / 86400);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y, m, d, hours, minutes, seconds
-    )
-}
-
-/// `(year, month, day)` from whole days since 1970-01-01 (exact for
-/// post-2000 dates; simple algorithm, no external dependency).
-fn civil_date(days: u64) -> (i64, u32, u32) {
-    let (y, remaining) = civil_year(days as i64);
-    let (m, d) = civil_month(y, remaining);
-    (y, m, d)
-}
-
-/// Advance past whole years from 1970 until `days` fits inside year `y`;
-/// returns `(y, days left inside y)`.
-fn civil_year(days: i64) -> (i64, i64) {
-    let mut y = 1970i64;
-    let mut remaining = days;
-    loop {
-        let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if remaining < days_in_year {
-            break;
-        }
-        remaining -= days_in_year;
-        y += 1;
-    }
-    (y, remaining)
-}
-
-/// `(month, day)` for `remaining` whole days since January 1 of year `y`.
-fn civil_month(y: i64, remaining: i64) -> (u32, u32) {
-    let month_days = if is_leap(y) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    let mut m = 1u32;
-    let mut rem = remaining;
-    for &md in &month_days {
-        if rem < md {
-            break;
-        }
-        rem -= md;
-        m += 1;
-    }
-    (m, (rem + 1) as u32)
-}
-
-fn is_leap(year: i64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }

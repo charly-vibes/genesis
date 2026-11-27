@@ -118,3 +118,55 @@ fn test_receipt_check_composes_into_scenario() {
     assert_eq!(report.failures.len(), 1);
     assert_eq!(report.failures[0].0, "receipt-records-outcome");
 }
+
+// -- genesis-0hx acceptance -----------------------------------------------
+
+/// A receipt whose schema has drifted (renamed/reshaped fields) must
+/// fault by name — `ReceiptMeta` — instead of passing silently because
+/// the raw `terminal_outcome` string fails to match "success".
+#[test]
+fn test_reshaped_receipt_is_schema_drift_fault() {
+    let check = receipt_records_terminal_outcome(0);
+    let json = serde_json::json!({
+        "ok": true,
+        "receipt": {
+            "terminal_outcome": "success",
+            "attempts": 1,
+        }
+    });
+    let result = receipt_result(json.to_string());
+    let reason = expect_tool_fault(check(&result));
+    assert!(
+        reason.contains("ReceiptMeta"),
+        "names the drifted schema: {reason}"
+    );
+}
+
+/// A `failure` receipt riding an `ok: true` envelope is the mirror lie of
+/// success-over-ok:false and must fault too.
+#[test]
+fn test_failure_receipt_over_ok_envelope_is_lie() {
+    let check = receipt_records_terminal_outcome(0);
+    let result = receipt_result(envelope_with_receipt(true, Some(TerminalOutcome::Failure)));
+    let reason = expect_tool_fault(check(&result));
+    assert!(
+        reason.contains("ok:true") || reason.contains("ok: true"),
+        "names contradiction: {reason}"
+    );
+    assert!(reason.contains("failure"), "names the claim: {reason}");
+}
+
+/// `Timeout` is `ok`-independent by contract: a delivered result with a
+/// timed-out follow-up is representable in either ok polarity.
+#[test]
+fn test_timeout_receipt_is_ok_independent() {
+    let check = receipt_records_terminal_outcome(0);
+    for ok in [true, false] {
+        let result = receipt_result(envelope_with_receipt(ok, Some(TerminalOutcome::Timeout)));
+        assert_eq!(
+            check(&result),
+            CheckOutcome::Pass,
+            "ok={ok} with timeout receipt"
+        );
+    }
+}

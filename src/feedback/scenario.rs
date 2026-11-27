@@ -194,13 +194,12 @@ fn match_envelope_hints(hint: Option<&str>, hint_commands: &[String]) -> CheckOu
     CheckOutcome::pass()
 }
 
-/// Stable per-failure-signature hash of a scratch record's kind + timestamp.
-fn record_repro_hash(record: &scratch::ErrorRecord) -> u64 {
-    use std::hash::{BuildHasher, Hasher};
-    let mut h = std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default().build_hasher();
-    h.write(record.kind.as_bytes());
-    h.write(record.ts.as_bytes());
-    h.finish()
+/// Stable per-failure-signature hash of a scratch record, delegating to
+/// [`context::repro_hash`] — the crate's single repro-hash implementation.
+/// The record's kind + timestamp act as the identity inputs: stable per
+/// scratch record, traceable back to the scratch file.
+pub(super) fn record_repro_hash(record: &scratch::ErrorRecord) -> u64 {
+    context::repro_hash(&record.kind, &record.ts, &None, None)
 }
 
 /// Fault when the replay ran a different command than recorded.

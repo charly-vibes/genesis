@@ -145,17 +145,80 @@ pub(super) fn urlencode(input: &str) -> String {
 }
 
 /// Directory for local fallback reports: `$XDG_CACHE_HOME/genesis/reports`,
-/// falling back to `~/.cache` and then the temp dir.
+/// falling back to `~/.cache` and then the temp dir. Empty values fall
+/// through (genesis-4xl): an empty `XDG_CACHE_HOME` must never resolve to a
+/// relative path that writes reports into the cwd.
 fn reports_dir() -> PathBuf {
+    reports_dir_for(
+        std::env::var("XDG_CACHE_HOME").ok(),
+        std::env::var("HOME").ok(),
+    )
+}
+
+/// `reports_dir` with injected env values.
+fn reports_dir_for(xdg: Option<String>, home: Option<String>) -> PathBuf {
     const TOOL: &str = "genesis";
-    if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
+    if let Some(cache) = xdg.filter(|v| !v.is_empty()) {
         return PathBuf::from(cache).join(TOOL).join("reports");
     }
-    if let Ok(home) = std::env::var("HOME") {
+    if let Some(home) = home.filter(|v| !v.is_empty()) {
         return PathBuf::from(home)
             .join(".cache")
             .join(TOOL)
             .join("reports");
     }
     std::env::temp_dir().join(TOOL).join("reports")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// genesis-4xl: an empty (or unset) `XDG_CACHE_HOME` must fall through
+    /// to `$HOME/.cache` or the temp dir — never to a relative path that
+    /// would write local fallback reports into the cwd.
+    #[test]
+    fn reports_dir_empty_xdg_is_never_relative() {
+        let home = "/home/report-tester";
+        let expected = home_reports_dir(home);
+        assert_eq!(
+            reports_dir_for(Some(String::new()), Some(home.into())),
+            expected
+        );
+        assert_eq!(reports_dir_for(None, Some(home.into())), expected);
+        assert_tmp_reports_fallthrough();
+        assert_custom_xdg_wins(home);
+    }
+
+    /// `.cache/genesis/reports` under the given HOME.
+    fn home_reports_dir(home: &str) -> PathBuf {
+        PathBuf::from(home)
+            .join(".cache")
+            .join("genesis")
+            .join("reports")
+    }
+
+    /// Empty XDG and empty HOME both fall through to the temp dir, which
+    /// must never be relative.
+    fn assert_tmp_reports_fallthrough() {
+        let tmp_reports = reports_dir_for(Some(String::new()), None);
+        assert_eq!(
+            tmp_reports,
+            std::env::temp_dir().join("genesis").join("reports")
+        );
+        assert!(
+            tmp_reports.is_absolute(),
+            "must not be relative: {tmp_reports:?}"
+        );
+        // Empty HOME also falls through to the temp dir.
+        assert_eq!(reports_dir_for(None, Some(String::new())), tmp_reports);
+    }
+
+    /// A set, non-empty XDG still wins over HOME-derived paths.
+    fn assert_custom_xdg_wins(home: &str) {
+        assert_eq!(
+            reports_dir_for(Some("/custom/cache".into()), Some(home.into())),
+            PathBuf::from("/custom/cache/genesis/reports")
+        );
+    }
 }

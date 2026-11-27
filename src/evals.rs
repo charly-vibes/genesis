@@ -5,7 +5,7 @@
 //! and a way to say *why* a scenario failed. This module is the shared
 //! core slice:
 //!
-//! - [`ErrorTaxonomy`] — the six cross-tool failure classifications
+//! - [`ErrorTaxonomy`] — the eight cross-tool failure classifications
 //!   (`ERR_*` codes) from the evaluation-framework research.
 //! - Envelope-assertion helpers ([`parse_envelope`]) over captured
 //!   subprocess stdout — the portable assertion ("exited nonzero with a
@@ -32,6 +32,10 @@ mod tests_e2e;
 #[path = "evals/tests_receipt.rs"]
 mod tests_receipt;
 
+#[cfg(test)]
+#[path = "evals/tests_report.rs"]
+mod tests_report;
+
 mod checks;
 mod outcome;
 mod scenario;
@@ -41,7 +45,7 @@ pub use checks::{
     agent_executed_all, agent_followed_hint, doc_drift_blindness, error_envelope_with_hint,
     ok_envelope, receipt_records_terminal_outcome,
 };
-pub use outcome::{EnvelopeOutcome, EvalsError, parse_envelope};
+pub use outcome::{EnvelopeOutcome, EvalsError, parse_envelope, parse_envelope_value};
 pub use scenario::{
     AgentStep, CheckOutcome, Distractor, DistractorKind, Scenario, ScenarioCheck, ScenarioReport,
     ScenarioResult,

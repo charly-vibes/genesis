@@ -43,6 +43,7 @@ fn error_result_with_remediation(command: &str) -> ErrorResult {
 #[test]
 fn genesis_built_error_envelope_resolves_remediation() {
     let envelope = Envelope::error(
+        "0.1",
         "my-tool/1.0.0",
         error_result_with_remediation("my-tool fix"),
         Vec::new(),
@@ -72,6 +73,7 @@ fn genesis_built_error_envelope_resolves_remediation() {
 #[test]
 fn genesis_built_success_envelope_parses_as_ok() {
     let envelope = Envelope::success(
+        "0.1",
         "my-tool/1.0.0",
         EnvelopeKind::Ok,
         serde_json::json!({}),
@@ -91,6 +93,7 @@ fn genesis_built_success_envelope_parses_as_ok() {
 #[test]
 fn genesis_error_fixture_carries_remediation_under_data_remediation() {
     let envelope = Envelope::error(
+        "0.1",
         "my-tool/1.0.0",
         error_result_with_remediation("my-tool fix"),
         Vec::new(),

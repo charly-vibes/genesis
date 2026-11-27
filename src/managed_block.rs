@@ -18,9 +18,12 @@
 //! marker: generator name, generator version, registry block name, and a
 //! short content hash. The hash covers only the injected content (never the
 //! footer itself), so drift is machine-checkable by recomputing expected
-//! content and comparing hashes. Footer is opt-in via
+//! content and comparing hashes. The hash is FNV-1a 64-bit truncated to 8
+//! hex digits — a pinned, rustc-stable algorithm, unlike the
+//! `std::hash::DefaultHasher` used before it. Footer is opt-in via
 //! [`BlockInjector::with_provenance`]; footer-less output is byte-identical
-//! to pre-footer releases. See [`content_sha8`] and [`provenance_footer`].
+//! to pre-footer releases. See [`content_sha8`], [`provenance_footer`], and
+//! [`split_provenance_footer`].
 //!
 //! Ported from `wai/src/managed_block.rs`. [`BlockDef`] replaces wai's
 //! hardcoded marker constants and [`BlockInjector`] replaces its inject
@@ -82,8 +85,23 @@ impl BlockRegistry {
     /// Register a block definition.
     ///
     /// If a block with the same name already exists, it is replaced.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the block's start or end marker is already used by a
+    /// registered block under a different name. Shared markers make both
+    /// blocks match each other's regions — silent cross-block capture — so
+    /// the conflict is rejected at registration instead.
     pub fn register(&mut self, block: BlockDef) {
         self.blocks.retain(|b| b.name != block.name);
+        assert!(
+            !self
+                .blocks
+                .iter()
+                .any(|b| b.start_marker == block.start_marker || b.end_marker == block.end_marker),
+            "block '{}' shares a marker with an already-registered block",
+            block.name
+        );
         self.blocks.push(block);
     }
 
@@ -114,47 +132,23 @@ pub enum InjectResult {
     Updated,
 }
 
-/// Compute the 8-hex-char content hash used in provenance footers.
-///
-/// Hashing style matches feedback's `repro_hash` (DefaultHasher over the
-/// content bytes) so there is one hashing story across the crate. Truncated
-/// to 8 hex chars — collision-resistant enough for drift detection.
-pub fn content_sha8(content: &str) -> String {
-    use std::hash::BuildHasher;
-    let full = format!(
-        "{:016x}",
-        std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default().hash_one(content)
-    );
-    full[..8].to_string()
-}
+mod provenance;
+mod splice;
 
-/// Build the opt-in provenance footer line for a managed block.
-///
-/// The footer is an HTML comment (inert in rendered markdown and ignored by
-/// plain-text readers) placed inside the block's markers, after the content.
-/// The `sha` field covers only `content` — never the footer line itself — so
-/// changing the generator version does not move the hash.
-pub fn provenance_footer(
-    generator: &str,
-    version: &str,
-    block_name: &str,
-    content: &str,
-) -> String {
-    format!(
-        "<!-- provenance: generator={} version={} source={} sha={} -->",
-        generator,
-        version,
-        block_name,
-        content_sha8(content)
-    )
-}
+pub use provenance::{content_sha8, parse_footer_sha, provenance_footer, split_provenance_footer};
+
+use splice::{block_span, prepend_block, splice_block, unknown_block_error};
 
 /// Injector for managed blocks.
 ///
 /// Reads, writes, and updates managed blocks in files.
 pub struct BlockInjector {
     registry: BlockRegistry,
-    provenance_generator: Option<String>,
+    /// Provenance stamp `(generator, version)` — `None` renders footer-less.
+    ///
+    /// Both values are supplied by the caller: the generator's identity is
+    /// the *injecting* tool's, which this crate cannot know.
+    provenance: Option<(String, String)>,
 }
 
 impl BlockInjector {
@@ -162,17 +156,20 @@ impl BlockInjector {
     pub fn new(registry: BlockRegistry) -> Self {
         Self {
             registry,
-            provenance_generator: None,
+            provenance: None,
         }
     }
 
-    /// Enable the provenance footer with the given generator name.
+    /// Enable the provenance footer with the given generator name and
+    /// version.
     ///
-    /// The version is taken from this crate's `CARGO_PKG_VERSION`. Footer-less
+    /// The caller stamps its own identity — this crate cannot know which
+    /// tool is injecting, so the version must be passed explicitly rather
+    /// than borrowed from genesis's `CARGO_PKG_VERSION`. Footer-less
     /// injectors (the default) produce byte-identical output to pre-footer
     /// releases.
-    pub fn with_provenance(mut self, generator: &str) -> Self {
-        self.provenance_generator = Some(generator.to_string());
+    pub fn with_provenance(mut self, generator: &str, version: &str) -> Self {
+        self.provenance = Some((generator.to_string(), version.to_string()));
         self
     }
 
@@ -237,12 +234,12 @@ impl BlockInjector {
     }
     /// Compose the managed-block text, with provenance when configured.
     fn render_block(&self, block: &BlockDef, content: &str) -> String {
-        match &self.provenance_generator {
-            Some(generator) => format!(
+        match &self.provenance {
+            Some((generator, version)) => format!(
                 "{}{}\n{}\n{}",
                 block.start_marker,
                 content,
-                provenance_footer(generator, env!("CARGO_PKG_VERSION"), &block.name, content),
+                provenance_footer(generator, version, &block.name, content),
                 block.end_marker
             ),
             None => format!("{}{}{}", block.start_marker, content, block.end_marker),
@@ -269,32 +266,3 @@ impl BlockInjector {
 }
 #[cfg(test)]
 mod tests;
-
-/// Prepend `block_text` ahead of `existing` content, writing to `path`.
-fn prepend_block(path: &Path, existing: &str, block_text: &str) -> std::io::Result<()> {
-    let new_content = format!("{block_text}\n\n{existing}");
-    std::fs::write(path, new_content)
-}
-
-/// `NotFound` error for a block name missing from the registry.
-fn unknown_block_error(block_name: &str) -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!("block '{}' not registered", block_name),
-    )
-}
-
-/// Byte span `[start, end_pos)` covered by `block`'s markers in `existing`.
-fn block_span(existing: &str, block: &BlockDef) -> Option<(usize, usize)> {
-    let end_pos = existing.find(&block.end_marker)? + block.end_marker.len();
-    Some((existing.find(&block.start_marker)?, end_pos))
-}
-
-/// Replace `existing[start..end_pos]` with `block_text`.
-fn splice_block(existing: &str, start: usize, end_pos: usize, block_text: &str) -> String {
-    let mut new_content = String::with_capacity(existing.len() + 512);
-    new_content.push_str(&existing[..start]);
-    new_content.push_str(block_text);
-    new_content.push_str(&existing[end_pos..]);
-    new_content
-}

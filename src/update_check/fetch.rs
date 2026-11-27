@@ -6,8 +6,8 @@
 //! cached even when equal to current, so "up to date" also honors the TTL
 //! (genesis-2ex), and failures never downgrade cached knowledge.
 
-use super::cache::{CacheEntry, read_cache, unix_now, write_cache};
-use super::http::http_get_body;
+use super::cache::{CacheEntry, backoff_entry, read_cache, unix_now, write_cache};
+use super::http::{self, http_get_body};
 use super::version::{is_newer, is_stable};
 use super::{DEFAULT_TTL_SECS, UpdateInfo, debug_emit};
 
@@ -75,25 +75,48 @@ fn to_update_info(
     })
 }
 
-/// Fetch and select the latest stable version. Side effect: on rate-limit (403/429)
-/// or transport errors, writes a backoff cache entry (to `backoff_cache_file`) so
-/// the next call within the backoff window short-circuits. Returns `None`
-/// (terminal) on unrecoverable errors.
+/// Fetch and select the latest stable version. Side effect: on rate-limit (403/429),
+/// transport errors, corrupt response bodies, or an empty registry (no non-yanked
+/// stable version), writes a backoff cache entry (to `backoff_cache_file`) so the
+/// next call within the window short-circuits (genesis-3i5): a corrupt response
+/// takes the short transport-error backoff, an empty registry the full cache TTL
+/// (there is genuinely nothing newer to learn until versions change). Returns
+/// `None` (terminal) on unrecoverable errors.
 pub(super) fn fetch_latest(
     api_base: &str,
     crate_name: &str,
     backoff_cache_file: &std::path::Path,
+    user_agent: Option<&str>,
 ) -> Option<FetchOutcome> {
     let url = format!("{api_base}/{crate_name}");
-    let body = http_get_body(&url, backoff_cache_file)?;
-    let parsed: CratesIoResponse = match serde_json::from_str(&body) {
-        Ok(p) => p,
+    let body = http_get_body(&url, backoff_cache_file, user_agent)?;
+    let parsed = parse_registry(&body, backoff_cache_file)?;
+    match select_latest_stable(parsed) {
+        Some(outcome) => Some(outcome),
+        None => {
+            write_cache(
+                backoff_cache_file,
+                backoff_entry(backoff_cache_file, DEFAULT_TTL_SECS),
+            );
+            None
+        }
+    }
+}
+
+/// Parse the registry body. A corrupt body takes the short transport-
+/// error backoff (genesis-3i5) and is terminal.
+fn parse_registry(body: &str, backoff_cache_file: &std::path::Path) -> Option<CratesIoResponse> {
+    match serde_json::from_str(body) {
+        Ok(p) => Some(p),
         Err(err) => {
             debug_emit(&format!("malformed response body: {err}"));
-            return None;
+            write_cache(
+                backoff_cache_file,
+                backoff_entry(backoff_cache_file, http::ERROR_BACKOFF_SECS),
+            );
+            None
         }
-    };
-    select_latest_stable(parsed)
+    }
 }
 
 /// Pick the first non-yanked stable version (newest-first ordering).

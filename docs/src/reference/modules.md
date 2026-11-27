@@ -700,7 +700,7 @@ the feature on the consumer's `genesis-vibes` dependency (`update-check =
 | `check(crate_name, current_version)` | Query crates.io (cached, CI-aware, fail-silent); `None` on any skip/failure |
 | `notice(&UpdateInfo)` | One-line actionable notice: `mytool 1.2.3 available — you have 1.2.2 (cargo install mytool)` |
 | `cache_path(crate_name)` | Resolve the cache file path; `None` when the crate name is invalid or the cache root is unset |
-| `check_with(crate_name, current_version, cache_dir, api_base)` | `#[doc(hidden)]` hermetic-test and advanced-wiring entry point: explicit cache dir + API base, performs **no** env-var skipping |
+| `check_with(crate_name, current_version, cache_dir, api_base, user_agent)` | `#[doc(hidden)]` hermetic-test and advanced-wiring entry point: explicit cache dir + API base + optional User-Agent override (default `genesis-vibes/<version>`), performs **no** env-var skipping |
 
 ### Validation and debugging
 

@@ -10,7 +10,9 @@ use super::*;
 use crate::testutil::TestUnwrap;
 use tempfile::TempDir;
 
+mod inspect;
 mod provenance;
+mod splice;
 
 fn tmp() -> TempDir {
     tempfile::tempdir().require("tempdir")
@@ -104,6 +106,35 @@ fn test_registry_get_unknown() {
     assert!(reg.get("UNKNOWN").is_none());
 }
 
+/// Two blocks must not share a start marker — the injector would match
+/// either block's region in the other's files (silent cross-block capture).
+#[test]
+#[should_panic(expected = "shares a marker with an already-registered block")]
+fn test_registry_rejects_shared_start_marker() {
+    let mut reg = BlockRegistry::new();
+    reg.register(BlockDef::new("WAI"));
+    assert!(reg.has("WAI"), "first block must register cleanly");
+    reg.register(BlockDef::with_markers(
+        "OTHER",
+        "<!-- WAI:START -->",
+        "<!-- OTHER:END -->",
+    ));
+}
+
+/// Sharing an end marker is rejected the same way.
+#[test]
+#[should_panic(expected = "shares a marker with an already-registered block")]
+fn test_registry_rejects_shared_end_marker() {
+    let mut reg = BlockRegistry::new();
+    reg.register(BlockDef::new("WAI"));
+    assert!(reg.has("WAI"), "first block must register cleanly");
+    reg.register(BlockDef::with_markers(
+        "OTHER",
+        "<!-- OTHER:START -->",
+        "<!-- WAI:END -->",
+    ));
+}
+
 // ── BlockInjector: create new file ─────────────────────────────────
 
 #[test]
@@ -130,117 +161,6 @@ fn test_inject_creates_file_with_markers() {
     assert!(content.contains("<!-- WAI:START -->"));
     assert!(content.contains("<!-- WAI:END -->"));
     assert!(content.contains("# Content"));
-}
-
-// ── BlockInjector: update existing block ───────────────────────────
-
-#[test]
-fn test_inject_updates_existing_block() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    let injector = test_injector();
-
-    // First injection
-    injector
-        .inject(&path, "WAI", "\n# Old content\n")
-        .require("value");
-
-    // Second injection — update
-    let result = injector
-        .inject(&path, "WAI", "\n# New content\n")
-        .require("value");
-    assert_eq!(result, InjectResult::Updated);
-
-    let content = std::fs::read_to_string(&path).require("value");
-    assert!(content.contains("# New content"));
-    assert!(!content.contains("# Old content"));
-}
-
-#[test]
-fn test_inject_update_does_not_duplicate_markers() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    let injector = test_injector();
-
-    injector.inject(&path, "WAI", "content").require("value");
-    injector.inject(&path, "WAI", "updated").require("value");
-
-    let content = std::fs::read_to_string(&path).require("value");
-    let start_count = content.matches("<!-- WAI:START -->").count();
-    let end_count = content.matches("<!-- WAI:END -->").count();
-    assert_eq!(start_count, 1, "should have exactly one WAI:START");
-    assert_eq!(end_count, 1, "should have exactly one WAI:END");
-}
-
-// ── BlockInjector: prepend to existing file ────────────────────────
-
-#[test]
-fn test_inject_prepends_to_existing_file() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    std::fs::write(&path, "# Existing file\n").require("value");
-
-    let injector = test_injector();
-    let result = injector
-        .inject(&path, "WAI", "\n# New block\n")
-        .require("value");
-    assert_eq!(result, InjectResult::Prepended);
-
-    let content = std::fs::read_to_string(&path).require("value");
-    assert!(content.starts_with("<!-- WAI:START -->"));
-    assert!(content.contains("# Existing file"));
-}
-
-// ── BlockInjector: has_block ───────────────────────────────────────
-
-#[test]
-fn test_has_block_false_when_file_missing() {
-    let dir = tmp();
-    let injector = test_injector();
-    assert!(!injector.has_block(&dir.path().join("nonexistent.md"), "WAI"));
-}
-
-#[test]
-fn test_has_block_false_when_no_block() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    std::fs::write(&path, "# No block\n").require("value");
-    let injector = test_injector();
-    assert!(!injector.has_block(&path, "WAI"));
-}
-
-#[test]
-fn test_has_block_true_when_block_present() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    let injector = test_injector();
-    injector.inject(&path, "WAI", "content").require("value");
-    assert!(injector.has_block(&path, "WAI"));
-}
-
-// ── BlockInjector: read_block ──────────────────────────────────────
-
-#[test]
-fn test_read_block_returns_none_when_missing() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    std::fs::write(&path, "# No block\n").require("value");
-    let injector = test_injector();
-    assert!(injector.read_block(&path, "WAI").is_none());
-}
-
-#[test]
-fn test_read_block_returns_content() {
-    let dir = tmp();
-    let path = dir.path().join("test.md");
-    let injector = test_injector();
-    injector
-        .inject(&path, "WAI", "\n# Block content\n")
-        .require("value");
-    let content = injector.read_block(&path, "WAI").require("value");
-    assert!(content.contains("<!-- WAI:START -->"));
-    assert!(content.contains("<!-- WAI:END -->"));
-    assert!(content.contains("# Block content"));
 }
 
 // ── Custom markers ─────────────────────────────────────────────────

@@ -191,7 +191,9 @@ fn version_pins_match_manifest() {
         ("README.md", readme.as_str()),
         ("docs/src/getting-started.md", getting_started.as_str()),
     ] {
-        check_version_pin(path, content, &pin, &full, &mut problems);
+        if let Some(problem) = check_version_pin(path, content, &pin, &full) {
+            problems.push(problem);
+        }
     }
     // at least one of README/getting-started documents the git-tag variant
     if !readme.contains(&tag_pin) && !getting_started.contains(&tag_pin) {
@@ -207,10 +209,11 @@ fn version_pins_match_manifest() {
     );
 }
 
-fn check_version_pin(path: &str, content: &str, pin: &str, full: &str, problems: &mut Vec<String>) {
-    if !content.contains(pin) {
-        problems.push(format!(
-            "{path}: missing install pin `{pin}` (Cargo.toml is at {full})"
-        ));
+fn check_version_pin(path: &str, content: &str, pin: &str, full: &str) -> Option<String> {
+    if content.contains(pin) {
+        return None;
     }
+    Some(format!(
+        "{path}: missing install pin `{pin}` (Cargo.toml is at {full})"
+    ))
 }

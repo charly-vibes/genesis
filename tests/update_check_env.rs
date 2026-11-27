@@ -38,6 +38,54 @@ fn ci_env_skips_check_entirely() {
     );
 }
 
+/// genesis-3i5: CI vendors disagree on the spelling of truth — Azure sets
+/// `CI=True`, Travis `CI=yes` — so ANY non-empty `CI` value must skip.
+#[test]
+fn ci_env_any_non_empty_value_skips_check() {
+    let _guard = env_lock();
+    // SAFETY: see env_lock() comment above.
+    for value in ["True", "1", "yes", "false-is-still-set"] {
+        unsafe { std::env::set_var("CI", value) };
+        let result = check("genesis-update-check-env-test", "0.0.1");
+        unsafe { std::env::remove_var("CI") };
+
+        assert!(
+            result.is_none(),
+            "CI={value} must skip the check before any IO"
+        );
+        assert!(
+            cache_path("genesis-update-check-env-test").is_none_or(|p| !p.exists()),
+            "CI={value} skip must not write cache"
+        );
+    }
+}
+
+/// genesis-3i5: vendor-specific CI markers must skip even when plain `CI` is
+/// unset — Azure DevOps only sets TF_BUILD.
+#[test]
+fn vendor_ci_env_vars_skip_check() {
+    let _guard = env_lock();
+    // SAFETY: see env_lock() comment above.
+    for (var, value) in [
+        ("TF_BUILD", "true"),
+        ("GITHUB_ACTIONS", "true"),
+        ("GITLAB_CI", "1"),
+    ] {
+        unsafe { std::env::set_var(var, value) };
+        let result = check("genesis-update-check-env-test", "0.0.1");
+        unsafe { std::env::remove_var(var) };
+
+        assert!(
+            result.is_none(),
+            "{var}={value} must skip the check before any IO"
+        );
+        assert!(
+            cache_path("genesis-update-check-env-test").is_none_or(|p| !p.exists()),
+            "{var}={value} skip must not write cache"
+        );
+    }
+}
+
 #[test]
 fn opt_out_env_var_skips_check_entirely() {
     let _guard = env_lock();

@@ -23,9 +23,9 @@ use genesis::update_check::check_with;
 fn fresh_cache_returns_cached_update_without_http() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
-    write_cache(&dir, "mytool", now_secs(), Some("2.0.0"), TTL_SECS);
+    write_cache(&dir, "mytool", now_secs(), Some("2.0.0"));
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("cached update should surface");
     assert_eq!(info.latest, "2.0.0");
@@ -52,9 +52,9 @@ fn cached_latest_older_than_installed_returns_none() {
     for (cached, installed, scheme) in schemes {
         let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[(cached, false)]));
         let dir = temp_cache_dir();
-        write_cache(&dir, "mytool", now_secs(), Some(cached), TTL_SECS);
+        write_cache(&dir, "mytool", now_secs(), Some(cached));
 
-        let result = check_with("mytool", installed, &dir, &server.url);
+        let result = check_with("mytool", installed, &dir, &server.url, None);
 
         assert!(
             result.is_none(),
@@ -72,15 +72,9 @@ fn cached_latest_older_than_installed_returns_none() {
 fn stale_cache_fetches_and_rewrites_cache() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
-    write_cache(
-        &dir,
-        "mytool",
-        now_secs() - TTL_SECS - 1,
-        Some("1.5.0"),
-        TTL_SECS,
-    );
+    write_cache(&dir, "mytool", now_secs() - TTL_SECS - 1, Some("1.5.0"));
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("newer stable version should surface");
     assert_eq!(info.latest, "2.0.0");
@@ -102,7 +96,7 @@ fn missing_cache_fetches() {
     let server = TestServer::spawn("HTTP/1.1 200 OK", crates_io_payload(&[("2.0.0", false)]));
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("update should surface on first run");
     assert_eq!(info.latest, "2.0.0");
@@ -114,7 +108,7 @@ fn http_error_is_fail_silent() {
     let server = TestServer::spawn("HTTP/1.1 500 Internal Server Error", "{}");
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     assert!(
         result.is_none(),
@@ -127,7 +121,7 @@ fn connection_refused_is_fail_silent() {
     // Port 1 on loopback: nothing listens there.
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "1.0.0", &dir, "http://127.0.0.1:1");
+    let result = check_with("mytool", "1.0.0", &dir, "http://127.0.0.1:1", None);
 
     assert!(
         result.is_none(),
@@ -141,7 +135,7 @@ fn corrupt_cache_is_treated_as_missing() {
     let dir = temp_cache_dir();
     std::fs::write(dir.join("mytool.json"), "{{{ not json").require("value");
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     let info = result.require("corrupt cache must fall back to a live fetch");
     assert_eq!(info.latest, "2.0.0");
@@ -155,7 +149,7 @@ fn unwritable_cache_dir_still_returns_result_without_panicking() {
     let blocker = temp_cache_dir().join("blocker");
     std::fs::write(&blocker, "not a dir").require("write");
 
-    let result = check_with("mytool", "1.0.0", &blocker, &server.url);
+    let result = check_with("mytool", "1.0.0", &blocker, &server.url, None);
 
     let info = result.require("cache write failure must not swallow the result");
     assert_eq!(info.latest, "2.0.0");
@@ -171,10 +165,84 @@ fn yanked_and_prerelease_versions_are_filtered_out() {
     );
     let dir = temp_cache_dir();
 
-    let result = check_with("mytool", "1.0.0", &dir, &server.url);
+    let result = check_with("mytool", "1.0.0", &dir, &server.url, None);
 
     assert!(
         result.is_none(),
         "yanked and prerelease versions must never be suggested as updates"
+    );
+}
+
+/// genesis-3i5: a proxy serving a corrupt (non-JSON) body must record a
+/// backoff entry exactly like the transport-error path does, so every CLI
+/// run doesn't re-hit the network within the backoff window.
+#[test]
+fn garbage_body_writes_backoff_and_skips_refetch_within_window() {
+    let server = TestServer::spawn("HTTP/1.1 200 OK", "<html>gateway garbage</html>");
+    let dir = temp_cache_dir();
+
+    let first = check_with("mytool", "1.0.0", &dir, &server.url, None);
+    assert!(first.is_none(), "garbage body must degrade to None");
+    assert_eq!(server.request_count(), 1);
+
+    let cache: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("mytool.json")).require("value"))
+            .require("value");
+    assert_eq!(
+        cache["latest"],
+        serde_json::Value::Null,
+        "corrupt response must not invent version knowledge"
+    );
+    assert_eq!(
+        cache["ttl_secs"].as_u64().require("as_u64"),
+        24 * 60 * 60,
+        "corrupt response takes the short transport-error backoff"
+    );
+
+    let second = check_with("mytool", "1.0.0", &dir, &server.url, None);
+    assert!(second.is_none());
+    assert_eq!(
+        server.request_count(),
+        1,
+        "corrupt response must back off: no second fetch within the window"
+    );
+}
+
+/// genesis-3i5: an all-yanked registry (no non-yanked stable version) must
+/// also record a backoff entry, with the FULL cache TTL — longer than the
+/// corrupt-response window, since there is nothing new to learn until
+/// versions actually change.
+#[test]
+fn all_yanked_registry_writes_backoff_and_skips_refetch_within_ttl() {
+    let server = TestServer::spawn(
+        "HTTP/1.1 200 OK",
+        crates_io_payload(&[("1.5.0", true), ("1.0.0", true)]),
+    );
+    let dir = temp_cache_dir();
+
+    let first = check_with("mytool", "1.0.0", &dir, &server.url, None);
+    assert!(first.is_none(), "no stable version must degrade to None");
+    assert_eq!(server.request_count(), 1);
+
+    let cache: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("mytool.json")).require("value"))
+            .require("value");
+    assert_eq!(
+        cache["latest"],
+        serde_json::Value::Null,
+        "empty registry must not invent version knowledge"
+    );
+    assert_eq!(
+        cache["ttl_secs"].as_u64().require("as_u64"),
+        TTL_SECS,
+        "empty registry takes the full cache TTL, longer than the corrupt-response backoff"
+    );
+
+    let second = check_with("mytool", "1.0.0", &dir, &server.url, None);
+    assert!(second.is_none());
+    assert_eq!(
+        server.request_count(),
+        1,
+        "empty registry must back off: no second fetch within the TTL"
     );
 }

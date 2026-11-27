@@ -122,6 +122,48 @@ fn uncommitted_files_staged_rename_reports_new_path() {
     );
 }
 
+/// `core.quotePath` makes `git diff --name-only` emit C-style-quoted
+/// paths for non-ASCII names; enumeration must unquote them so
+/// changed_files and uncommitted_files report identical strings.
+#[test]
+fn quoted_non_ascii_paths_match_uncommitted_files() {
+    let fixture = Fixture::new().with_git_init().build().require("fixture");
+    seed_commit_and_stage_non_ascii(&fixture);
+
+    let changed = git::changed_files(fixture.root()).require("changed_files");
+    let uncommitted = git::uncommitted_files(fixture.root()).require("uncommitted_files");
+    assert_eq!(
+        changed, uncommitted,
+        "quoted ls/diff output must unquote identically to porcelain parsing"
+    );
+    assert_eq!(
+        changed,
+        vec!["café.txt".to_string()],
+        "non-ASCII name must round-trip unquoted, got: {changed:?}"
+    );
+}
+
+/// Seed the fixture repo: a first commit (tracked-change enumeration
+/// needs a HEAD to diff against), then the non-ASCII file staged so
+/// `core.quotePath` applies to it.
+///
+/// changed_files enumerates tracked changes against HEAD, so an untracked
+/// file is invisible to that list; the parity contract is that both
+/// enumerators unquote a quoted `core.quotePath` name identically.
+fn seed_commit_and_stage_non_ascii(fixture: &Fixture) {
+    std::fs::write(fixture.path(".gitkeep"), "seed").require("write file");
+    for args in [
+        &(["git", "add", ".gitkeep"])[..],
+        &(["git", "commit", "-m", "seed"])[..],
+    ] {
+        let out = fixture.run(args).require("run git");
+        assert!(out.success(), "{args:?} failed: {}", out.stderr);
+    }
+    std::fs::write(fixture.path("café.txt"), "content").require("write non-ascii file");
+    let out = fixture.run(&["git", "add", "café.txt"]).require("run git");
+    assert!(out.success(), "add failed: {}", out.stderr);
+}
+
 #[test]
 fn lossy_variant_returns_empty_on_failure() {
     // A directory with no repository at all: the non-lossy variant errors,

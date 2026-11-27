@@ -35,24 +35,42 @@ pub(super) fn is_newer(latest: &str, current: &str) -> bool {
 /// Calendar/numeric fallback for versions that do not both parse as semver.
 /// Compares dot-separated numeric components left to right; missing trailing
 /// components rank as `0`; non-numeric components make the pair incomparable
-/// (conservatively "no update").
+/// (conservatively "no update"). A leading `v`/`V` (e.g. `v2026.10.4`) is
+/// stripped before comparison so v-prefixed calendar versions still rank
+/// (genesis-3i5).
 fn is_newer_calendar(latest: &str, current: &str) -> bool {
-    let mut latest_parts = latest.split('.');
-    let mut current_parts = current.split('.');
-    loop {
-        let (l, c) = (latest_parts.next(), current_parts.next());
-        if l.is_none() && c.is_none() {
-            return false;
-        }
-        let (Ok(ln), Ok(cn)) = (
-            l.unwrap_or("0").parse::<u64>(),
-            c.unwrap_or("0").parse::<u64>(),
-        ) else {
-            // Non-numeric components: not rankable, stay silent.
-            return false;
-        };
+    let mut latest_parts = strip_v(latest).split('.');
+    let mut current_parts = strip_v(current).split('.');
+    while let Some((ln, cn)) = next_components(&mut latest_parts, &mut current_parts) {
         if ln != cn {
             return ln > cn;
         }
     }
+    false
+}
+
+/// Drop a leading `v`/`V` so v-prefixed calendar versions still rank
+/// (genesis-3i5).
+fn strip_v(s: &str) -> &str {
+    s.strip_prefix(['v', 'V']).unwrap_or(s)
+}
+
+/// Next component pair as numbers. `None` when both sides are exhausted
+/// (no newer component seen) or either component is non-numeric — not
+/// rankable, stay silent.
+fn next_components(
+    latest: &mut std::str::Split<'_, char>,
+    current: &mut std::str::Split<'_, char>,
+) -> Option<(u64, u64)> {
+    let (l, c) = (latest.next(), current.next());
+    if l.is_none() && c.is_none() {
+        return None;
+    }
+    let (Ok(ln), Ok(cn)) = (
+        l.unwrap_or("0").parse::<u64>(),
+        c.unwrap_or("0").parse::<u64>(),
+    ) else {
+        return None;
+    };
+    Some((ln, cn))
 }

@@ -5,11 +5,13 @@
 
 mod anchor;
 mod inject;
+mod stage;
 
 use super::GitHooksError;
 use crate::managed_block::BlockDef;
-use anchor::{find_anchor, line_end_after, section};
-use inject::{Wiring, ensure_trailing_newline, wire_command};
+use anchor::{find_anchor, section};
+use inject::{Wiring, wire_command};
+use stage::{append_stage_with_commands, wire_into_stage};
 use std::path::{Path, PathBuf};
 
 /// A lefthook config stage (design D5b: config vocabulary, not hook
@@ -67,13 +69,73 @@ pub fn ensure_wired(
     content: &str,
 ) -> Result<WiredOutcome, GitHooksError> {
     let path = config_path_or_error(root)?;
+    validate_markers(&path, stage, block)?;
     let existing = read_config(&path)?;
+    ensure_balanced_markers(&path, &existing, block)?;
     let block_text = format!("{}{}{}", block.start_marker, content, block.end_marker);
-    match find_anchor(&existing, stage) {
-        Err(()) => Err(unanchorable_error(&path, stage)),
-        Ok(Some(offset)) => wire_into_stage(&path, &existing, offset, &block_text, content),
-        Ok(None) => append_stage_with_commands(&path, &existing, stage, &block_text),
+    wire_or_append(&path, &existing, stage, &block_text, content)
+}
+
+/// Route the block into the stage's section when an anchor exists,
+/// or append a fresh stage section otherwise.
+fn wire_or_append(
+    path: &Path,
+    existing: &str,
+    stage: Stage,
+    block_text: &str,
+    content: &str,
+) -> Result<WiredOutcome, GitHooksError> {
+    match find_anchor(existing, stage) {
+        Err(()) => Err(unanchorable_error(path, stage)),
+        Ok(Some(offset)) => {
+            let sec = section(existing, offset);
+            wire_into_stage(path, existing, offset, sec, block_text, content, stage)
+        }
+        Ok(None) => append_stage_with_commands(path, existing, stage, block_text),
     }
+}
+
+/// Refuse markers that would be emitted as unparseable YAML
+/// (genesis-5sm): a bare HTML-comment marker (`<!-- NAME:START -->`,
+/// [`BlockDef::new`]'s default) lands in the config as a column-0
+/// non-comment line and lefthook cannot parse the file afterwards —
+/// markers must be comment-prefixed (`# <!-- NAME:START -->`).
+fn validate_markers(path: &Path, stage: Stage, block: &BlockDef) -> Result<(), GitHooksError> {
+    for marker in [&block.start_marker, &block.end_marker] {
+        if marker.trim_start().starts_with("<!--") && !marker.starts_with('#') {
+            return Err(GitHooksError::UnanchorableLefthookConfig {
+                path: path.to_path_buf(),
+                stage: stage.key().to_string(),
+                message: format!(
+                    "marker {marker:?} is a bare HTML comment: emitted into the config it produces unparseable YAML — declare comment-prefixed markers (e.g. \"# <!-- {name}:START -->\")",
+                    name = block.name
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// genesis-5sm: marker balance is checked file-wide by COUNT, not
+/// presence — per-stage blocks legitimately appear once per stage
+/// section, so equal non-zero counts are healthy; differing counts are
+/// an unknown state and wiring refuses unmodified (same discipline as
+/// `ensure_command_wired`'s `marker_outcome`).
+fn ensure_balanced_markers(
+    path: &Path,
+    existing: &str,
+    block: &BlockDef,
+) -> Result<(), GitHooksError> {
+    let starts = existing.matches(&block.start_marker).count();
+    let ends = existing.matches(&block.end_marker).count();
+    if starts != ends {
+        return Err(GitHooksError::UnbalancedLefthookMarkers {
+            path: path.to_path_buf(),
+            start: block.start_marker.clone(),
+            end: block.end_marker.clone(),
+        });
+    }
+    Ok(())
 }
 
 /// Read a lefthook config file into a string.
@@ -92,101 +154,6 @@ fn unanchorable_error(path: &Path, stage: Stage) -> GitHooksError {
         stage: stage.key().to_string(),
         message: "stage key is quoted or otherwise not anchorable at column 0".to_string(),
     }
-}
-
-/// Stage section exists at `offset`: inject idempotently into it.
-///
-/// Idempotence is per stage section ("the stage's section already
-/// contains the block's content"). `is_column_zero_key` treats comments
-/// as non-keys, so a stage section spans an injected block exactly; the
-/// former file-level `contains(block_text)` clause satisfied later
-/// stages from the first stage's block, leaving dual-section configs —
-/// the common real shape — with only the first stage wired.
-fn wire_into_stage(
-    path: &Path,
-    existing: &str,
-    offset: usize,
-    block_text: &str,
-    content: &str,
-) -> Result<WiredOutcome, GitHooksError> {
-    let stage_section = section(existing, offset);
-    if stage_section.contains(content) {
-        return Ok(WiredOutcome::AlreadyWired);
-    }
-    let updated = splice_into_stage(existing, offset, stage_section, block_text);
-    write_config(path, &updated)?;
-    Ok(WiredOutcome::Injected)
-}
-
-/// Splice `block_text` into the stage section `sec`: after the existing
-/// `commands:` line when present (its offset is relative to the stage
-/// section and re-based onto the full config), otherwise after the
-/// anchor line with a `commands:` prefix.
-///
-/// genesis-r99: lefthook only honors commands declared under the
-/// stage's `commands:` mapping — nest the block inside `commands:`,
-/// emitting the mapping after the stage anchor when the stage lacks
-/// one. Caller content is inserted verbatim: it is written for the
-/// `commands:` child level.
-fn splice_into_stage(existing: &str, offset: usize, sec: &str, block_text: &str) -> String {
-    let anchor_line_end = line_end_after(existing, offset);
-    let (insert_at, prefix) = match commands_key_end(sec) {
-        Some(end) => (offset + end, ""),
-        None => (anchor_line_end, "  commands:\n"),
-    };
-    splice_with_prefix(existing, insert_at, prefix, block_text)
-}
-
-/// Byte offset just past the stage section's `commands:` line, if any
-/// (skips the anchor line itself).
-fn commands_key_end(stage_section: &str) -> Option<usize> {
-    let mut scanned = 0usize;
-    for (i, line) in stage_section.split_inclusive('\n').enumerate() {
-        if i > 0 && line.trim() == "commands:" {
-            return Some(scanned + line.len());
-        }
-        scanned += line.len();
-    }
-    None
-}
-
-/// Splice `block_text` (plus `prefix`) into `existing` at `insert_at`.
-///
-/// The block always ends on its own line: without this, caller content
-/// ending in `\n` leaves the END marker glued onto the next existing
-/// line — with comment-prefixed markers that line becomes a YAML
-/// comment and the following key is silently deleted (genesis-au8).
-fn splice_with_prefix(existing: &str, insert_at: usize, prefix: &str, block_text: &str) -> String {
-    let mut updated = String::with_capacity(existing.len() + block_text.len() + prefix.len() + 2);
-    updated.push_str(&existing[..insert_at]);
-    if insert_at == existing.len() {
-        updated.push('\n'); // anchor/commands was the last line without a newline
-    }
-    updated.push_str(prefix);
-    updated.push_str(block_text);
-    if !block_text.ends_with('\n') {
-        updated.push('\n');
-    }
-    updated.push_str(&existing[insert_at..]);
-    updated
-}
-
-/// genesis-r99: appended stages also nest the block inside `commands:`
-/// so the wired command is a real lefthook command, not a
-/// silently-ignored stage-level key.
-fn append_stage_with_commands(
-    path: &Path,
-    existing: &str,
-    stage: Stage,
-    block_text: &str,
-) -> Result<WiredOutcome, GitHooksError> {
-    let mut updated = ensure_trailing_newline(existing);
-    updated.push_str(stage.key());
-    updated.push_str(":\n  commands:\n");
-    updated.push_str(block_text);
-    updated.push('\n');
-    write_config(path, &updated)?;
-    Ok(WiredOutcome::Injected)
 }
 
 /// Write a lefthook config file.
@@ -229,6 +196,7 @@ pub fn ensure_command_wired(
     block: &BlockDef,
 ) -> Result<WiredOutcome, GitHooksError> {
     let path = config_path_or_error(root)?;
+    validate_markers(&path, stage, block)?;
     let existing = read_config(&path)?;
     let wiring = Wiring {
         path: &path,
@@ -246,6 +214,12 @@ pub fn ensure_command_wired(
 /// stage-scoped scan — a pre-push command must not satisfy a
 /// pre-commit check). Returns `false` when the command is absent, the
 /// stage section is missing, or no config exists.
+///
+/// Degradation (explicit, genesis-5sm): when the config exists but
+/// cannot be read (permissions, invalid UTF-8), this also returns
+/// `false` — indistinguishable from "not wired". Doctor-style callers
+/// that must tell the two apart should re-read the config directly
+/// instead of expanding this API with a fallible variant.
 pub fn is_wired(root: &Path, stage: Stage, command: &str) -> bool {
     let Some(path) = config_path(root) else {
         return false;

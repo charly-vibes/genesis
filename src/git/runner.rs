@@ -2,6 +2,8 @@
 //! walk-based repository-root detection that ignores `GIT_DIR` state.
 
 use std::path::{Path, PathBuf};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::thread::JoinHandle;
 
 use super::error::GitError;
 
@@ -47,8 +49,103 @@ impl EnvPolicy {
 /// (e.g. git missing from `PATH`) yield [`GitError::Spawn`].
 pub fn run(root: &Path, policy: EnvPolicy, args: &[&str]) -> Result<GitOutput, GitError> {
     let output = spawn_git(root, policy, args)?;
+    git_output(args, output, &[0])
+}
+
+/// Run the git binary in `root` with the policy's env hygiene applied,
+/// feeding `input` on stdin and returning the raw outcome.
+///
+/// Unlike [`run`], both 0 and 1 exits are returned to the caller
+/// (`Ok`) because some git commands use them as meaningful answers
+/// (`check-ignore` maps 1 to "a given path is ignored"); only other
+/// non-zero exits yield [`GitError::Git`].
+///
+/// Stdin is drained on a thread: git answers incrementally, so a large
+/// batch can fill the child's stdout pipe while stdin is still being
+/// written — writing inline would deadlock there.
+pub(super) fn run_with_stdin(
+    root: &Path,
+    policy: EnvPolicy,
+    args: &[&str],
+    input: &str,
+) -> Result<GitOutput, GitError> {
+    let mut child = spawn_stdin_git(root, policy, args)?;
+    let writer = spawn_stdin_writer(child.stdin.take().expect("stdin piped"), input);
+    let output = child
+        .wait_with_output()
+        .map_err(|source| GitError::Spawn { source })?;
+    if let Err(source) = writer.join().expect("stdin writer thread panicked") {
+        return Err(GitError::Io {
+            path: root.to_path_buf(),
+            message: "failed to write git stdin".to_string(),
+            source,
+        });
+    }
+    git_output(args, output, &[0, 1])
+}
+
+/// Spawn git with piped stdio for [`run_with_stdin`].
+fn spawn_stdin_git(root: &Path, policy: EnvPolicy, args: &[&str]) -> Result<Child, GitError> {
+    stdin_git_command(root, policy, args)
+        .spawn()
+        .map_err(|source| GitError::Spawn { source })
+}
+
+/// The piped-stdio git command: all three streams piped so stdout drains
+/// while stdin is still being written (the large-batch deadlock case).
+fn stdin_git_command(root: &Path, policy: EnvPolicy, args: &[&str]) -> Command {
+    let mut cmd = git_command(root, policy, args);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd
+}
+
+/// Drain `input` into the child's stdin on a thread.
+fn spawn_stdin_writer(stdin: ChildStdin, input: &str) -> JoinHandle<std::io::Result<()>> {
+    use std::io::Write as _;
+    let input = input.to_string();
+    std::thread::spawn(move || -> std::io::Result<()> {
+        let mut stdin = stdin;
+        stdin.write_all(input.as_bytes())?;
+        stdin.flush()
+    })
+}
+
+/// Spawn git in `root` with the policy's env hygiene applied.
+fn spawn_git(
+    root: &Path,
+    policy: EnvPolicy,
+    args: &[&str],
+) -> Result<std::process::Output, GitError> {
+    git_command(root, policy, args)
+        .output()
+        .map_err(|source| GitError::Spawn { source })
+}
+
+/// A `git` command in `root` with the policy's env hygiene applied.
+fn git_command(root: &Path, policy: EnvPolicy, args: &[&str]) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.args(args).current_dir(root);
+    if policy == EnvPolicy::StripHookContext {
+        for var in EnvPolicy::HOOK_CONTEXT_VARS {
+            cmd.env_remove(var);
+        }
+    }
+    cmd
+}
+
+/// Map a finished git output onto `GitOutput`, failing on exits outside
+/// `allowed` (`run` accepts only 0; `run_with_stdin` also accepts 1 —
+/// some git commands use it as a meaningful answer, e.g. `check-ignore`
+/// maps 1 to "a given path is ignored").
+fn git_output(
+    args: &[&str],
+    output: std::process::Output,
+    allowed: &[i32],
+) -> Result<GitOutput, GitError> {
     let code = output.status.code();
-    if code != Some(0) {
+    if !allowed.contains(&code.unwrap_or(-1)) {
         return Err(GitError::Git {
             args: args.iter().map(|arg| (*arg).to_string()).collect(),
             code: code.unwrap_or(-1),
@@ -60,22 +157,6 @@ pub fn run(root: &Path, policy: EnvPolicy, args: &[&str]) -> Result<GitOutput, G
         stdout: output.stdout,
         stderr: output.stderr,
     })
-}
-
-/// Spawn git in `root` with the policy's env hygiene applied.
-fn spawn_git(
-    root: &Path,
-    policy: EnvPolicy,
-    args: &[&str],
-) -> Result<std::process::Output, GitError> {
-    let mut cmd = std::process::Command::new("git");
-    cmd.args(args).current_dir(root);
-    if policy == EnvPolicy::StripHookContext {
-        for var in EnvPolicy::HOOK_CONTEXT_VARS {
-            cmd.env_remove(var);
-        }
-    }
-    cmd.output().map_err(|source| GitError::Spawn { source })
 }
 
 /// Split command stdout into non-empty trimmed lines.
